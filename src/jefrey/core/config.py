@@ -199,6 +199,15 @@ class PolicySettings(BaseSettings):
     mode: Literal["enforce", "audit", "off"] = "enforce"
     autonomous: bool = True
 
+class HITLSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="JEFREY_HITL__", extra="ignore")
+
+    # RISCO ATIVO (P4): prazo máximo de uma aprovação pendente. Após expirar, a
+    # aprovação transiciona para 'expired' e a ferramenta é negada (o agent loop
+    # não pode travar para sempre aguardando o humano). Padrão: 30 minutos.
+    approval_ttl: float = 1800.0
+    poll_interval: float = 2.0
+
 
 
 class AgentSettings(BaseSettings):
@@ -287,6 +296,7 @@ class AppSettings(BaseSettings):
     redis: RedisSettings = RedisSettings()
     agent: AgentSettings = AgentSettings()
     policy: PolicySettings = PolicySettings()
+    hitl: HITLSettings = HITLSettings()
     mcp: MCPServerSettings = MCPServerSettings()
     mcp_client: MCPClientSettings = MCPClientSettings()
 

@@ -151,6 +151,30 @@ class MCPClient:
     async def __aexit__(self, *exc) -> None:
         await self.disconnect()
 
+    # ----- registro explícito (Opção B, Decisão 3) -----
+    def register_explicit(
+        self, *, tool_name: str, risk: "str | object", required_role: str = "user",
+        description: str = "", overwrite: bool = True,
+    ) -> "MCPClient":
+        """Registra explicitamente uma ferramenta deste servidor MCP no ToolRegistry.
+
+        Opção B (Decisão 3): em vez de descobrir ferramentas automaticamente via
+        list_tools (superfície de ataque — servidor malicioso poderia injetar tools),
+        cada ferramenta externa é registrada manualmente com risco e papel declarados.
+        """
+        from src.jefrey.core.rbac import as_role
+        from src.jefrey.core.policy import RiskLevel
+        from src.jefrey.core.registry import TOOL_REGISTRY
+
+        rk = risk if isinstance(risk, RiskLevel) else RiskLevel(str(risk).lower())
+        TOOL_REGISTRY.register(
+            name=tool_name, risk=rk, required_role=as_role(required_role),
+            description=description, server=self.name, source="mcp", external=True,
+            overwrite=overwrite,
+        )
+        logger.info("MCPClient registrou explicitamente '%s' (server=%s risk=%s)", tool_name, self.name, rk.value)
+        return self
+
     # ----- ferramentas -----
     async def list_tools(self) -> list[dict]:
         if self._session is None:

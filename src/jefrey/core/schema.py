@@ -13,6 +13,9 @@ def init_db() -> None:
     with engine.begin() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     Base.metadata.create_all(engine)
+    # P4: adiciona coluna expires_at na tabela approvals (já existente desde P3). Idempotente.
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE approvals ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ"))
     with engine.begin() as conn:
         # Garante que metadata_json seja JSONB (idempotente; no-op se já for jsonb).
         # Necessário porque filtros usam os operadores @> / ->> da JSONB.

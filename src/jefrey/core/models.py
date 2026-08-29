@@ -78,6 +78,25 @@ class Approval(Base):
     decided_by = Column(String(128), nullable=True)
     decided_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=True, index=True)  # P4: prazo do approval (approval_ttl)
+
+
+class AuditLog(Base):
+    """Log de auditoria forense (P4, CIPHER-010) — substitui docker logs."""
+    __tablename__ = "audit_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    ts = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    thread_id = Column(String(128), nullable=False, index=True)
+    tool_name = Column(String(256), nullable=False)
+    actor_role = Column(String(32), nullable=False, default="user")
+    risk = Column(String(32), nullable=False, default="unknown")
+    decision = Column(String(32), nullable=False)
+    reason = Column(Text, nullable=True)
+    approval_id = Column(String(64), nullable=True, index=True)
+    approval_decision = Column(String(32), nullable=True)
+    source = Column(String(32), nullable=False, default="agent")
+    detail_json = Column(JSONB, nullable=False, default=lambda: {})
 
 
 MEMORY_TABLES = {

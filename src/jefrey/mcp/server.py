@@ -66,6 +66,7 @@ async def _run_guarded(tool: StructuredTool, args: dict, thread_id: str) -> str:
     exposto ao caller; logo nenhum cliente pode se autodeclarar "admin" via payload.
     """
     from src.jefrey.core.policy import get_policy_engine, PolicyContext, Decision
+    from src.jefrey.core.registry import register_default_tools
 
     policy = get_policy_engine()
     ctx = PolicyContext(thread_id=thread_id, user_role=_resolve_role(), autonomous=policy.autonomous)
@@ -232,6 +233,8 @@ def build_server() -> MCPServer:
 
     # registra skills (email/calendar podem falhar se libs do Google ausentes — tratado em load_skills)
     load_skills()
+    # P4: popula o ToolRegistry com risco/papel explícitos de cada ferramenta.
+    register_default_tools()
 
     registered = 0
     for tool in list(skill_registry.get_all_tools()):

@@ -234,63 +234,55 @@ class JefreyAgent:
     
     @traceable(name="execute_tools")
     async def _execute_tools(self, state: AgentState) -> AgentState:
-        """Executa ferramentas chamadas pelo LLM."""
+        """Executa ferramentas chamadas pelo LLM com RBAC + HITL (P4).
+
+        A lógica de segurança (RBAC -> PolicyEngine -> HITL/polling -> execução)
+        está centralizada em ToolExecutor; o agente apenas orquestra.
+        """
+        from src.jefrey.core.executor import ToolExecutor
+
         tool_map = {tool.name: tool for tool in self.tools}
+        executor = ToolExecutor(
+            tool_resolver=tool_map.get,
+            actor_role="user",
+            autonomous=False,
+            thread_id=state.thread_id,
+        )
         results = []
-        
+
         for tool_call in state.tool_calls:
             tool_name = tool_call["name"]
             tool_args = tool_call["args"]
             tool_id = tool_call["id"]
-            
+
             await event_bus.emit_sync(SystemEvents.TOOL_CALL, {
                 "tool": tool_name,
                 "args": tool_args,
                 "thread_id": state.thread_id,
             })
-            
+
             try:
-                tool = tool_map.get(tool_name)
-                if not tool:
-                    raise ValueError(f"Ferramenta não encontrada: {tool_name}")
-
-                # Policy Engine: aplica RBAC/HITL antes de executar a ferramenta.
-                pres = self._policy.decide(tool_name, tool_args, PolicyContext(thread_id=state.thread_id))
-                self._policy.audit(tool_name, pres, PolicyContext(thread_id=state.thread_id))
-                if pres.decision == Decision.DENY:
+                outcome = await executor.execute(tool_name, tool_args, state.thread_id)
+                if outcome.blocked:
                     results.append({
                         "tool_call_id": tool_id, "name": tool_name,
-                        "result": f"[BLOQUEADO PELA POLÍTICA] {pres.reason}",
+                        "result": f"[BLOQUEADO] {outcome.reason}",
                     })
                     await event_bus.emit_sync(SystemEvents.TOOL_RESULT, {
                         "tool": tool_name, "success": False, "blocked": True,
                         "thread_id": state.thread_id,
                     })
                     continue
-                if pres.decision == Decision.HITL:
-                    results.append({
-                        "tool_call_id": tool_id, "name": tool_name,
-                        "result": f"[AGUARDANDO APROVAÇÃO] pedido {pres.approval_id} registrado",
-                    })
-                    await event_bus.emit_sync(SystemEvents.TOOL_RESULT, {
-                        "tool": tool_name, "success": False, "blocked": True,
-                        "thread_id": state.thread_id,
-                    })
-                    continue
-
-                result = await tool.ainvoke(tool_args)
                 results.append({
                     "tool_call_id": tool_id,
                     "name": tool_name,
-                    "result": result,
+                    "result": outcome.result,
                 })
-                
                 await event_bus.emit_sync(SystemEvents.TOOL_RESULT, {
                     "tool": tool_name,
                     "success": True,
                     "thread_id": state.thread_id,
                 })
-                
             except Exception as e:
                 logger.error(f"Erro ao executar {tool_name}: {e}", exc_info=True)
                 results.append({
@@ -304,24 +296,24 @@ class JefreyAgent:
                     "error": str(e),
                     "thread_id": state.thread_id,
                 })
-        
+
         state.tool_results = results
-        
+
         # Adiciona resultados como ToolMessage
         for result in results:
             if "error" in result:
                 content = f"Erro: {result['error']}"
             else:
                 content = json.dumps(result["result"], ensure_ascii=False)
-            
+
             state.messages.append(ToolMessage(
                 content=content,
                 tool_call_id=result["tool_call_id"],
             ))
-        
+
         state.tool_calls = []  # Limpa para próximo ciclo
         return state
-    
+
     @traceable(name="save_memory")
     async def _save_memory(self, state: AgentState) -> AgentState:
         """Salva memórias importantes."""
