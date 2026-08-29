@@ -49,14 +49,14 @@ _ROLE_CV: contextvars.ContextVar[str | None] = contextvars.ContextVar("jefrey_ro
 
 
 def _resolve_role() -> str:
-    """Papel efetivo da chamada, resolvido server-side (CIPHER-001)."""
-    from src.jefrey.core.config import get_settings
+    """Papel efetivo da chamada, resolvido server-side (CIPHER-001).
 
-    cfg = get_settings().mcp
-    hdr = _ROLE_CV.get()
-    if hdr and hdr in cfg.allowed_roles:
-        return hdr
-    return cfg.service_role
+    Delega em ``resolve_role`` (rbac.py) — mesmo padrão usado pelo agent loop
+    (CIPHER-022): o header X-Jefrey-Role só é honrado se estiver em allowed_roles.
+    """
+    from src.jefrey.core.rbac import resolve_role
+
+    return resolve_role(_ROLE_CV.get()).value
 
 
 async def _run_guarded(tool: StructuredTool, args: dict, thread_id: str) -> str:

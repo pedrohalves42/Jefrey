@@ -86,11 +86,11 @@ class PolicyEngine:
 
     def decide(self, tool_name, args=None, ctx=None) -> PolicyResult:
         ctx = ctx or PolicyContext()
-        if self._mode == "off":
-            return PolicyResult(Decision.ALLOW, self.risk_of(tool_name), "policy desligada")
         risk = self.risk_of(tool_name)
 
-        # --- 1) RBAC (ANTES da lógica de risco — AXIOM #1) ---
+        # --- 1) RBAC (SEMPRE, antes de tudo — CIPHER-021) ---
+        # 'off' desativa só o PolicyEngine de risco; RBAC roda sempre (um guest NUNCA
+        # executa ferramenta MEDIUM/HIGH mesmo com policy desligada).
         required = TOOL_REGISTRY.required_role_of(tool_name) or Role.USER
         rbac_res = RBACEngine().check(ctx.user_role, required, tool_name)
         if rbac_res.decision == "deny":
@@ -101,6 +101,9 @@ class PolicyEngine:
             return PolicyResult(
                 Decision.DENY, risk, "ferramenta não registrada no ToolRegistry (risco desconhecido)",
             )
+
+        if self._mode == "off":
+            return PolicyResult(Decision.ALLOW, risk, "policy desligada (RBAC mantido)")
 
         # --- 3) admin bypass (AXIOM #4) ---
         if as_role(ctx.user_role) == Role.ADMIN:

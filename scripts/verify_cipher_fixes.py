@@ -52,6 +52,46 @@ CHECKS = [
     # CIPHER-018: tool_timeout em MCPServerSettings
     ("CIPHER-018: tool_timeout em MCPServerSettings",
      lambda: "tool_timeout" in open("src/jefrey/core/config.py", encoding="utf-8").read()),
+
+    # CIPHER-019: HITL REST exige Bearer token (Authorization / 401 / secret_key)
+    ("CIPHER-019: HITL REST exige Bearer token (Authorization/401/secret_key)",
+     lambda: ("Authorization" in open("src/jefrey/api/approvals.py", encoding="utf-8").read()
+              and "401" in open("src/jefrey/api/approvals.py", encoding="utf-8").read()
+              and "secret_key" in open("src/jefrey/api/approvals.py", encoding="utf-8").read())),
+
+    # CIPHER-020: /approvals/pending não expõe arguments_json
+    ("CIPHER-020: /approvals/pending não expõe arguments_json",
+     lambda: "arguments_json" not in open("src/jefrey/api/approvals.py", encoding="utf-8")
+             .read().split("async def list_pending")[1]),
+
+    # CIPHER-021: mode='off' não pula RBAC (RBAC checado ANTES do off)
+    ("CIPHER-021: mode='off' não pula RBAC (RBAC antes do off)",
+     lambda: (lambda b: b.find("RBACEngine().check") != -1
+              and b.find('self._mode == "off"') != -1
+              and b.find("RBACEngine().check") < b.find('self._mode == "off"'))(
+         open("src/jefrey/core/policy.py", encoding="utf-8")
+         .read().split("def decide")[1].split("def _hitl")[0])),
+
+    # CIPHER-022: actor_role resolvido server-side (resolve_role em rbac + agent)
+    ("CIPHER-022: actor_role resolvido server-side (resolve_role em rbac+agent)",
+     lambda: ("def resolve_role" in open("src/jefrey/core/rbac.py", encoding="utf-8").read()
+              and "resolve_role" in open("src/jefrey/core/agent.py", encoding="utf-8")
+              .read().split("class JefreyAgent")[1])),
+
+    # CIPHER-023: ToolExecutor._invoke usa to_thread/iscoroutinefunction p/ sync
+    ("CIPHER-023: ToolExecutor._invoke usa to_thread/iscoroutinefunction p/ sync",
+     lambda: ("to_thread" in open("src/jefrey/core/executor.py", encoding="utf-8").read()
+              or "iscoroutinefunction" in open("src/jefrey/core/executor.py", encoding="utf-8").read())),
+
+    # CIPHER-024: uuid inválido em /decide -> 400 (não 500)
+    ("CIPHER-024: uuid inválido em /decide -> 400 (não 500)",
+     lambda: ("status_code=400" in open("src/jefrey/api/approvals.py", encoding="utf-8").read()
+              and "uuid.UUID" in open("src/jefrey/api/approvals.py", encoding="utf-8").read())),
+
+    # CIPHER-025: AuditLogger dual-write fallback (audit_fallback_path + _write_fallback)
+    ("CIPHER-025: AuditLogger dual-write fallback (audit_fallback_path + _write_fallback)",
+     lambda: ("audit_fallback_path" in open("src/jefrey/core/config.py", encoding="utf-8").read()
+              and "_write_fallback" in open("src/jefrey/core/audit.py", encoding="utf-8").read())),
 ]
 
 

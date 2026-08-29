@@ -208,7 +208,18 @@ class HITLSettings(BaseSettings):
     approval_ttl: float = 1800.0
     poll_interval: float = 2.0
 
+class APISettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="JEFREY_API__", extra="ignore")
 
+    # CIPHER-019: segredo do Bearer token que protege os endpoints HITL de aprovação
+    # (api/approvals.py). OBRIGATÓRIO em produção: se vazio, o middleware de auth recusa
+    # TODAS as requests (nenhum token válido é possível) -> o endpoint NUNCA sobe sem
+    # autenticação. Gere com `python -c "import secrets; print(secrets.token_hex(32))"`.
+    secret_key: str = ""
+
+    # CIPHER-025: caminho de fallback local para o trilho de auditoria quando o
+    # Postgres está fora (dual-write). Garante rastro forense mesmo em queda.
+    audit_fallback_path: str = "data/audit_fallback.jsonl"
 
 class AgentSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="JEFREY_AGENT__", extra="ignore")
@@ -297,6 +308,7 @@ class AppSettings(BaseSettings):
     agent: AgentSettings = AgentSettings()
     policy: PolicySettings = PolicySettings()
     hitl: HITLSettings = HITLSettings()
+    api: APISettings = APISettings()
     mcp: MCPServerSettings = MCPServerSettings()
     mcp_client: MCPClientSettings = MCPClientSettings()
 

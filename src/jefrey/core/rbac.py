@@ -41,6 +41,23 @@ def role_allowed(actor: Role, required: Role) -> bool:
     """True se o papel do ator é suficiente para o papel exigido pela ferramenta."""
     return _ROLE_RANK[actor] >= _ROLE_RANK[required]
 
+def resolve_role(preferred: "str | Role | None" = None) -> Role:
+    """Resolve o papel efetivo SERVER-SIDE (CIPHER-022).
+
+    Mesmo padrão de ``_resolve_role`` do gateway MCP: a fonte de verdade é
+    ``service_role`` (config); um papel preferido (ex.: header ``X-Jefrey-Role``)
+    só é honrado se estiver em ``allowed_roles``. Nunca confia em papel vindo de
+    payload de chamador — fecha a superfície de CIPHER-001 também no agent loop.
+    """
+    from src.jefrey.core.config import get_settings
+
+    cfg = get_settings().mcp
+    allowed = {as_role(r) for r in (cfg.allowed_roles or [])}
+    pref = as_role(preferred)
+    if pref in allowed:
+        return pref
+    return as_role(cfg.service_role)
+
 
 @dataclass
 class RBACResult:

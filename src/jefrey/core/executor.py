@@ -15,6 +15,7 @@ listado no escopo de P4 (fatorado de agent.py para isolamento de dependências).
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Awaitable
@@ -137,4 +138,7 @@ class ToolExecutor:
             return f"[ERRO] ferramenta '{tool_name}' não resolvida"
         if hasattr(tool, "ainvoke"):
             return await tool.ainvoke(args)
-        return await tool(**args)
+        if asyncio.iscoroutinefunction(tool):  # callable async explícito
+            return await tool(**args)
+        # CIPHER-023: callable síncrono roda em thread p/ não bloquear o event loop.
+        return await asyncio.to_thread(tool, **args)

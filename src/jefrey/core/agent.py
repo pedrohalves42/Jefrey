@@ -19,6 +19,7 @@ from langsmith import traceable
 import src.jefrey.core.logging  # noqa: F401
 from src.jefrey.core.config import get_settings
 from src.jefrey.core.policy import get_policy_engine, PolicyContext, Decision
+from src.jefrey.core.rbac import resolve_role
 from src.jefrey.core.memory import get_memory_manager
 from src.jefrey.core.events import event_bus, SystemEvents
 from src.jefrey.core.checkpointer import get_postgres_checkpointer
@@ -244,7 +245,7 @@ class JefreyAgent:
         tool_map = {tool.name: tool for tool in self.tools}
         executor = ToolExecutor(
             tool_resolver=tool_map.get,
-            actor_role="user",
+            actor_role=resolve_role(),  # CIPHER-022: papel SERVER-SIDE (config), nunca do caller
             autonomous=False,
             thread_id=state.thread_id,
         )
