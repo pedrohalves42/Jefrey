@@ -1,0 +1,261 @@
+{
+  "name": "Jefrey Event Router",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "jefrey-events",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0001-4a00-8000-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        400
+      ],
+      "webhookId": "jefrey-events-router"
+    },
+    {
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "outputKey": "tool_call",
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.event_type || ($json.body && $json.body.event_type) }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "tool_call"
+                  }
+                ]
+              }
+            },
+            {
+              "outputKey": "memory_query",
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.event_type || ($json.body && $json.body.event_type) }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "memory_query"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "a1b2c3d4-0002-4a00-8000-000000000002",
+      "name": "Switch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        480,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.item.json;\nconst b = (item && item.body) ? item.body : item;\nconst isMem = b.event_type === 'memory_query';\nconst toolName = isMem ? 'search_notes' : (b.payload ? b.payload.tool : undefined);\nlet argumentsObj;\nif (isMem) {\n  argumentsObj = {\n    query: b.payload ? b.payload.query : undefined,\n    top_k: (b.payload && b.payload.top_k) || 5,\n    thread_id: b.thread_id\n  };\n} else {\n  argumentsObj = Object.assign({}, (b.payload && b.payload.args) || {}, {\n    thread_id: b.thread_id\n  });\n}\nreturn [{\n  json: {\n    body: {\n      jsonrpc: '2.0',\n      id: 1,\n      method: 'tools/call',\n      params: { name: toolName, arguments: argumentsObj }\n    }\n  }\n}];",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0003-4a00-8000-000000000003",
+      "name": "Build MCP Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        760,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://mcp-server:8001/mcp",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "contentType": "json",
+        "jsonBody": "={{ $json.body }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0004-4a00-8000-000000000004",
+      "name": "Call Jefrey MCP",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1010,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.item.json;\nlet text = '';\nif (item && item.result && item.result.content && item.result.content[0]) {\n  text = item.result.content[0].text;\n} else if (item && item.error) {\n  text = 'MCP_ERROR: ' + (item.error.message || JSON.stringify(item.error));\n} else {\n  text = JSON.stringify(item).slice(0, 500);\n}\nconst wb = $items('Webhook')[0].json;\nconst b = (wb && wb.body) ? wb.body : wb;\nreturn [{\n  json: {\n    result: text,\n    event_type: b.event_type,\n    thread_id: b.thread_id,\n    audit_id: $execution.id,\n    statusCode: 200\n  }\n}];",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0005-4a00-8000-000000000005",
+      "name": "Parse MCP Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1260,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const wb = $items('Webhook')[0].json;\nconst b = (wb && wb.body) ? wb.body : wb;\nreturn [{\n  json: {\n    error: 'unknown_event_type',\n    event_type: (b && b.event_type) ? b.event_type : '(none)',\n    audit_id: $execution.id,\n    statusCode: 400\n  }\n}];",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0009-4a00-8000-000000000009",
+      "name": "Error Code",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        760,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { result: $json.result, thread_id: $json.thread_id, event_type: $json.event_type, audit_id: $json.audit_id, statusCode: $json.statusCode } }}",
+        "statusCode": "={{ $json.statusCode }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0008-4a00-8000-000000000008",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1520,
+        460
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Build MCP Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build MCP Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build MCP Payload": {
+      "main": [
+        [
+          {
+            "node": "Call Jefrey MCP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Jefrey MCP": {
+      "main": [
+        [
+          {
+            "node": "Parse MCP Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse MCP Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Code": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": {},
+  "pinData": {},
+  "meta": {
+    "templateId": "jefrey-event-router",
+    "instanceId": "jefrey"
+  },
+  "tags": [
+    "jefrey",
+    "p3b",
+    "event-router",
+    "mcp"
+  ]
+}

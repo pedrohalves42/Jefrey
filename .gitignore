@@ -1,0 +1,46 @@
+# Secrets — NUNCA versionar
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+build/
+dist/
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Logs e artefatos de teste
+logs/
+*.log
+*.txt
+cmp_result.txt
+probe_*.txt
+p3_out.txt
+
+# Docker volumes (dados locais)
+pgdata/
+redis_data/
+n8n_data/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# n8n credentials (se exportados)
+n8n/credentials/
+
+# Dados gerados (embeddings ChromaDB, sqlite local) — nunca versionar
+data/
+*.sqlite3
+

@@ -1,0 +1,164 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[project]
+name = "jefrey"
+version = "0.1.0"
+description = "Jefrey - Assistente pessoal IA com memória avançada e habilidades orientadas a eventos"
+authors = [
+    {name = "Jefrey Team", email = "contato@jefrey.ai"}
+]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.12"
+keywords = ["AI", "LLM", "assistant", "memory", "agent", "skills"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "langgraph>=0.2.0",
+    "langchain>=0.2.0",
+    "langchain-community>=0.2.0",
+    "langchain-openai>=0.2.0",
+    "langchain-anthropic>=0.2.0",
+    "langchain-ollama>=0.2.0",
+    "pydantic>=2.8.0",
+    "pydantic-settings>=2.8.0",
+    "python-dotenv>=1.0.0",
+    "chromadb>=0.5.0",
+    "pyyaml>=6.0",
+    "python-json-logger>=2.0.7",
+    "asyncio-mqtt>=0.13.0",
+    "click>=8.0.0",
+    "rich>=13.0.0",
+    "uvicorn>=0.34.0",
+    "fastapi>=0.110.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.6.0",
+    "mypy>=1.11.0",
+    "black>=24.4.0",
+    "isort>=5.13.0",
+    "pre-commit>=3.7.0",
+    "types-python-dotenv>=1.0.0",
+    "types-pyyaml>=6.0.0",
+]
+
+[project.scripts]
+jefrey = "src.jefrey.cli:main"
+jefrey-cli = "src.jefrey.cli:main"
+
+[tool.poetry]
+package-dir = "src"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C",  # flake8-comprehensions
+    "UP", # pyupgrade
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["jefrey"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+exclude = [
+    "tests/",
+    ".venv/",
+    ".git/",
+]
+
+[tool.black]
+line-length = 100
+target-version = ['py312']
+include = 'src/jefrey/.*\.py$'
+
+[tool.isort]
+profile = "black"
+line_length = 100
+target_version = "py312"
+
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+asyncio_default_fixture_style = "function"
+python_files = ["test_*.py", "*_test.py"]
+python_paths = ["src"]
+
+[tool.coverage.run]
+source = ["src/jefrey"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == '__main__':",
+    "if TYPE_CHECKING:",
+]
+
+[tool.coverage.html]
+directory = "htmlcov"
+
+[dependency-groups]
+test = ["pytest", "pytest-asyncio", "pytest-cov"]
+lint = ["ruff", "mypy", "black", "isort"]
+format = ["black", "isort"]
+all = [
+    "langgraph",
+    "langchain",
+    "langchain-community",
+    "langchain-openai",
+    "langchain-anthropic",
+    "langchain-ollama",
+    "pydantic",
+    "pydantic-settings",
+    "python-dotenv",
+    "chromadb",
+    "pyyaml",
+    "python-json-logger",
+    "asyncio-mqtt",
+    "click",
+    "rich",
+    "uvicorn",
+    "fastapi",
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "ruff",
+    "mypy",
+    "black",
+    "isort",
+    "pre-commit",
+    "types-python-dotenv",
+    "types-pyyaml",
+]
+
+[virtualenvs]
+path = ".venv"

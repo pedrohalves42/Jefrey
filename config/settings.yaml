@@ -1,0 +1,92 @@
+# Configuração Principal do Jarvis
+app:
+  name: "Jefrey"
+  version: "0.1.0"
+  debug: true
+
+# Modelo de Linguagem (LLM)
+llm:
+  provider: "openai"  # openai | ollama | anthropic
+  model: "gpt-4o-mini"
+  temperature: 0.7
+  max_tokens: 4000
+  # Para Ollama local (SEM /v1 no final - o cliente já adiciona):
+  # base_url: "http://localhost:11434"
+  # api_key: "ollama"
+  #
+  # Para LM Studio local (porta padrão 1234):
+  # base_url: "http://127.0.0.1:1234"
+  #
+  # Para servidor compatível com OpenAI (porta 20128):
+  # base_url: "http://127.0.0.1:20128"
+
+# Memória e Contexto
+memory:
+  # Memória de curto prazo (buffer de conversa)
+  short_term:
+    max_messages: 20
+    max_tokens: 8000
+  
+  # Memória de longo prazo (vetorial)
+  long_term:
+    provider: "chromadb"  # chromadb | sqlite-vec
+    persist_directory: "data/chroma_db"
+    collection_name: "jefrey_memory"
+    embedding_model: "text-embedding-3-small"
+    top_k: 5
+    similarity_threshold: 0.7
+
+# Interface de Voz
+voice:
+  enabled: false
+  wake_word:
+    enabled: false
+    provider: "porcupine"  # porcupine | openwakeword
+    access_key: ""  # Chave do Picovoice Console
+    keywords: ["jefrey"]
+  
+  stt:
+    provider: "whisper"  # whisper | google | azure
+    model: "base"  # tiny, base, small, medium, large
+    language: "pt"
+  
+  tts:
+    provider: "piper"  # piper | elevenlabs | pyttsx3
+    voice: "pt_BR-faber-medium"
+    speed: 1.0
+
+# Integrações (chaves vão no .env)
+integrations:
+  google_calendar:
+    enabled: false
+    credentials_file: "config/credentials/google_calendar.json"
+    token_file: "config/tokens/google_calendar_token.json"
+  
+  gmail:
+    enabled: false
+    credentials_file: "config/credentials/gmail.json"
+    token_file: "config/tokens/gmail_token.json"
+  
+  notion:
+    enabled: false
+    # token no .env
+  
+  composio:
+    enabled: false
+    # api_key no .env
+
+# Skills (habilidades) - true/false para ativar/desativar
+skills:
+  calendar: true
+  email: true
+  web_search: true
+  notes: true
+  automation: true
+  weather: false
+  stocks: false
+
+# Logging
+logging:
+  level: "INFO"
+  file: "logs/jefrey.log"
+  format: "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
