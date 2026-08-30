@@ -3,6 +3,7 @@
 # Fase P1: PostgreSQL 16 + pgvector (memória vetorial + relacional) e Redis (working memory)
 # Fase P3a: MCP Gateway (servidor dedicado streamable-http :8001, healthcheck /health)
 # Fase P3b: n8n (Event Router :5678, healthcheck /healthz, importa workflow versionado)
+# Fase P6: Observability (Prometheus :9090 + Grafana :3000)
 # =============================================================================
 services:
   postgres:
@@ -93,25 +94,16 @@ services:
     volumes:
       - .:/app
     environment:
-      # Em Docker usamos os hostnames dos serviços (postgres/redis). As URLs completas
-      # têm precedência sobre o .env (que aponta para localhost) e sobrescrevem o
-      # JEFREY_DATABASE__HOST/REDIS__HOST para o networking interno do compose.
       JEFREY_DATABASE__URL: postgresql+psycopg://jefrey:jefrey@postgres:5432/jefrey
       JEFREY_REDIS__URL: redis://:${JEFREY_REDIS__PASSWORD:-jefrey_redis_2026}@redis:6379/0
       JEFREY_DATABASE__HOST: postgres
       JEFREY_REDIS__HOST: redis
       JEFREY_REDIS__PASSWORD: ${JEFREY_REDIS__PASSWORD:-jefrey_redis_2026}
-      # Embeddings: o MCP Server roda em container; Ollama sobe na HOST (Windows).
-      # host.docker.internal resolve para a host em Docker Desktop e está confirmado
-      # acessível (testado: 200 OK de dentro do container). Sem isso, save_note etc.
-      # falham com "Failed to connect to Ollama" dentro do container.
       JEFREY_EMBEDDINGS__BASE_URL: http://host.docker.internal:11434
       JEFREY_MCP__HOST: 0.0.0.0
       JEFREY_MCP__PORT: 8001
     ports:
       - "8001:8001"
-    # CIPHER-014: resolve host.docker.internal no Linux via host-gateway
-    # (no-op no Windows Docker Desktop, que já resolve nativamente). Sem condicionais.
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -141,11 +133,6 @@ services:
     ports:
       - "5678:5678"
     environment:
-      # Autenticação (P3b): n8n 2.36 usa User Management (owner + API key) para a REST API.
-      # O básico legado N8N_BASIC_AUTH_* está descontinuado e NÃO autentica a API nesta
-      # versão (testado: 401 em /api/v1/*). Por isso desligamos o básico e usamos
-      # owner (email/senha) + API key gerada em runtime (verify_p3b). O editor e a
-      # instância seguem autenticados — equivalente seguro ao pedido original.
       N8N_BASIC_AUTH_ACTIVE: "false"
       N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER}
       N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD}
@@ -157,12 +144,6 @@ services:
       N8N_PERSONALIZATION_ENABLED: "false"
       N8N_HEALTHY_CHECK_PATH: "/healthz"
       WEBHOOK_URL: "http://localhost:5678/"
-      # NOTA (Decisão 2 do P3b): o workflow versionado fica em n8n/workflows/ (no repo).
-      # O auto-import via N8N_WORKFLOWS_IMPORT_FOLDER foi DESLIGADO porque recriava o
-      # workflow a cada startup e conflitava no path do webhook (/webhook/jefrey-events)
-      # com a importação idempotente do verify_p3b via API (find-or-create por nome +
-      # activate). O JSON versionado no repo cumpre o intento de "não perder o workflow
-      # se o volume morrer".
     volumes:
       - jefrey_n8n_data:/home/node/.n8n
     depends_on:
@@ -176,7 +157,53 @@ services:
       start_period: 60s
     restart: unless-stopped
 
+  # ---------------------------------------------------------------------------
+  # Fase P6 — Observabilidade (Prometheus + Grafana)
+  # Prometheus: scrape jefrey-api:8000/metrics, retém 30 dias.
+  # Grafana: provisiona datasource Prometheus + dashboard Jefrey (6 painéis).
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: jefrey-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - jefrey_prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: jefrey-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-jefrey_grafana_2026}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/jefrey.json
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards
+      - jefrey_grafana_data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   jefrey_pgdata:
   jefrey_redisdata:
   jefrey_n8n_data:
+  jefrey_prometheus_data:
+  jefrey_grafana_data:

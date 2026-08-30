@@ -1,0 +1,13 @@
+apiVersion: 1
+
+providers:
+  - name: "Jefrey"
+    orgId: 1
+    folder: "Jefrey"
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

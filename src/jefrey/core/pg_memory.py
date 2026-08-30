@@ -19,6 +19,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from src.jefrey.core.db import get_db
 from src.jefrey.core.models import memory_table
 from src.jefrey.core.config import get_settings
+from src.jefrey.core.metrics import MEMORY_OPS, MEMORY_LATENCY
 
 def _jsonable(value: Any) -> Any:
     try:
@@ -140,29 +141,41 @@ class PostgresLongTermMemory:
         layer: str | None = None,
         user_id: str = "system",
     ) -> str:
-        table = memory_table(layer or self._default_layer)
-        metadata = dict(metadata or {})
-        tags = metadata.pop("tags", []) or []
-        title = metadata.pop("title", None)
-        source = metadata.pop("source", "user")
-        metadata = {k: _jsonable(v) for k, v in metadata.items()}
-        embedding = self._embeddings.embed_query(content)
-        rec = table(
-            id=uuid.UUID(memory_id) if memory_id else uuid.uuid4(),
-            user_id=user_id,
-            content=content,
-            embedding=embedding,
-            title=title,
-            source=source,
-            tags=list(tags),
-            metadata_json=metadata,
-        )
-        with get_db() as session:
-            session.add(rec)
-            session.flush()
-            rid = str(rec.id)
-        logger.info("add layer=%s id=%s user=%s tags=%s", layer or self._default_layer, rid, user_id, tags)
-        return rid
+        import time as _time
+        _layer = layer or self._default_layer
+        _start = _time.monotonic()
+        try:
+            table = memory_table(_layer)
+            metadata = dict(metadata or {})
+            tags = metadata.pop("tags", []) or []
+            title = metadata.pop("title", None)
+            source = metadata.pop("source", "user")
+            metadata = {k: _jsonable(v) for k, v in metadata.items()}
+            embedding = self._embeddings.embed_query(content)
+            rec = table(
+                id=uuid.UUID(memory_id) if memory_id else uuid.uuid4(),
+                user_id=user_id,
+                content=content,
+                embedding=embedding,
+                title=title,
+                source=source,
+                tags=list(tags),
+                metadata_json=metadata,
+            )
+            with get_db() as session:
+                session.add(rec)
+                session.flush()
+                rid = str(rec.id)
+            _elapsed = _time.monotonic() - _start
+            MEMORY_LATENCY.labels(operation="add", layer=_layer).observe(_elapsed)
+            MEMORY_OPS.labels(operation="add", layer=_layer).inc()
+            logger.info("add layer=%s id=%s user=%s tags=%s", _layer, rid, user_id, tags)
+            return rid
+        except Exception:
+            _elapsed = _time.monotonic() - _start
+            MEMORY_LATENCY.labels(operation="add", layer=_layer).observe(_elapsed)
+            MEMORY_OPS.labels(operation="add", layer=_layer).inc()
+            raise
 
     def search(
         self,
@@ -172,28 +185,40 @@ class PostgresLongTermMemory:
         layer: str | None = None,
         user_id: str = "system",
     ) -> list[dict]:
-        table = memory_table(layer or self._default_layer)
-        top_k = top_k or self._top_k
-        q = self._embeddings.embed_query(query)
-        distance = table.embedding.cosine_distance(q)
-        stmt = select(table, distance.label("distance")).where(
-            _build_filter(table, filter_metadata, user_id=user_id)
-        )
-        stmt = stmt.order_by(distance).limit(top_k)
-        results: list[dict] = []
+        import time as _time
+        _layer = layer or self._default_layer
+        _start = _time.monotonic()
         try:
-            with get_db() as session:
-                rows = session.execute(stmt).all()
-                for rec, dist in rows:
-                    similarity = 1 - float(dist)
-                    if similarity < self._similarity_threshold:
-                        continue
-                    results.append(self._to_dict(rec, similarity))
-        except Exception as e:  # noqa: BLE001
-            logger.error("search layer=%s falhou: %s", layer or self._default_layer, e)
+            table = memory_table(_layer)
+            top_k = top_k or self._top_k
+            q = self._embeddings.embed_query(query)
+            distance = table.embedding.cosine_distance(q)
+            stmt = select(table, distance.label("distance")).where(
+                _build_filter(table, filter_metadata, user_id=user_id)
+            )
+            stmt = stmt.order_by(distance).limit(top_k)
+            results: list[dict] = []
+            try:
+                with get_db() as session:
+                    rows = session.execute(stmt).all()
+                    for rec, dist in rows:
+                        similarity = 1 - float(dist)
+                        if similarity < self._similarity_threshold:
+                            continue
+                        results.append(self._to_dict(rec, similarity))
+            except Exception as e:  # noqa: BLE001
+                logger.error("search layer=%s falhou: %s", _layer, e)
+                raise
+            _elapsed = _time.monotonic() - _start
+            MEMORY_LATENCY.labels(operation="search", layer=_layer).observe(_elapsed)
+            MEMORY_OPS.labels(operation="search", layer=_layer).inc()
+            logger.debug("search layer=%s query=%r top_k=%s user=%s -> %d", _layer, query[:50], top_k, user_id, len(results))
+            return results
+        except Exception:
+            _elapsed = _time.monotonic() - _start
+            MEMORY_LATENCY.labels(operation="search", layer=_layer).observe(_elapsed)
+            MEMORY_OPS.labels(operation="search", layer=_layer).inc()
             raise
-        logger.debug("search layer=%s query=%r top_k=%s user=%s -> %d", layer or self._default_layer, query[:50], top_k, user_id, len(results))
-        return results
 
     def get(self, memory_id: str, layer: str | None = None, user_id: str = "system") -> dict | None:
         table = memory_table(layer or self._default_layer)

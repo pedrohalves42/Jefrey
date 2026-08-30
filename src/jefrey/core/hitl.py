@@ -18,6 +18,7 @@ import datetime
 from typing import Any
 
 from src.jefrey.core.rbac import as_role  # noqa: F401  (mantém API simétrica)
+from src.jefrey.core.metrics import APPROVALS_CREATED, APPROVALS_DECIDED
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,7 @@ class ApprovalManager:
             "approval criado id=%s tool=%s thread=%s user=%s expires_em=%.0fs",
             aid, tool_name, thread_id, user_id, self._ttl,
         )
+        APPROVALS_CREATED.labels(tool_name=tool_name, risk_level=risk_level).inc()
         return aid
 
     def decide(self, approval_id: str, decision: str, decided_by: str | None = None,
@@ -76,6 +78,7 @@ class ApprovalManager:
         d = str(decision).lower()
         if d not in ("approved", "rejected"):
             raise ValueError(f"decisão inválida: {decision}")
+        _tool_name = ""
         with get_db() as s:
             r = s.get(Approval, uuid.UUID(approval_id))
             if r is None or r.status != "pending":
@@ -87,10 +90,12 @@ class ApprovalManager:
                     approval_id, r.user_id, user_id,
                 )
                 return False
+            _tool_name = r.tool_name  # captura antes do session close
             r.status = d
             r.decided_by = decided_by
             r.decided_at = func.now()
         logger.info("approval %s -> %s por %s (user=%s)", approval_id, d, decided_by, user_id)
+        APPROVALS_DECIDED.labels(decision=d, tool_name=_tool_name).inc()
         return True
 
     def expire_due(self) -> int:
@@ -109,6 +114,7 @@ class ApprovalManager:
             for r in rows:
                 r.status = "expired"
                 r.decided_at = now
+                APPROVALS_DECIDED.labels(decision="expired", tool_name=r.tool_name).inc()
                 count += 1
         if count:
             logger.info("approval(s) expirada(s): %d", count)

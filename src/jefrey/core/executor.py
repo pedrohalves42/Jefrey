@@ -25,6 +25,7 @@ from src.jefrey.core.registry import TOOL_REGISTRY
 from src.jefrey.core.policy import get_policy_engine, PolicyContext, Decision
 from src.jefrey.core.hitl import ApprovalManager
 from src.jefrey.core.audit import audit_tool_call
+from src.jefrey.core.metrics import TOOLS_BLOCKED, TOOL_EXEC_LATENCY
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +78,7 @@ class ToolExecutor:
                 thread_id=tid, tool_name=tool_name, actor_role=actor.value,
                 risk=risk_str, decision="deny_rbac", reason=rbac_res.reason, source="agent",
             )
+            TOOLS_BLOCKED.labels(tool_name=tool_name, reason="rbac_deny").inc()
             return ToolExecutionResult(
                 blocked=True, decision="deny_rbac", reason=rbac_res.reason,
             )
@@ -92,6 +94,7 @@ class ToolExecutor:
                 risk=risk_val, decision="deny", reason=res.reason,
                 approval_id=res.approval_id, source="agent",
             )
+            TOOLS_BLOCKED.labels(tool_name=tool_name, reason="policy_deny").inc()
             return ToolExecutionResult(
                 blocked=True, decision="deny", reason=res.reason, approval_id=res.approval_id,
             )
@@ -135,12 +138,23 @@ class ToolExecutor:
         )
 
     async def _invoke(self, tool_name: str, args: dict) -> Any:
+        import time as _time
         tool = self._resolve(tool_name)
         if tool is None:
             return f"[ERRO] ferramenta '{tool_name}' não resolvida"
-        if hasattr(tool, "ainvoke"):
-            return await tool.ainvoke(args)
-        if asyncio.iscoroutinefunction(tool):  # callable async explícito
-            return await tool(**args)
-        # CIPHER-023: callable síncrono roda em thread p/ não bloquear o event loop.
-        return await asyncio.to_thread(tool, **args)
+        _start = _time.monotonic()
+        try:
+            if hasattr(tool, "ainvoke"):
+                result = await tool.ainvoke(args)
+            elif asyncio.iscoroutinefunction(tool):  # callable async explícito
+                result = await tool(**args)
+            else:
+                # CIPHER-023: callable síncrono roda em thread p/ não bloquear o event loop.
+                result = await asyncio.to_thread(tool, **args)
+            _elapsed = _time.monotonic() - _start
+            TOOL_EXEC_LATENCY.labels(tool_name=tool_name).observe(_elapsed)
+            return result
+        except Exception:
+            _elapsed = _time.monotonic() - _start
+            TOOL_EXEC_LATENCY.labels(tool_name=tool_name).observe(_elapsed)
+            raise

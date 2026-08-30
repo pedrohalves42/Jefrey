@@ -33,6 +33,8 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 from mcp.client.stdio import StdioServerParameters, stdio_client
 
+from src.jefrey.core.metrics import MCP_CALLS, MCP_LATENCY
+
 logger = logging.getLogger(__name__)
 
 
@@ -190,21 +192,35 @@ class MCPClient:
         ]
 
     async def call_tool(self, name: str, arguments: dict | None = None) -> str:
+        import time as _time
         if self._session is None:
             raise MCPClientError(f"MCPClient '{self.name}' não está conectado")
+        _start = _time.monotonic()
         try:
             result = await asyncio.wait_for(
                 self._session.call_tool(name, arguments or {}),
                 timeout=self._timeout,
             )
+            _elapsed = _time.monotonic() - _start
+            MCP_LATENCY.labels(server=self.name).observe(_elapsed)
+            MCP_CALLS.labels(server=self.name, status="success").inc()
         except asyncio.TimeoutError:
+            _elapsed = _time.monotonic() - _start
+            MCP_LATENCY.labels(server=self.name).observe(_elapsed)
+            MCP_CALLS.labels(server=self.name, status="error").inc()
             raise MCPClientError(
                 f"Timeout ao chamar ferramenta '{name}' em '{self.name}'",
                 tool=name,
             )
         except MCPClientError:
+            _elapsed = _time.monotonic() - _start
+            MCP_LATENCY.labels(server=self.name).observe(_elapsed)
+            MCP_CALLS.labels(server=self.name, status="error").inc()
             raise
         except Exception as e:  # noqa: BLE001
+            _elapsed = _time.monotonic() - _start
+            MCP_LATENCY.labels(server=self.name).observe(_elapsed)
+            MCP_CALLS.labels(server=self.name, status="error").inc()
             raise MCPClientError(
                 f"Erro ao chamar '{name}' em '{self.name}': {type(e).__name__}",
                 tool=name,

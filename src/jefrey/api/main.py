@@ -18,7 +18,9 @@ from src.jefrey.api.approvals import build_approvals_app
 from src.jefrey.api.auth_middleware import FastAPIAuthMiddleware
 from src.jefrey.api.chat import router as chat_router
 from src.jefrey.api.memory import router as memory_router
+from src.jefrey.api.metrics_endpoint import router as metrics_router
 from src.jefrey.core.config import get_settings
+from src.jefrey.core.metrics import SERVICE_HEALTH
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +55,10 @@ def create_app() -> FastAPI:
 
     # SECURITY (P6-pre): autenticação Bearer + user context (multi-tenant)
     app.add_middleware(FastAPIAuthMiddleware)
+
+    # P6: Observability — Prometheus metrics endpoint
+    SERVICE_HEALTH.labels(component="api").set(1)
+    app.include_router(metrics_router)
 
     # Health check no nível raiz
     @app.get("/health", tags=["system"])
