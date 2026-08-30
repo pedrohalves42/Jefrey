@@ -9,6 +9,7 @@ Monta:
 from __future__ import annotations
 
 import logging
+import os
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,10 +35,17 @@ def create_app() -> FastAPI:
         description="API REST unificada do assistente Jefrey (FastAPI + Starlette)",
     )
 
-    # CORS para acesso por UIs e frontends locais
+    # SECURITY (P0.5): CORS restrito — origins configuráveis via env
+    # Em produção, JEFREY_API__CORS_ORIGINS deve listar os domínios permitidos.
+    cors_origins_raw = os.getenv("JEFREY_API__CORS_ORIGINS", "")
+    if cors_origins_raw:
+        cors_origins = [o.strip() for o in cors_origins_raw.split(",") if o.strip()]
+    else:
+        # Default: apenas localhost (desenvolvimento)
+        cors_origins = ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:3000"]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

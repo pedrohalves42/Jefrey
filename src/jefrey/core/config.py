@@ -305,7 +305,7 @@ class AppSettings(BaseSettings):
     name: str = "Jefrey"
     version: str = "0.1.0"
     user_name: str = "Usuário"
-    debug: bool = True
+    debug: bool = False
     
     llm: LLMSettings = LLMSettings()
     memory: MemorySettings = MemorySettings()

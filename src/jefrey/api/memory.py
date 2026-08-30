@@ -23,7 +23,7 @@ router = APIRouter(prefix="/memory", tags=["memory"])
 async def search_memory(
     request: Request,
     q: str = Query(..., description="Termo ou frase para busca semântica na memória"),
-    limit: Optional[int] = Query(5, description="Número máximo de memórias a retornar"),
+    limit: Optional[int] = Query(5, ge=1, le=100, description="Número máximo de memórias a retornar (1-100)"),
 ):
     """Busca memórias de longo prazo usando similaridade vetorial.
 
@@ -39,8 +39,8 @@ async def search_memory(
         results = mm.long_term.search(q, limit=limit, user_id=user_id)
         return {"memories": results, "count": len(results)}
     except Exception as e:
-        logger.error(f"Erro na busca de memória: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("memory: erro na busca (user=%s): %s", user_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Erro interno na busca de memória.")
 
 @router.get("/health")
 async def memory_health():
@@ -58,8 +58,8 @@ async def memory_health():
             "long_term_memories": total_long_term,
         }
     except Exception as e:
-        logger.error(f"Erro ao verificar health da memória: {e}", exc_info=True)
+        logger.error("memory: erro no health check: %s", e, exc_info=True)
         return {
             "status": "unhealthy",
-            "error": str(e),
+            "error": "Erro interno ao verificar saúde da memória.",
         }

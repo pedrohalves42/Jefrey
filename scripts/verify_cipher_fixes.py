@@ -124,6 +124,52 @@ CHECKS = [
     ("SEC-006: secret_key production validation em APISettings",
      lambda: "validate_for_production" in open("src/jefrey/core/config.py", encoding="utf-8").read()
              and "validate_for_production()" in open("src/jefrey/api/main.py", encoding="utf-8").read()),
+
+    # === SECURITY P0.5: Production hardening ===
+
+    # P05-01: debug default = False
+    ("P05-01: debug default = False (config.py)",
+     lambda: 'debug: bool = False' in open("src/jefrey/core/config.py", encoding="utf-8").read()),
+
+    # P05-02: ChatRequest com max_length
+    ("P05-02: ChatRequest max_length (chat.py)",
+     lambda: "max_length=10000" in open("src/jefrey/api/chat.py", encoding="utf-8").read()
+             and "pattern=" in open("src/jefrey/api/chat.py", encoding="utf-8").read()),
+
+    # P05-03: Error sanitization (sem str(e) em HTTP responses)
+    ("P05-03: Error sanitization — sem str(e) em responses",
+     lambda: 'detail=str(e)' not in open("src/jefrey/api/chat.py", encoding="utf-8").read()
+             and 'detail=str(e)' not in open("src/jefrey/api/memory.py", encoding="utf-8").read()),
+
+    # P05-04: CORS restrito (sem *)
+    ("P05-04: CORS restrito — sem allow_origins=['*']",
+     lambda: "allow_origins=[\"*\"]" not in open("src/jefrey/api/main.py", encoding="utf-8").read()
+             and "cors_origins" in open("src/jefrey/api/main.py", encoding="utf-8").read()),
+
+    # P05-05: Non-root Docker USER
+    ("P05-05: Non-root Docker USER",
+     lambda: "USER jefrey" in open("Dockerfile.api", encoding="utf-8").read()
+             and "USER jefrey" in open("Dockerfile.mcp", encoding="utf-8").read()),
+
+    # P05-06: Redis password in docker-compose
+    ("P05-06: Redis requirepass em docker-compose",
+     lambda: "requirepass" in open("docker-compose.yml", encoding="utf-8").read()),
+
+    # P05-07: user_id em ToolExecutor (agent.py)
+    ("P05-07: user_id propagado para ToolExecutor",
+     lambda: "user_id=state.user_id" in open("src/jefrey/core/agent.py", encoding="utf-8").read()),
+
+    # P05-08: Short-term memory isolation (session por thread)
+    ("P05-08: Short-term memory isolation (session por thread)",
+     lambda: "session(state.thread_id)" in open("src/jefrey/core/agent.py", encoding="utf-8").read()),
+
+    # P05-09: Content guard expandido (>=15 patterns)
+    ("P05-09: Content guard expandido (>=15 patterns)",
+     lambda: open("src/jefrey/core/content_guard.py", encoding="utf-8").read().count('r"') >= 15),
+
+    # P05-10: memory.py limit com upper bound
+    ("P05-10: memory.py limit com upper bound (le=100)",
+     lambda: "le=100" in open("src/jefrey/api/memory.py", encoding="utf-8").read()),
 ]
 
 

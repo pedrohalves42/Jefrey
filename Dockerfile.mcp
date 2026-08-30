@@ -13,6 +13,11 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# SECURITY (P0.5): rodar como usuário não-root
+RUN groupadd -r jefrey && useradd -r -g jefrey -d /app -s /sbin/nologin jefrey \
+    && chown -R jefrey:jefrey /app
+USER jefrey
+
 # Healthcheck em /health (sem dependência de pacotes externos além do stdlib)
 HEALTHCHECK --interval=10s --timeout=5s --retries=15 --start-period=30s \
   CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8001/health',timeout=2).status==200 else 1)"

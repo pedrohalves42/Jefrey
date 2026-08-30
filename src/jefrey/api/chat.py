@@ -15,8 +15,9 @@ import logging
 import time
 from typing import Any, Dict
 
+import re as _re
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.jefrey.core.agent import JefreyAgent
 from src.jefrey.core.content_guard import sanitize_tool_output
@@ -46,8 +47,12 @@ async def _cleanup_stale_tasks():
         logger.info("chat: task stale removida no cleanup: thread=%s", tid)
 
 class ChatRequest(BaseModel):
-    message: str
-    thread_id: str = "default"
+    message: str = Field(..., min_length=1, max_length=10000, description="Mensagem do usuário (1-10000 chars)")
+    thread_id: str = Field(
+        default="default",
+        pattern=r'^[a-zA-Z0-9_\-]{1,128}$',
+        description="ID da thread (alfanumérico, 1-128 chars)",
+    )
 
 @router.post("")
 async def chat(request: Request, req: ChatRequest):
@@ -96,7 +101,7 @@ async def chat(request: Request, req: ChatRequest):
 
     async def _run_agent_task():
         try:
-            return await agent.run(sanitized, thread_id)
+            return await agent.run(sanitized, thread_id, user_id=user_id)
         except Exception as e:
             logger.error(f"chat: falha na execução do agente (thread_id={thread_id} user={user_id}): {e}", exc_info=True)
             raise e
@@ -118,7 +123,8 @@ async def chat(request: Request, req: ChatRequest):
                     "thread_id": thread_id,
                 }
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Erro na execução: {e}")
+                logger.error("chat: erro na execução (thread=%s): %s", thread_id, e, exc_info=True)
+                raise HTTPException(status_code=500, detail="Erro interno na execução. Tente novamente.")
 
         # Se houver qualquer aprovação pendente no banco para esta thread, retorna imediatamente
         pending = ApprovalManager().get_pending(thread_id, user_id=user_id)
@@ -166,7 +172,8 @@ async def resume_chat(request: Request, thread_id: str):
                         "thread_id": thread_id,
                     }
                 except Exception as e:
-                    raise HTTPException(status_code=500, detail=f"Erro na retomada: {e}")
+                    logger.error("chat: erro na retomada (thread=%s): %s", thread_id, e, exc_info=True)
+                    raise HTTPException(status_code=500, detail="Erro interno na retomada. Tente novamente.")
 
             pending = ApprovalManager().get_pending(thread_id, user_id=user_id)
             if pending:
@@ -192,9 +199,10 @@ async def resume_chat(request: Request, thread_id: str):
                 "thread_id": thread_id,
             }
         except Exception as e:
+            logger.error("chat: erro na task finalizada (thread=%s): %s", thread_id, e, exc_info=True)
             return {
                 "status": "error",
-                "error": str(e),
+                "error": "Erro interno na execução da tarefa.",
                 "thread_id": thread_id,
             }
 
@@ -243,9 +251,10 @@ async def get_chat_status(request: Request, thread_id: str):
                     "thread_id": thread_id,
                 }
             except Exception as e:
+                logger.error("chat: erro ao obter resultado da task (thread=%s): %s", thread_id, e, exc_info=True)
                 return {
                     "status": "error",
-                    "error": str(e),
+                    "error": "Erro interno ao obter resultado.",
                     "thread_id": thread_id,
                 }
         pending = ApprovalManager().get_pending(thread_id, user_id=user_id)

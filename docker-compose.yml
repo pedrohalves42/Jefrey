@@ -26,7 +26,7 @@ services:
   redis:
     image: redis:7.2-alpine
     container_name: jefrey-redis
-    command: ["redis-server", "--appendonly", "yes"]
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${JEFREY_REDIS__PASSWORD:-jefrey_redis_2026}"]
     ports:
       - "6379:6379"
     volumes:
@@ -54,9 +54,10 @@ services:
       - .:/app
     environment:
       JEFREY_DATABASE__URL: postgresql+psycopg://jefrey:jefrey@postgres:5432/jefrey
-      JEFREY_REDIS__URL: redis://redis:6379/0
+      JEFREY_REDIS__URL: redis://:${JEFREY_REDIS__PASSWORD:-jefrey_redis_2026}@redis:6379/0
       JEFREY_DATABASE__HOST: postgres
       JEFREY_REDIS__HOST: redis
+      JEFREY_REDIS__PASSWORD: ${JEFREY_REDIS__PASSWORD:-jefrey_redis_2026}
       JEFREY_EMBEDDINGS__BASE_URL: http://host.docker.internal:11434
       JEFREY_API__SECRET_KEY: ${JEFREY_API__SECRET_KEY}
       JEFREY_API__AUDIT_FALLBACK_PATH: /app/data/audit_fallback.jsonl
@@ -96,9 +97,10 @@ services:
       # têm precedência sobre o .env (que aponta para localhost) e sobrescrevem o
       # JEFREY_DATABASE__HOST/REDIS__HOST para o networking interno do compose.
       JEFREY_DATABASE__URL: postgresql+psycopg://jefrey:jefrey@postgres:5432/jefrey
-      JEFREY_REDIS__URL: redis://redis:6379/0
+      JEFREY_REDIS__URL: redis://:${JEFREY_REDIS__PASSWORD:-jefrey_redis_2026}@redis:6379/0
       JEFREY_DATABASE__HOST: postgres
       JEFREY_REDIS__HOST: redis
+      JEFREY_REDIS__PASSWORD: ${JEFREY_REDIS__PASSWORD:-jefrey_redis_2026}
       # Embeddings: o MCP Server roda em container; Ollama sobe na HOST (Windows).
       # host.docker.internal resolve para a host em Docker Desktop e está confirmado
       # acessível (testado: 200 OK de dentro do container). Sem isso, save_note etc.

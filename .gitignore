@@ -44,3 +44,16 @@ n8n/credentials/
 data/
 *.sqlite3
 
+# Google OAuth tokens/credentials (P0.5)
+config/tokens/
+config/credentials/
+
+# Arquivos comprimidos
+*.rar
+*.zip
+*.tar.gz
+
+# Environment variants
+.env.production
+.env.staging
+

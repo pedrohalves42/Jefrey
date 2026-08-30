@@ -45,6 +45,7 @@ class AgentState:
     error: str | None = None
     metadata: dict = field(default_factory=dict)
     thread_id: str = "default"
+    user_id: str = "system"
 
 
 class JefreyAgent:
@@ -174,7 +175,12 @@ class JefreyAgent:
     
     @traceable(name="load_context")
     async def _load_context(self, state: AgentState) -> AgentState:
-        """Carrega contexto de memória."""
+        """Carrega contexto de memória.
+        
+        SECURITY (P0.5): usa sessão de curto prazo por thread (não compartilha entre usuários).
+        """
+        # SHORT-TERM ISOLATION: sessão por thread_id para não vazar conversas entre usuários
+        thread_st = self.memory.short_term.session(state.thread_id)
         context = self.memory.get_context(state.user_input)
         state.memory_context = context
         
@@ -246,6 +252,7 @@ class JefreyAgent:
         executor = ToolExecutor(
             tool_resolver=tool_map.get,
             actor_role=resolve_role(),  # CIPHER-022: papel SERVER-SIDE (config), nunca do caller
+            user_id=state.user_id,  # SECURITY (P0.5): isolamento multi-tenant
             autonomous=False,
             thread_id=state.thread_id,
         )
@@ -317,14 +324,20 @@ class JefreyAgent:
 
     @traceable(name="save_memory")
     async def _save_memory(self, state: AgentState) -> AgentState:
-        """Salva memórias importantes."""
+        """Salva memórias importantes.
+        
+        SECURITY (P0.5): usa sessão de curto prazo por thread (não compartilha entre usuários).
+        """
         if state.user_input:
             last_ai = next((m for m in reversed(state.messages) if isinstance(m, AIMessage)), None)
             if last_ai:
-                self.memory.add_conversation(state.user_input, last_ai.content)
+                # SHORT-TERM ISOLATION: salva na sessão da thread específica
+                thread_st = self.memory.short_term.session(state.thread_id)
+                thread_st.add_user(state.user_input)
+                thread_st.add_assistant(last_ai.content)
         
         await event_bus.emit_sync(SystemEvents.MEMORY_SAVED, {
-            "short_term_messages": len(self.memory.short_term.get_messages()),
+            "short_term_messages": len(self.memory.short_term.session(state.thread_id).get_messages()),
             "thread_id": state.thread_id,
         })
         
@@ -337,8 +350,11 @@ class JefreyAgent:
         return state
     
     @traceable(name="agent_run")
-    async def run(self, user_input: str, thread_id: str = "default") -> str:
-        """Executa o agente para uma entrada do usuário."""
+    async def run(self, user_input: str, thread_id: str = "default", user_id: str = "system") -> str:
+        """Executa o agente para uma entrada do usuário.
+
+        SECURITY (P0.5): user_id propagado para ToolExecutor para isolamento multi-tenant.
+        """
         if self._backend is not None:
             return await self._backend.run(user_input, thread_id)
 
@@ -346,6 +362,7 @@ class JefreyAgent:
             messages=[HumanMessage(content=user_input)],
             user_input=user_input,
             thread_id=thread_id,
+            user_id=user_id,
         )
 
         await event_bus.emit_sync(SystemEvents.USER_MESSAGE, {
@@ -368,7 +385,7 @@ class JefreyAgent:
         return response
     
     @traceable(name="agent_stream")
-    async def stream(self, user_input: str, thread_id: str = "default"):
+    async def stream(self, user_input: str, thread_id: str = "default", user_id: str = "system"):
         """Stream da resposta (para UI em tempo real)."""
         if self._backend is not None:
             async for delta in self._backend.stream(user_input, thread_id):
