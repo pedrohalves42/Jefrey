@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.jefrey.api.approvals import build_approvals_app
+from src.jefrey.api.auth_middleware import FastAPIAuthMiddleware
 from src.jefrey.api.chat import router as chat_router
 from src.jefrey.api.memory import router as memory_router
 from src.jefrey.core.config import get_settings
@@ -21,9 +22,15 @@ from src.jefrey.core.config import get_settings
 logger = logging.getLogger(__name__)
 
 def create_app() -> FastAPI:
+    # SECURITY (P6-pre): valida configurações de produção no startup
+    cfg = get_settings()
+    for warning in cfg.api.validate_for_production():
+        logger.warning(warning)
+        print(warning)
+
     app = FastAPI(
         title="Jefrey API",
-        version=get_settings().version,
+        version=cfg.version,
         description="API REST unificada do assistente Jefrey (FastAPI + Starlette)",
     )
 
@@ -35,6 +42,9 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # SECURITY (P6-pre): autenticação Bearer + user context (multi-tenant)
+    app.add_middleware(FastAPIAuthMiddleware)
 
     # Health check no nível raiz
     @app.get("/health", tags=["system"])

@@ -29,6 +29,7 @@ class Base(DeclarativeBase):
 
 class _MemoryMixin:
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(String(128), nullable=False, server_default="'system'", index=True)
     content = Column(Text, nullable=False)
     embedding = Column(Vector(EMBED_DIM), nullable=False)
     title = Column(String(512), nullable=True)
@@ -68,6 +69,7 @@ class Approval(Base):
     __tablename__ = "approvals"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(String(128), nullable=False, server_default="'system'", index=True)
     thread_id = Column(String(128), nullable=False, index=True)
     tool_name = Column(String(256), nullable=False)
     arguments_json = Column(JSONB, nullable=False, default=lambda: {})

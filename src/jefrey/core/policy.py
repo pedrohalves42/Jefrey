@@ -47,6 +47,7 @@ class RunContext:
 class PolicyContext:
     thread_id: str = "default"
     user_role: str = "user"   # admin | user | guest (RBAC, P4)
+    user_id: str = "system"   # SECURITY: multi-tenant isolation
     autonomous: bool = True   # True => gateway (sem humano): HIGH/CRITICAL => DENY
                               # False => agente (humano no loop): HIGH/CRITICAL => HITL (aguarda)
 
@@ -129,7 +130,7 @@ class PolicyEngine:
         approval_id = am.create(
             thread_id=ctx.thread_id, tool_name=tool_name, arguments=args or {},
             risk_level=risk.value, reason=f"{risk.value} requer aprovação humana",
-            created_by=ctx.user_role,
+            created_by=ctx.user_role, user_id=ctx.user_id,
         )
         logger.warning(
             "HITL tool=%s risk=%s thread=%s approval=%s",

@@ -47,11 +47,13 @@ class ToolExecutor:
         tool_resolver: ToolResolver,
         *,
         actor_role: str = "user",
+        user_id: str = "system",
         autonomous: bool = False,
         thread_id: str = "default",
     ) -> None:
         self._resolve = tool_resolver
         self._actor_role = as_role(actor_role)
+        self._user_id = user_id
         self._autonomous = autonomous
         self._thread_id = thread_id
         self._rbac = RBACEngine()
@@ -80,7 +82,7 @@ class ToolExecutor:
             )
 
         # --- PolicyEngine ---
-        ctx = PolicyContext(thread_id=tid, user_role=actor.value, autonomous=self._autonomous)
+        ctx = PolicyContext(thread_id=tid, user_role=actor.value, user_id=self._user_id, autonomous=self._autonomous)
         res = self._policy.decide(tool_name, args, ctx)
         risk_val = res.risk.value
 

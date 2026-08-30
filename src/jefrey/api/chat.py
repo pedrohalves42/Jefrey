@@ -4,6 +4,9 @@ Endpoints:
   POST /chat                    -> Inicia/envia mensagem para o agente (com content_guard)
   POST /chat/resume/{thread_id} -> Continua execução suspensa por HITL pendente
   GET  /chat/status/{thread_id} -> Consulta status atual de execução de uma thread
+
+SECURITY (P6-pre): Todos os endpoints extraem user_id do request.state (via middleware)
+para isolamento multi-tenant em memória e aprovações.
 """
 from __future__ import annotations
 
@@ -12,7 +15,7 @@ import logging
 import time
 from typing import Any, Dict
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Request
 from pydantic import BaseModel
 
 from src.jefrey.core.agent import JefreyAgent
@@ -29,7 +32,6 @@ _RUNNING_TASKS: Dict[str, asyncio.Task] = {}
 # P5-FIX-2: Timestamp do último cleanup de tasks mortas
 _last_cleanup: float = 0.0
 _CLEANUP_INTERVAL: float = 60.0  # Limpa a cada 60 segundos
-
 
 async def _cleanup_stale_tasks():
     """Remove tasks que terminaram mas ficaram no dict (pós-restart ou crash parcial)."""
@@ -48,16 +50,20 @@ class ChatRequest(BaseModel):
     thread_id: str = "default"
 
 @router.post("")
-async def chat(req: ChatRequest):
+async def chat(request: Request, req: ChatRequest):
     """Envia mensagem ao agente Jefrey.
 
     Aplica content_guard para mitigar prompt injection. Se o agente atingir uma
     ferramenta de alto risco (HIGH/CRITICAL), ele cria um approval e o endpoint
     retorna imediatamente com status 'pending_approval' (modo assíncrono).
+
+    SECURITY: user_id extraído do request.state (middleware) para isolamento multi-tenant.
     """
     # P5-FIX-2: Limpa tasks mortas periodicamente
     await _cleanup_stale_tasks()
 
+    # SECURITY: extrai user_id do middleware
+    user_id = getattr(request.state, "user_id", "anonymous")
     thread_id = req.thread_id
     message = req.message.strip()
 
@@ -68,16 +74,17 @@ async def chat(req: ChatRequest):
     sanitized = sanitize_tool_output(message, source="user_input")
     if "[CONTEÚDO BLOQUEADO" in sanitized:
         logger.warning(
-            "chat: input bloqueado pelo content_guard para thread=%s. Original=%s",
-            thread_id, message[:100],
+            "chat: input bloqueado pelo content_guard para thread=%s user=%s. Original=%s",
+            thread_id, user_id, message[:100],
         )
         raise HTTPException(
             status_code=400,
             detail="Mensagem bloqueada por regras de segurança (prompt de entrada suspeito)",
         )
 
-    # Verifica se já há uma tarefa ativa rodando nesta thread
-    if thread_id in _RUNNING_TASKS and not _RUNNING_TASKS[thread_id].done():
+    # Verifica se já há uma tarefa ativa rodando nesta thread (composto por user+thread)
+    task_key = f"{user_id}:{thread_id}"
+    if task_key in _RUNNING_TASKS and not _RUNNING_TASKS[task_key].done():
         # Retorna status running para evitar execuções concorrentes na mesma thread
         return {
             "status": "running",
@@ -91,13 +98,13 @@ async def chat(req: ChatRequest):
         try:
             return await agent.run(sanitized, thread_id)
         except Exception as e:
-            logger.error(f"chat: falha na execução do agente (thread_id={thread_id}): {e}", exc_info=True)
+            logger.error(f"chat: falha na execução do agente (thread_id={thread_id} user={user_id}): {e}", exc_info=True)
             raise e
         finally:
-            _RUNNING_TASKS.pop(thread_id, None)
+            _RUNNING_TASKS.pop(task_key, None)
 
     task = asyncio.create_task(_run_agent_task())
-    _RUNNING_TASKS[thread_id] = task
+    _RUNNING_TASKS[task_key] = task
 
     # Polling inicial de até 5.0 segundos para responder rápido se terminar ou se for para HITL
     start_time = time.monotonic()
@@ -114,7 +121,7 @@ async def chat(req: ChatRequest):
                 raise HTTPException(status_code=500, detail=f"Erro na execução: {e}")
 
         # Se houver qualquer aprovação pendente no banco para esta thread, retorna imediatamente
-        pending = ApprovalManager().get_pending(thread_id)
+        pending = ApprovalManager().get_pending(thread_id, user_id=user_id)
         if pending:
             return {
                 "status": "pending_approval",
@@ -133,13 +140,18 @@ async def chat(req: ChatRequest):
     }
 
 @router.post("/resume/{thread_id}")
-async def resume_chat(thread_id: str):
+async def resume_chat(request: Request, thread_id: str):
     """Resume a execução de uma thread suspensa após a aprovação humana de uma ferramenta.
 
     P5-FIX-1: Verifica approval pendente no DB antes de decidir a ação.
     Não recria task com input vazio — retorna idle ou pending_approval.
+
+    SECURITY: user_id extraído do request.state para isolamento multi-tenant.
     """
-    task = _RUNNING_TASKS.get(thread_id)
+    # SECURITY: extrai user_id do middleware
+    user_id = getattr(request.state, "user_id", "anonymous")
+    task_key = f"{user_id}:{thread_id}"
+    task = _RUNNING_TASKS.get(task_key)
 
     # Se há task ativa em memória, aguarda resultado
     if task and not task.done():
@@ -156,7 +168,7 @@ async def resume_chat(thread_id: str):
                 except Exception as e:
                     raise HTTPException(status_code=500, detail=f"Erro na retomada: {e}")
 
-            pending = ApprovalManager().get_pending(thread_id)
+            pending = ApprovalManager().get_pending(thread_id, user_id=user_id)
             if pending:
                 return {
                     "status": "pending_approval",
@@ -187,7 +199,7 @@ async def resume_chat(thread_id: str):
             }
 
     # Se não há task ativa (servidor reiniciou ou nunca existiu task), verifica DB
-    pending = ApprovalManager().get_pending(thread_id)
+    pending = ApprovalManager().get_pending(thread_id, user_id=user_id)
     if pending:
         # Ainda há aprovação pendente — orienta o cliente a decidir primeiro
         return {
@@ -212,9 +224,15 @@ async def resume_chat(thread_id: str):
     }
 
 @router.get("/status/{thread_id}")
-async def get_chat_status(thread_id: str):
-    """Consulta o status de execução de uma thread."""
-    task = _RUNNING_TASKS.get(thread_id)
+async def get_chat_status(request: Request, thread_id: str):
+    """Consulta o status de execução de uma thread.
+
+    SECURITY: user_id extraído do request.state para isolamento multi-tenant.
+    """
+    # SECURITY: extrai user_id do middleware
+    user_id = getattr(request.state, "user_id", "anonymous")
+    task_key = f"{user_id}:{thread_id}"
+    task = _RUNNING_TASKS.get(task_key)
     if task:
         if task.done():
             try:
@@ -230,7 +248,7 @@ async def get_chat_status(thread_id: str):
                     "error": str(e),
                     "thread_id": thread_id,
                 }
-        pending = ApprovalManager().get_pending(thread_id)
+        pending = ApprovalManager().get_pending(thread_id, user_id=user_id)
         if pending:
             return {
                 "status": "pending_approval",
@@ -239,7 +257,7 @@ async def get_chat_status(thread_id: str):
             }
         return {"status": "running", "thread_id": thread_id}
     else:
-        pending = ApprovalManager().get_pending(thread_id)
+        pending = ApprovalManager().get_pending(thread_id, user_id=user_id)
         if pending:
             return {
                 "status": "pending_approval",

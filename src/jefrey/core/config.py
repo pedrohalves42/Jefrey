@@ -221,6 +221,17 @@ class APISettings(BaseSettings):
     # Postgres está fora (dual-write). Garante rastro forense mesmo em queda.
     audit_fallback_path: str = "data/audit_fallback.jsonl"
 
+    def validate_for_production(self) -> list[str]:
+        """Valida configurações obrigatórias para produção. Retorna lista de warnings."""
+        warnings = []
+        if not self.secret_key:
+            warnings.append(
+                "⚠️  JEFREY_API__SECRET_KEY está vazio! "
+                "Nenhum Bearer token será aceito. "
+                "Gere com: python -c \"import secrets; print(secrets.token_hex(32))\""
+            )
+        return warnings
+
 class AgentSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="JEFREY_AGENT__", extra="ignore")
 

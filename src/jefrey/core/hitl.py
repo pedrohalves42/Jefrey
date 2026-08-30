@@ -39,6 +39,7 @@ class ApprovalManager:
         self, *, thread_id: str, tool_name: str, arguments: dict,
         risk_level: str, reason: str | None = None,
         created_by: str | None = None, server: str | None = None,
+        user_id: str = "system",
     ) -> str:
         from src.jefrey.core.db import get_db
         from src.jefrey.core.models import Approval
@@ -50,6 +51,7 @@ class ApprovalManager:
         with get_db() as s:
             s.add(Approval(
                 id=uuid.UUID(aid),
+                user_id=user_id,
                 thread_id=thread_id,
                 tool_name=tool_name,
                 arguments_json=dict(arguments or {}),
@@ -60,12 +62,13 @@ class ApprovalManager:
                 expires_at=expires,
             ))
         logger.info(
-            "approval criado id=%s tool=%s thread=%s expires_em=%.0fs",
-            aid, tool_name, thread_id, self._ttl,
+            "approval criado id=%s tool=%s thread=%s user=%s expires_em=%.0fs",
+            aid, tool_name, thread_id, user_id, self._ttl,
         )
         return aid
 
-    def decide(self, approval_id: str, decision: str, decided_by: str | None = None) -> bool:
+    def decide(self, approval_id: str, decision: str, decided_by: str | None = None,
+               user_id: str | None = None) -> bool:
         from src.jefrey.core.db import get_db
         from src.jefrey.core.models import Approval
         from sqlalchemy import func
@@ -77,10 +80,17 @@ class ApprovalManager:
             r = s.get(Approval, uuid.UUID(approval_id))
             if r is None or r.status != "pending":
                 return False
+            # SECURITY: ownership check — só o dono pode decidir
+            if user_id is not None and r.user_id != user_id:
+                logger.warning(
+                    "decide negado: approval_id=%s pertence a user=%s, não a user=%s",
+                    approval_id, r.user_id, user_id,
+                )
+                return False
             r.status = d
             r.decided_by = decided_by
             r.decided_at = func.now()
-        logger.info("approval %s -> %s por %s", approval_id, d, decided_by)
+        logger.info("approval %s -> %s por %s (user=%s)", approval_id, d, decided_by, user_id)
         return True
 
     def expire_due(self) -> int:
@@ -115,7 +125,7 @@ class ApprovalManager:
                 return None
             return self._row_to_dict(r)
 
-    def get_pending(self, thread_id: str | None = None) -> list[dict]:
+    def get_pending(self, thread_id: str | None = None, user_id: str | None = None) -> list[dict]:
         from src.jefrey.core.db import get_db
         from src.jefrey.core.models import Approval
 
@@ -124,12 +134,16 @@ class ApprovalManager:
             q = s.query(Approval).filter(Approval.status == "pending")
             if thread_id:
                 q = q.filter(Approval.thread_id == thread_id)
+            # SECURITY: filtra por user_id para isolamento multi-tenant
+            if user_id is not None:
+                q = q.filter(Approval.user_id == user_id)
             return [self._row_to_dict(r) for r in q.all()]
 
     @staticmethod
     def _row_to_dict(r) -> dict:
         return {
             "id": str(r.id),
+            "user_id": r.user_id,
             "thread_id": r.thread_id,
             "tool_name": r.tool_name,
             "arguments_json": r.arguments_json,

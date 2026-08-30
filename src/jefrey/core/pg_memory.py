@@ -1,4 +1,8 @@
-"""Long-term memory backend PostgreSQL + pgvector (compatível com a interface ChromaDB)."""
+"""Long-term memory backend PostgreSQL + pgvector (compatível com a interface ChromaDB).
+
+SECURITY (P6-pre): Todos os métodos filtram por user_id para isolamento multi-tenant.
+O user_id é obrigatório em add/search/get/update/delete/list_recent.
+"""
 from __future__ import annotations
 
 import json
@@ -16,7 +20,6 @@ from src.jefrey.core.db import get_db
 from src.jefrey.core.models import memory_table
 from src.jefrey.core.config import get_settings
 
-
 def _jsonable(value: Any) -> Any:
     try:
         json.dumps(value)
@@ -24,21 +27,27 @@ def _jsonable(value: Any) -> Any:
     except (TypeError, ValueError):
         return str(value)
 
-
-def _build_filter(table, filter_metadata: dict | None):
+def _build_filter(table, filter_metadata: dict | None, user_id: str | None = None):
     """Traduz um filtro estilo ChromaDB ({key: {$in/:eq...}}) para uma cláusula SQLAlchemy.
 
+    SECURITY: Sempre inclui filtro por user_id quando fornecido.
     Chaves que existem como coluna (ex.: ``tags``) usam operadores nativos; chaves
     arbitrárias são resolvidas na coluna ``metadata_json`` (JSONB) via ``@>``
     (containment) ou ``->>`` (texto) conforme o operador.
     """
-    if not filter_metadata:
-        return True
     clauses = []
+
+    # SECURITY: filtro obrigatório por user_id (isolamento multi-tenant)
+    if user_id is not None:
+        clauses.append(table.user_id == user_id)
+
+    if not filter_metadata:
+        return and_(*clauses) if clauses else True
+
     # Apenas colunas conhecidas são filtráveis diretamente; qualquer outra chave é
     # resolvida em metadata_json (JSONB). Isso evita getattr(table, key) com chaves
     # arbitrárias (ex.: "__class__") vindas de ferramentas/agentes (injecao/robustez).
-    _COLUMN_KEYS = {"tags", "title", "source", "importance", "created_at", "updated_at"}
+    _COLUMN_KEYS = {"tags", "title", "source", "importance", "created_at", "updated_at", "user_id"}
     for key, cond in filter_metadata.items():
         is_meta = key not in _COLUMN_KEYS
         if is_meta:
@@ -73,7 +82,6 @@ def _build_filter(table, filter_metadata: dict | None):
                 clauses.append(col == cond)
     return and_(*clauses)
 
-
 def _metadata_clause(text_col, col, op: str, val, key: str) -> Any:
     """Constrói a cláusula para filtros sobre a coluna JSONB ``metadata_json``.
 
@@ -100,9 +108,11 @@ def _metadata_clause(text_col, col, op: str, val, key: str) -> Any:
         return numeric <= val
     return col.op("@>")(cast({key: val}, JSONB))
 
-
 class PostgresLongTermMemory:
-    """Memória de longo prazo vetorial no PostgreSQL (pgvector)."""
+    """Memória de longo prazo vetorial no PostgreSQL (pgvector).
+
+    SECURITY: Todos os métodos exigem user_id para isolamento multi-tenant.
+    """
 
     def __init__(
         self,
@@ -128,6 +138,7 @@ class PostgresLongTermMemory:
         metadata: dict[str, Any] | None = None,
         memory_id: str | None = None,
         layer: str | None = None,
+        user_id: str = "system",
     ) -> str:
         table = memory_table(layer or self._default_layer)
         metadata = dict(metadata or {})
@@ -138,6 +149,7 @@ class PostgresLongTermMemory:
         embedding = self._embeddings.embed_query(content)
         rec = table(
             id=uuid.UUID(memory_id) if memory_id else uuid.uuid4(),
+            user_id=user_id,
             content=content,
             embedding=embedding,
             title=title,
@@ -149,7 +161,7 @@ class PostgresLongTermMemory:
             session.add(rec)
             session.flush()
             rid = str(rec.id)
-        logger.info("add layer=%s id=%s tags=%s", layer or self._default_layer, rid, tags)
+        logger.info("add layer=%s id=%s user=%s tags=%s", layer or self._default_layer, rid, user_id, tags)
         return rid
 
     def search(
@@ -158,12 +170,15 @@ class PostgresLongTermMemory:
         top_k: int | None = None,
         filter_metadata: dict | None = None,
         layer: str | None = None,
+        user_id: str = "system",
     ) -> list[dict]:
         table = memory_table(layer or self._default_layer)
         top_k = top_k or self._top_k
         q = self._embeddings.embed_query(query)
         distance = table.embedding.cosine_distance(q)
-        stmt = select(table, distance.label("distance")).where(_build_filter(table, filter_metadata))
+        stmt = select(table, distance.label("distance")).where(
+            _build_filter(table, filter_metadata, user_id=user_id)
+        )
         stmt = stmt.order_by(distance).limit(top_k)
         results: list[dict] = []
         try:
@@ -177,14 +192,18 @@ class PostgresLongTermMemory:
         except Exception as e:  # noqa: BLE001
             logger.error("search layer=%s falhou: %s", layer or self._default_layer, e)
             raise
-        logger.debug("search layer=%s query=%r top_k=%s -> %d", layer or self._default_layer, query[:50], top_k, len(results))
+        logger.debug("search layer=%s query=%r top_k=%s user=%s -> %d", layer or self._default_layer, query[:50], top_k, user_id, len(results))
         return results
 
-    def get(self, memory_id: str, layer: str | None = None) -> dict | None:
+    def get(self, memory_id: str, layer: str | None = None, user_id: str = "system") -> dict | None:
         table = memory_table(layer or self._default_layer)
         with get_db() as session:
             rec = session.get(table, uuid.UUID(memory_id))
             if rec is None:
+                return None
+            # SECURITY: ownership check — só retorna se pertence ao user
+            if rec.user_id != user_id:
+                logger.warning("get id=%s negado: user=%s não é owner (owner=%s)", memory_id, user_id, rec.user_id)
                 return None
             return self._to_dict(rec)
 
@@ -194,12 +213,17 @@ class PostgresLongTermMemory:
         content: str | None = None,
         metadata: dict | None = None,
         layer: str | None = None,
+        user_id: str = "system",
     ) -> bool:
         table = memory_table(layer or self._default_layer)
         with get_db() as session:
             rec = session.get(table, uuid.UUID(memory_id))
             if rec is None:
                 logger.warning("update id=%s nao encontrado (layer=%s)", memory_id, layer or self._default_layer)
+                return False
+            # SECURITY: ownership check
+            if rec.user_id != user_id:
+                logger.warning("update id=%s negado: user=%s não é owner", memory_id, user_id)
                 return False
             if content is not None:
                 rec.content = content
@@ -220,14 +244,18 @@ class PostgresLongTermMemory:
             session.add(rec)
         return True
 
-    def delete(self, memory_id: str, layer: str | None = None) -> bool:
+    def delete(self, memory_id: str, layer: str | None = None, user_id: str = "system") -> bool:
         table = memory_table(layer or self._default_layer)
         with get_db() as session:
             rec = session.get(table, uuid.UUID(memory_id))
             if rec is None:
                 return False
+            # SECURITY: ownership check
+            if rec.user_id != user_id:
+                logger.warning("delete id=%s negado: user=%s não é owner", memory_id, user_id)
+                return False
             session.delete(rec)
-        logger.info("delete id=%s layer=%s", memory_id, layer or self._default_layer)
+        logger.info("delete id=%s layer=%s user=%s", memory_id, layer or self._default_layer, user_id)
         return True
 
     def list_recent(
@@ -235,11 +263,12 @@ class PostgresLongTermMemory:
         limit: int = 20,
         filter_metadata: dict | None = None,
         layer: str | None = None,
+        user_id: str = "system",
     ) -> list[dict]:
         table = memory_table(layer or self._default_layer)
         stmt = (
             select(table)
-            .where(_build_filter(table, filter_metadata))
+            .where(_build_filter(table, filter_metadata, user_id=user_id))
             .order_by(table.created_at.desc())
             .limit(limit)
         )
@@ -247,10 +276,13 @@ class PostgresLongTermMemory:
             rows = session.execute(stmt).all()
             return [self._to_dict(r[0]) for r in rows]
 
-    def count(self, layer: str | None = None) -> int:
+    def count(self, layer: str | None = None, user_id: str | None = None) -> int:
         table = memory_table(layer or self._default_layer)
         with get_db() as session:
-            return session.scalar(select(func.count()).select_from(table)) or 0
+            q = select(func.count()).select_from(table)
+            if user_id is not None:
+                q = q.where(table.user_id == user_id)
+            return session.scalar(q) or 0
 
     def health_check(self) -> dict:
         """Verifica saúde do backend Postgres (contagem + captura de erro)."""
@@ -265,6 +297,7 @@ class PostgresLongTermMemory:
     def _to_dict(rec, similarity: float | None = None) -> dict:
         d = {
             "id": str(rec.id),
+            "user_id": rec.user_id,
             "content": rec.content,
             "title": rec.title,
             "source": rec.source,

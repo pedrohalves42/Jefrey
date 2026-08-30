@@ -92,6 +92,38 @@ CHECKS = [
     ("CIPHER-025: AuditLogger dual-write fallback (audit_fallback_path + _write_fallback)",
      lambda: ("audit_fallback_path" in open("src/jefrey/core/config.py", encoding="utf-8").read()
               and "_write_fallback" in open("src/jefrey/core/audit.py", encoding="utf-8").read())),
+
+    # === SECURITY P6-pre: Multi-tenant isolation ===
+
+    # SEC-001: user_id coluna presente em models.py (_MemoryMixin)
+    ("SEC-001: user_id coluna em _MemoryMixin (models.py)",
+     lambda: "user_id" in open("src/jefrey/core/models.py", encoding="utf-8").read()
+             .split("class _MemoryMixin")[1].split("class ")[0]),
+
+    # SEC-002: pg_memory.py filtra por user_id em search/get/delete
+    ("SEC-002: pg_memory.py filtra por user_id (search/get/delete)",
+     lambda: ("user_id" in open("src/jefrey/core/pg_memory.py", encoding="utf-8").read()
+              and "rec.user_id != user_id" in open("src/jefrey/core/pg_memory.py", encoding="utf-8").read())),
+
+    # SEC-003: hitl.py get_pending filtra por user_id
+    ("SEC-003: hitl.py get_pending filtra por user_id",
+     lambda: "user_id" in open("src/jefrey/core/hitl.py", encoding="utf-8").read()
+             .split("def get_pending")[1].split("def ")[0]),
+
+    # SEC-004: approvals.py ownership check em decide
+    ("SEC-004: approvals.py ownership check em decide",
+     lambda: "user_id" in open("src/jefrey/api/approvals.py", encoding="utf-8").read()
+             .split("async def decide")[1]),
+
+    # SEC-005: FastAPI auth middleware existe
+    ("SEC-005: FastAPI auth middleware (auth_middleware.py)",
+     lambda: os.path.exists("src/jefrey/api/auth_middleware.py")
+             and "Bearer" in open("src/jefrey/api/auth_middleware.py", encoding="utf-8").read()),
+
+    # SEC-006: secret_key production validation
+    ("SEC-006: secret_key production validation em APISettings",
+     lambda: "validate_for_production" in open("src/jefrey/core/config.py", encoding="utf-8").read()
+             and "validate_for_production()" in open("src/jefrey/api/main.py", encoding="utf-8").read()),
 ]
 
 
