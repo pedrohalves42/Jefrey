@@ -124,22 +124,23 @@ async def _test_jefrey_agent_integration() -> None:
 async def _test_policy_engine() -> None:
     from src.jefrey.core.schema import init_db
     from src.jefrey.core.policy import (
-        get_policy_engine, PolicyContext, Decision, ApprovalStore,
+        get_policy_engine, PolicyContext, Decision,
     )
+    from src.jefrey.core.hitl import ApprovalManager
 
     init_db()  # garante a tabela approvals
     pe = get_policy_engine()
 
     # LOW -> ALLOW (auto-aprovado)
-    r1 = pe.decide("memory_search", {"query": "x"}, PolicyContext(thread_id="t1"))
+    r1 = pe.decide("save_note", {"content": "test"}, PolicyContext(thread_id="t1"))
     assert r1.decision == Decision.ALLOW, r1
 
     # HIGH (ferramenta externa, ex.: email) -> DENY em modo autônomo, com approval registrado
     r2 = pe.decide("email_send", {"to": "a@b.com"}, PolicyContext(thread_id="t2"))
     assert r2.decision == Decision.DENY, r2
     assert r2.approval_id is not None, "HITL deve registrar um approval"
-    store = ApprovalStore()
-    pending = store.list_pending(thread_id="t2")
+    store = ApprovalManager()
+    pending = store.get_pending(thread_id="t2")
     assert any(p["id"] == r2.approval_id for p in pending), "approval não persistido em Postgres"
 
     # CRITICAL -> DENY
