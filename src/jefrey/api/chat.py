@@ -26,6 +26,23 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 # Armazena tarefas do agente em execução ativa
 _RUNNING_TASKS: Dict[str, asyncio.Task] = {}
 
+# P5-FIX-2: Timestamp do último cleanup de tasks mortas
+_last_cleanup: float = 0.0
+_CLEANUP_INTERVAL: float = 60.0  # Limpa a cada 60 segundos
+
+
+async def _cleanup_stale_tasks():
+    """Remove tasks que terminaram mas ficaram no dict (pós-restart ou crash parcial)."""
+    global _last_cleanup
+    now = time.monotonic()
+    if now - _last_cleanup < _CLEANUP_INTERVAL:
+        return
+    _last_cleanup = now
+    stale = [tid for tid, t in _RUNNING_TASKS.items() if t.done()]
+    for tid in stale:
+        _RUNNING_TASKS.pop(tid, None)
+        logger.info("chat: task stale removida no cleanup: thread=%s", tid)
+
 class ChatRequest(BaseModel):
     message: str
     thread_id: str = "default"
@@ -38,6 +55,9 @@ async def chat(req: ChatRequest):
     ferramenta de alto risco (HIGH/CRITICAL), ele cria um approval e o endpoint
     retorna imediatamente com status 'pending_approval' (modo assíncrono).
     """
+    # P5-FIX-2: Limpa tasks mortas periodicamente
+    await _cleanup_stale_tasks()
+
     thread_id = req.thread_id
     message = req.message.strip()
 
@@ -114,12 +134,15 @@ async def chat(req: ChatRequest):
 
 @router.post("/resume/{thread_id}")
 async def resume_chat(thread_id: str):
-    """Resume a execução de uma thread suspensa após a aprovação humana de uma ferramenta."""
+    """Resume a execução de uma thread suspensa após a aprovação humana de uma ferramenta.
+
+    P5-FIX-1: Verifica approval pendente no DB antes de decidir a ação.
+    Não recria task com input vazio — retorna idle ou pending_approval.
+    """
     task = _RUNNING_TASKS.get(thread_id)
 
+    # Se há task ativa em memória, aguarda resultado
     if task and not task.done():
-        # A tarefa já está rodando em background (provavelmente fazendo polling no DB).
-        # Vamos apenas aguardar um pouco para retornar o resultado se estiver concluído.
         start_time = time.monotonic()
         while time.monotonic() - start_time < 8.0:
             if task.done():
@@ -133,7 +156,6 @@ async def resume_chat(thread_id: str):
                 except Exception as e:
                     raise HTTPException(status_code=500, detail=f"Erro na retomada: {e}")
 
-            # Se ainda houver outra aprovação pendente subsequente
             pending = ApprovalManager().get_pending(thread_id)
             if pending:
                 return {
@@ -148,48 +170,45 @@ async def resume_chat(thread_id: str):
             "message": "A tarefa continua rodando em background após a aprovação.",
         }
 
-    # Se não houver tarefa ativa em memória (ex.: reinício do servidor), recria rodando com input vazio
-    # para que o LangGraph recupere o último checkpoint da thread e retome.
-    agent = JefreyAgent()
-
-    async def _resume_agent_task():
+    # Se a task já terminou, retorna o resultado
+    if task and task.done():
         try:
-            return await agent.run("", thread_id)
-        except Exception as e:
-            logger.error(f"chat: falha ao resumir thread_id={thread_id}: {e}", exc_info=True)
-            raise e
-        finally:
-            _RUNNING_TASKS.pop(thread_id, None)
-
-    task = asyncio.create_task(_resume_agent_task())
-    _RUNNING_TASKS[thread_id] = task
-
-    start_time = time.monotonic()
-    while time.monotonic() - start_time < 8.0:
-        if task.done():
-            try:
-                response = task.result()
-                return {
-                    "status": "complete",
-                    "response": response,
-                    "thread_id": thread_id,
-                }
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Erro na retomada do checkpoint: {e}")
-
-        pending = ApprovalManager().get_pending(thread_id)
-        if pending:
+            response = task.result()
             return {
-                "status": "pending_approval",
-                "approval_id": pending[0]["id"],
+                "status": "complete",
+                "response": response,
                 "thread_id": thread_id,
             }
-        await asyncio.sleep(0.2)
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e),
+                "thread_id": thread_id,
+            }
 
+    # Se não há task ativa (servidor reiniciou ou nunca existiu task), verifica DB
+    pending = ApprovalManager().get_pending(thread_id)
+    if pending:
+        # Ainda há aprovação pendente — orienta o cliente a decidir primeiro
+        return {
+            "status": "pending_approval",
+            "approval_id": pending[0]["id"],
+            "thread_id": thread_id,
+            "message": (
+                f"Aprovação '{pending[0]['id']}' ainda pendente para "
+                f"ferramenta '{pending[0]['tool_name']}'. "
+                f"Decida via POST /approvals/{pending[0]['id']}/decide antes de resumir."
+            ),
+        }
+
+    # Sem task ativa e sem approval pendente — thread está ociosa
     return {
-        "status": "running",
+        "status": "idle",
         "thread_id": thread_id,
-        "message": "Thread retomada a partir do checkpoint. Executando em background.",
+        "message": (
+            "Nenhuma tarefa ativa e nenhuma aprovação pendente nesta thread. "
+            "Envie uma nova mensagem via POST /chat para continuar a conversa."
+        ),
     }
 
 @router.get("/status/{thread_id}")

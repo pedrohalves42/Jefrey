@@ -156,14 +156,39 @@ def check10():
     assert '"8000:8000"' in content, "Porta 8000 não mapeada"
 
 
-# ── Check 11: hitl_notify.py existe com notify_pending_approval ──
-@check("11. hitl_notify.py com notify_pending_approval implementado")
+# ── Check 11: hitl_notify.py com notify_pending_approval e error handling ──
+@check("11. hitl_notify.py com notify_pending_approval + error handling por canal")
 def check11():
     assert os.path.isfile("src/jefrey/api/hitl_notify.py"), "hitl_notify.py não encontrado"
     with open("src/jefrey/api/hitl_notify.py", encoding="utf-8") as f:
         content = f.read()
     assert "notify_pending_approval" in content, "Função não encontrada"
     assert "approval_id" in content, "Parâmetro approval_id não encontrado"
+    assert "_notify_whatsapp" in content, "Canal WhatsApp não implementado"
+    assert "_notify_smtp" in content, "Canal SMTP não implementado"
+    assert "_notify_webhook" in content, "Canal webhook não implementado"
+    assert "WASENDER_API_KEY" in content, "WASENDER_API_KEY não verificado"
+    assert "SMTP_HOST" in content, "SMTP_HOST não verificado"
+    assert "HITL_WEBHOOK_URL" in content, "HITL_WEBHOOK_URL não verificado"
+
+
+# ── Check 15: resume_chat não chama agent.run("") ──
+@check("15. resume_chat verifica approval pendente antes de recriar task")
+def check15():
+    with open("src/jefrey/api/chat.py", encoding="utf-8") as f:
+        content = f.read()
+    assert 'agent.run("")' not in content, "resume_chat ainda chama agent.run('') — corrompe contexto"
+    assert "get_pending" in content, "resume_chat não verifica approval pendente"
+    assert '"idle"' in content, "resume_chat não retorna idle quando sem tarefa"
+
+
+# ── Check 16: _RUNNING_TASKS tem cleanup ──
+@check("16. _RUNNING_TASKS tem cleanup automático de tasks mortas")
+def check16():
+    with open("src/jefrey/api/chat.py", encoding="utf-8") as f:
+        content = f.read()
+    assert "_cleanup_stale_tasks" in content, "Função de cleanup não encontrada"
+    assert "stale" in content or "done()" in content, "Cleanup não verifica tasks done()"
 
 
 # ── Check 12: verify_cipher_fixes 16/16 sem regressão ──
@@ -244,6 +269,8 @@ def main():
     check12()
     check13()
     check14()
+    check15()
+    check16()
 
     passed = sum(1 for _, ok, _ in results if ok)
     total = len(results)
