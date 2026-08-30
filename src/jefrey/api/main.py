@@ -1,9 +1,9 @@
 """Servidor FastAPI principal do Jefrey (Fase P5).
 
 Monta:
-- /approvals (sub-aplicação Starlette com autenticação Bearer e HITL)
-- /chat (endpoints de conversação assíncrona com content_guard)
-- /memory (busca vetorial e métricas de memória)
+- /approvals (sub-aplicacao Starlette com autenticacao Bearer e HITL)
+- /chat (endpoints de conversacao assincrona com content_guard)
+- /memory (busca vetorial e metricas de memoria)
 - /health (health check para monitoramento e docker-compose)
 """
 from __future__ import annotations
@@ -25,7 +25,7 @@ from src.jefrey.core.metrics import SERVICE_HEALTH
 logger = logging.getLogger(__name__)
 
 def create_app() -> FastAPI:
-    # SECURITY (P6-pre): valida configurações de produção no startup
+    # SECURITY (P6-pre): validacao de producao no startup
     cfg = get_settings()
     for warning in cfg.api.validate_for_production():
         logger.warning(warning)
@@ -37,8 +37,8 @@ def create_app() -> FastAPI:
         description="API REST unificada do assistente Jefrey (FastAPI + Starlette)",
     )
 
-    # SECURITY (P0.5): CORS restrito — origins configuráveis via env
-    # Em produção, JEFREY_API__CORS_ORIGINS deve listar os domínios permitidos.
+    # SECURITY (P0.5): CORS restrito -- origins configuraveis via env
+    # Em producao, JEFREY_API__CORS_ORIGINS deve listar os dominios permitidos.
     cors_origins_raw = os.getenv("JEFREY_API__CORS_ORIGINS", "")
     if cors_origins_raw:
         cors_origins = [o.strip() for o in cors_origins_raw.split(",") if o.strip()]
@@ -53,14 +53,14 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # SECURITY (P6-pre): autenticação Bearer + user context (multi-tenant)
+    # SECURITY (P6-pre): autenticacao Bearer + user context (multi-tenant)
     app.add_middleware(FastAPIAuthMiddleware)
 
-    # P6: Observability — Prometheus metrics endpoint
+    # P6: Observability -- Prometheus metrics endpoint (PUBLICO, sem auth)
     SERVICE_HEALTH.labels(component="api").set(1)
     app.include_router(metrics_router)
 
-    # Health check no nível raiz
+    # Health check no nivel raiz (PUBLICO, sem auth)
     @app.get("/health", tags=["system"])
     async def health():
         return {"status": "ok", "version": get_settings().version}
@@ -69,17 +69,19 @@ def create_app() -> FastAPI:
     app.include_router(chat_router)
     app.include_router(memory_router)
 
-    # Monta a sub-aplicação de aprovações Starlette (mantém CIPHER-019, 020, 024 intactos)
-    # A sub-aplicação possui suas próprias rotas /approvals/pending e /approvals/{id}/decide
+    # Monta a sub-aplicacao de aprovacoes Starlette (mantem CIPHER-019, 020, 024 intactos)
+    # FIX: mount em /approvals (nao /) para evitar conflito com outros routers.
+    # Rotas relativas do sub-app: /pending e /{id}/decide
+    # Resultado final: /approvals/pending e /approvals/{id}/decide
     approvals_app = build_approvals_app()
-    app.mount("/", approvals_app)
+    app.mount("/approvals", approvals_app)
 
     return app
 
 app = create_app()
 
 def main():
-    """Ponto de entrada para execução via CLI ou container."""
+    """Ponto de entrada para execucao via CLI ou container."""
     cfg = get_settings()
     uvicorn.run(
         "src.jefrey.api.main:app",

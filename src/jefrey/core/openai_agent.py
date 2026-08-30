@@ -116,6 +116,7 @@ async def _guarded_call(tool_name: str, original_coro_factory, policy, ctx, args
     pctx = PolicyContext(
         thread_id=thread_id,
         user_role=getattr(rc, "user_role", "user"),
+        user_id=getattr(rc, "user_id", "system"),  # SECURITY: multi-tenant isolation
         autonomous=getattr(rc, "autonomous", True),
     )
     if policy is None:

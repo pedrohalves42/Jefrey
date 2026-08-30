@@ -36,7 +36,7 @@ async def search_memory(
         user_id = getattr(request.state, "user_id", "anonymous")
         mm = get_memory_manager()
         # Chama busca vetorial com filtro por user_id
-        results = mm.long_term.search(q, limit=limit, user_id=user_id)
+        results = mm.long_term.search(q, top_k=limit, user_id=user_id)
         return {"memories": results, "count": len(results)}
     except Exception as e:
         logger.error("memory: erro na busca (user=%s): %s", user_id, e, exc_info=True)

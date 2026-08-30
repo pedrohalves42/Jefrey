@@ -396,6 +396,7 @@ class JefreyAgent:
             messages=[HumanMessage(content=user_input)],
             user_input=user_input,
             thread_id=thread_id,
+            user_id=user_id,
         )
 
         config = {"configurable": {"thread_id": thread_id}}

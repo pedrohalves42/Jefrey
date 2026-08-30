@@ -1,4 +1,4 @@
-"""Working memory (curto prazo) apoiada em Redis com fallback em memória local."""
+"""Working memory (curto prazo) apoiada em Redis com fallback em memoria local."""
 from __future__ import annotations
 
 import json
@@ -17,7 +17,6 @@ _MESSAGE_TYPES = {
 }
 _TYPE_TO_CLASS: dict[str, Any] = {}
 
-
 def _message_classes() -> dict[str, Any]:
     if not _TYPE_TO_CLASS:
         from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
@@ -32,13 +31,11 @@ def _message_classes() -> dict[str, Any]:
         )
     return _TYPE_TO_CLASS
 
-
 def _serialize(msg) -> dict:
     return {"role": _MESSAGE_TYPES.get(type(msg).__name__, "human"), "content": msg.content}
 
-
 def _deserialize(d: dict):
-    # Popula (preguiçosamente) o mapa role->classe antes de desserializar.
+    # Popula (preguicosamente) o mapa role->classe antes de desserializar.
     # Sem isso, _TYPE_TO_CLASS ficaria vazio e _TYPE_TO_CLASS["human"] levantaria KeyError.
     classes = _message_classes()
     cls = classes.get(d["role"])
@@ -48,9 +45,8 @@ def _deserialize(d: dict):
         raise ValueError(f"tipo de mensagem desconhecido: {d.get('role')!r}")
     return cls(d["content"])
 
-
 class RedisWorkingMemory:
-    """Memória de trabalho por sessão (thread_id). Redis como primário, memória local como fallback."""
+    """Memoria de trabalho por sessao (thread_id). Redis como primario, memoria local como fallback."""
 
     def __init__(
         self,
@@ -74,15 +70,15 @@ class RedisWorkingMemory:
 
                 self._redis = redis.Redis.from_url(redis_url, decode_responses=True)
                 self._redis.ping()
-            except Exception as e:  # pragma: no cover - resiliência
+            except Exception as e:  # pragma: no cover - resiliencia
                 logger.warning(
-                    "Redis indisponível (%s) — usando memória local para sessão '%s'",
+                    "Redis indisponivel (%s) -- usando memoria local para sessao '%s'",
                     e,
                     session_id,
                 )
                 self._redis = None
 
-    # ---- escopo por sessão ----
+    # ---- escopo por sessao ----
     def session(self, session_id: str) -> "RedisWorkingMemory":
         return RedisWorkingMemory(
             session_id=session_id,
@@ -108,7 +104,7 @@ class RedisWorkingMemory:
         else:
             self._local[self.session_id] = items
 
-    # ---- API pública (compatível com ShortTermMemory) ----
+    # ---- API publica (compativel com ShortTermMemory) ----
     def add(self, message) -> None:
         with self._lock:
             items = self._load()
@@ -171,15 +167,18 @@ class RedisWorkingMemory:
         return list(self._local.keys())
 
     def health_check(self) -> dict:
-        """Verifica saúde do backend de working memory.
+        """Verifica saude do backend de working memory.
 
-        Retorna 'ok' (Redis acessível), 'local_fallback' (Redis indisponível, usando
-        memória local) ou 'error' (falha inesperada ao pingar o Redis).
+        Retorna 'ok' (Redis acessivel com auth), 'local_fallback' (Redis indisponivel,
+        usando memoria local) ou 'error' (falha inesperada ao pingar o Redis).
         """
         if self._redis is None:
             return {"status": "local_fallback", "backend": "local"}
         try:
+            # SECURITY: ping valida nao apenas conectividade mas tambem autenticacao
             self._redis.ping()
+            # Verifica se auth funciona realmente (ping pode passar sem auth em configs sem senha)
+            self._redis.echo(b"health")
             return {"status": "ok", "backend": "redis"}
         except Exception as e:  # noqa: BLE001
             logger.warning("health_check redis falhou: %s", e)

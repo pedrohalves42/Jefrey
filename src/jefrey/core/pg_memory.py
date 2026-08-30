@@ -1,7 +1,7 @@
-"""Long-term memory backend PostgreSQL + pgvector (compatível com a interface ChromaDB).
+"""Long-term memory backend PostgreSQL + pgvector (compativel com a interface ChromaDB).
 
-SECURITY (P6-pre): Todos os métodos filtram por user_id para isolamento multi-tenant.
-O user_id é obrigatório em add/search/get/update/delete/list_recent.
+SECURITY (P6-pre): Todos os metodos filtram por user_id para isolamento multi-tenant.
+O user_id e obrigatorio em add/search/get/update/delete/list_recent.
 """
 from __future__ import annotations
 
@@ -29,25 +29,25 @@ def _jsonable(value: Any) -> Any:
         return str(value)
 
 def _build_filter(table, filter_metadata: dict | None, user_id: str | None = None):
-    """Traduz um filtro estilo ChromaDB ({key: {$in/:eq...}}) para uma cláusula SQLAlchemy.
+    """Traduz um filtro estilo ChromaDB ({key: {$in/:eq...}}) para uma clausula SQLAlchemy.
 
     SECURITY: Sempre inclui filtro por user_id quando fornecido.
     Chaves que existem como coluna (ex.: ``tags``) usam operadores nativos; chaves
-    arbitrárias são resolvidas na coluna ``metadata_json`` (JSONB) via ``@>``
+    arbitraras sao resolvidas na coluna ``metadata_json`` (JSONB) via ``@>``
     (containment) ou ``->>`` (texto) conforme o operador.
     """
     clauses = []
 
-    # SECURITY: filtro obrigatório por user_id (isolamento multi-tenant)
+    # SECURITY: filtro obrigatorio por user_id (isolamento multi-tenant)
     if user_id is not None:
         clauses.append(table.user_id == user_id)
 
     if not filter_metadata:
         return and_(*clauses) if clauses else True
 
-    # Apenas colunas conhecidas são filtráveis diretamente; qualquer outra chave é
+    # Apenas colunas conhecidas sao filtraveis diretamente; qualquer outra chave e
     # resolvida em metadata_json (JSONB). Isso evita getattr(table, key) com chaves
-    # arbitrárias (ex.: "__class__") vindas de ferramentas/agentes (injecao/robustez).
+    # arbitraries (ex.: "__class__") vindas de ferramentas/agentes (injecao/robustez).
     _COLUMN_KEYS = {"tags", "title", "source", "importance", "created_at", "updated_at", "user_id"}
     for key, cond in filter_metadata.items():
         is_meta = key not in _COLUMN_KEYS
@@ -84,13 +84,13 @@ def _build_filter(table, filter_metadata: dict | None, user_id: str | None = Non
     return and_(*clauses)
 
 def _metadata_clause(text_col, col, op: str, val, key: str) -> Any:
-    """Constrói a cláusula para filtros sobre a coluna JSONB ``metadata_json``.
+    """Constroi a clausula para filtros sobre a coluna JSONB ``metadata_json``.
 
     ``$eq``/``$ne`` usam containment (``@>``) passando o **dict** Python para o
-    ``cast(..., JSONB)`` — assim o driver serializa em objeto jsonb correto
+    ``cast(..., JSONB)`` -- assim o driver serializa em objeto jsonb correto
     (passar ``json.dumps(...)`` faz o psycopg re-serializar a string e quebrar o ``@>``).
-    ``$in`` usa comparação textual (``->>``); operadores de comparação (``$gt`` etc.)
-    fazem cast para numérico.
+    ``$in`` usa comparacao textual (``->>``); operadores de comparacao (``$gt`` etc.)
+    fazem cast para numerico.
     """
     if op == "$in":
         return text_col.in_(val)
@@ -110,9 +110,9 @@ def _metadata_clause(text_col, col, op: str, val, key: str) -> Any:
     return col.op("@>")(cast({key: val}, JSONB))
 
 class PostgresLongTermMemory:
-    """Memória de longo prazo vetorial no PostgreSQL (pgvector).
+    """Memoria de longo prazo vetorial no PostgreSQL (pgvector).
 
-    SECURITY: Todos os métodos exigem user_id para isolamento multi-tenant.
+    SECURITY: Todos os metodos exigem user_id para isolamento multi-tenant.
     """
 
     def __init__(
@@ -198,17 +198,13 @@ class PostgresLongTermMemory:
             )
             stmt = stmt.order_by(distance).limit(top_k)
             results: list[dict] = []
-            try:
-                with get_db() as session:
-                    rows = session.execute(stmt).all()
-                    for rec, dist in rows:
-                        similarity = 1 - float(dist)
-                        if similarity < self._similarity_threshold:
-                            continue
-                        results.append(self._to_dict(rec, similarity))
-            except Exception as e:  # noqa: BLE001
-                logger.error("search layer=%s falhou: %s", _layer, e)
-                raise
+            with get_db() as session:
+                rows = session.execute(stmt).all()
+                for rec, dist in rows:
+                    similarity = 1 - float(dist)
+                    if similarity < self._similarity_threshold:
+                        continue
+                    results.append(self._to_dict(rec, similarity))
             _elapsed = _time.monotonic() - _start
             MEMORY_LATENCY.labels(operation="search", layer=_layer).observe(_elapsed)
             MEMORY_OPS.labels(operation="search", layer=_layer).inc()
@@ -226,9 +222,9 @@ class PostgresLongTermMemory:
             rec = session.get(table, uuid.UUID(memory_id))
             if rec is None:
                 return None
-            # SECURITY: ownership check — só retorna se pertence ao user
+            # SECURITY: ownership check -- so retorna se pertence ao user
             if rec.user_id != user_id:
-                logger.warning("get id=%s negado: user=%s não é owner (owner=%s)", memory_id, user_id, rec.user_id)
+                logger.warning("get id=%s negado: user=%s nao e owner (owner=%s)", memory_id, user_id, rec.user_id)
                 return None
             return self._to_dict(rec)
 
@@ -248,7 +244,7 @@ class PostgresLongTermMemory:
                 return False
             # SECURITY: ownership check
             if rec.user_id != user_id:
-                logger.warning("update id=%s negado: user=%s não é owner", memory_id, user_id)
+                logger.warning("update id=%s negado: user=%s nao e owner", memory_id, user_id)
                 return False
             if content is not None:
                 rec.content = content
@@ -277,7 +273,7 @@ class PostgresLongTermMemory:
                 return False
             # SECURITY: ownership check
             if rec.user_id != user_id:
-                logger.warning("delete id=%s negado: user=%s não é owner", memory_id, user_id)
+                logger.warning("delete id=%s negado: user=%s nao e owner", memory_id, user_id)
                 return False
             session.delete(rec)
         logger.info("delete id=%s layer=%s user=%s", memory_id, layer or self._default_layer, user_id)
@@ -310,7 +306,7 @@ class PostgresLongTermMemory:
             return session.scalar(q) or 0
 
     def health_check(self) -> dict:
-        """Verifica saúde do backend Postgres (contagem + captura de erro)."""
+        """Verifica saude do backend Postgres (contagem + captura de erro)."""
         try:
             n = self.count()
             return {"status": "ok", "backend": "postgres", "count": n}

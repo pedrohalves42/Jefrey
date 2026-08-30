@@ -1,8 +1,8 @@
-"""Guarda de conteúdo mínimo (base para P7).
+"""Guarda de conteudo minimo (base para P7).
 
 Previne que o output de ferramentas MCP externas seja interpretado pelo LLM como
-instrução (prompt injection). Padrões conhecidos de injeção são bloqueados antes
-de o conteúdo chegar ao modelo.
+instrucao (prompt injection). Padroes conhecidos de injecao sao bloqueados antes
+de o conteudo chegar ao modelo.
 """
 from __future__ import annotations
 
@@ -11,9 +11,9 @@ import re
 
 logger = logging.getLogger(__name__)
 
-# Padrões que indicam tentativa de prompt injection no conteúdo retornado.
+# Padroes que indicam tentativa de prompt injection no conteudo retornado.
 _INJECTION_PATTERNS: list[str] = [
-    # --- Prompt injection clássico ---
+    # --- Prompt injection classico ---
     r"ignore (previous|prior|all) instructions",
     r"disregard (previous|prior|all)",
     r"forget (previous|prior|all)",
@@ -27,16 +27,15 @@ _INJECTION_PATTERNS: list[str] = [
     r"do the following",
     r"BEGIN:INSTRUCTION",
 
-    # --- Delimitadores de sistema / formatação de treino ---
+    # --- Delimitadores de sistema / formatacao de treino ---
     r"system prompt",
     r"###\s*(Human|Assistant|System):",
-    r"(Human|Assistant|System):",       # labels OpenAI fine-tuning (sem ###)
-    r"SYSTEM:",                         # uppercase labels
-    r"USER:",
-    r"ASSISTANT:",
+    # FIX: label de fine-tuning so e perigoso no INICIO de linha (não no meio do texto)
+    r"^(Human|Assistant|System):",
+    r"^(SYSTEM|USER|ASSISTANT):",
 
     # --- Tokens especiais de modelo (ChatML, Llama, Cohere, etc.) ---
-    r"<\|.*?\|>",                       # tokens genéricos <|...|>
+    r"<\|.*?\|>",                       # genericos <|...|>
     r"<\|im_start\|>",                  # ChatML
     r"<\|im_end\|>",
     r"<\|endoftext\|>",                 # GPT
@@ -45,32 +44,32 @@ _INJECTION_PATTERNS: list[str] = [
     r"\[INST\]",                        # Llama instruction tags
     r"\[/INST\]",
     r"<<SYS>>",                         # Llama2 chat format
-    r"</s>",
 
     # --- Template injection ---
     r"\{\{.*system.*\}\}",              # Jinja/template injection
     r"\{system\}",                      # Template syntax
 
-    # --- Padding / obfuscação ---
-    r"^\s{20,}",                        # muitos espaços no início (ocultar texto)
+    # --- Padding / obfuscacao ---
+    r"^\s{20,}",                        # muitos espacos no inicio (ocultar texto)
 ]
-
 
 def sanitize_tool_output(content: str, source: str = "external") -> str:
     """Sanitiza output de ferramenta externa antes de passar ao LLM.
 
-    Retorna o conteúdo original se seguro, ou um marcador de bloqueio se contiver
-    padrão suspeito de injeção de prompt.
+    Retorna o conteudo original se seguro, ou um marcador de bloqueio se contiver
+    padrao suspeito de injecao de prompt.
     """
     if not content:
         return content
     for pattern in _INJECTION_PATTERNS:
-        if re.search(pattern, content, re.IGNORECASE):
+        # FIX: usa re.MULTILINE para que ^ funcione por linha (evita falsos positivos
+        # de "Human:" no meio de texto normal)
+        if re.search(pattern, content, re.IGNORECASE | re.MULTILINE):
             logger.warning(
                 "content_guard.blocked source=%s pattern=%s preview=%s",
                 source, pattern, content[:100],
             )
-            return f"[CONTEÚDO BLOQUEADO: output de '{source}' contém padrão suspeito]"
+            return f"[CONTEUDO BLOQUEADO: output de '{source}' contem padrao suspeito]"
     # SECURITY (P0.5): log de passes bem-sucedidos para auditoria de tentativas
     logger.debug("content_guard.pass source=%s len=%d", source, len(content))
     return content
