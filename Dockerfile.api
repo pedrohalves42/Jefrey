@@ -1,0 +1,15 @@
+# Imagem do Jefrey FastAPI Server (Fase P5).
+# Serviço paralelo ao MCP Server (porta 8000 vs 8001).
+# Mesma base do Dockerfile.mcp — dependências instaladas no build (cacheadas).
+# O código é montado via volume (.:/app) em runtime.
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=20s \
+  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health',timeout=2).status==200 else 1)"
+
+CMD ["python", "-m", "src.jefrey.api"]

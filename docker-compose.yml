@@ -39,6 +39,45 @@ services:
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
+  # Fase P5 — FastAPI Server (serviço paralelo ao MCP Gateway)
+  # API REST unificada: /chat (assíncrono com HITL), /memory, /approvals, /health.
+  # Porta 8000 (MCP Server fica na 8001).
+  # ---------------------------------------------------------------------------
+  jefrey-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    image: jefrey-api:local
+    container_name: jefrey-api
+    working_dir: /app
+    volumes:
+      - .:/app
+    environment:
+      JEFREY_DATABASE__URL: postgresql+psycopg://jefrey:jefrey@postgres:5432/jefrey
+      JEFREY_REDIS__URL: redis://redis:6379/0
+      JEFREY_DATABASE__HOST: postgres
+      JEFREY_REDIS__HOST: redis
+      JEFREY_EMBEDDINGS__BASE_URL: http://host.docker.internal:11434
+      JEFREY_API__SECRET_KEY: ${JEFREY_API__SECRET_KEY}
+      JEFREY_API__AUDIT_FALLBACK_PATH: /app/data/audit_fallback.jsonl
+    ports:
+      - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health',timeout=2).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
   # Fase P3a — MCP Gateway (processo separado do agente)
   # Expõe as ferramentas do SkillRegistry via streamable-http na porta 8001.
   # Cada ferramenta passa pelo PolicyEngine (thread_id vem do request MCP).
