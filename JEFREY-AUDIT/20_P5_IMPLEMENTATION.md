@@ -118,6 +118,21 @@ Adicionado serviço `jefrey-api` com porta 8000, depends_on postgres+redis, heal
 **Status:** MITIGADO em P5
 **Ação:** `POST /chat` aplica `sanitize_tool_output(message, source="user_input")` antes de passar ao agent loop. Input bloqueado retorna HTTP 400 imediatamente. Documentado e testável via check2 do verify_p5.
 
+### P5-FIX-1: resume_chat sem agent.run("")
+**Status:** CORRIGIDO (commit be97cb8)
+**Problema:** `resume_chat` chamava `agent.run("")` para "retomar" — criava `HumanMessage(content="")` no histórico, corrompendo o contexto.
+**Correção:** Verifica approval pendente no DB. Se há approval, orienta a decidir primeiro. Se não há task nem approval, retorna `idle`.
+
+### P5-FIX-2: _RUNNING_TASKS sem cleanup
+**Status:** CORRIGIDO (commit be97cb8)
+**Problema:** Tasks terminadas ficavam no dict indefinidamente (memory leak + estado inconsistente pós-restart).
+**Correção:** `_cleanup_stale_tasks()` roda a cada 60s, remove tasks `done()`.
+
+### P5-FIX-3: hitl_notify sem error handling
+**Status:** CORRIGIDO (commit be97cb8)
+**Problema:** Canais WhatsApp/SMTP/webhook não tinham try/except — falha de credencial lançava exceção não tratada.
+**Correção:** Cada canal com try/except isolado. Falha loga warning, não derruba os outros canais.
+
 ---
 
 ## 6. Pendências / Futuro
@@ -133,4 +148,5 @@ Adicionado serviço `jefrey-api` com porta 8000, depends_on postgres+redis, heal
 
 | Commit | Descrição |
 |---|---|
-| (P5) | Adiciona API FastAPI, CLI client, Dockerfile.api, docker-compose jefrey-api, verify_p5.py |
+| 08b8dfc | P5: FastAPI API + CLI client + Dockerfile.api + docker-compose jefrey-api + verify_p5 14/14 |
+| be97cb8 | P5-FIX: resume_chat sem agent.run(''), cleanup tasks, hitl_notify error handling (16/16) |
