@@ -43,6 +43,12 @@ dependencies = [
     "uvicorn>=0.34.0",
     "fastapi>=0.110.0",
     "prometheus-client>=0.20.0",
+    "google-api-python-client>=2.0",
+    "google-auth-oauthlib>=1.1",
+    "google-auth>=2.0",
+    "duckduckgo-search>=6.0",
+    "ddgs>=9.0",  # N1 rename fallback
+    "tavily-python>=0.3",
 ]
 
 [project.optional-dependencies]

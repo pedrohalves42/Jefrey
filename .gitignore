@@ -19,6 +19,8 @@ env/
 logs/
 *.log
 *.txt
+!requirements.txt
+!pyproject.toml
 cmp_result.txt
 probe_*.txt
 p3_out.txt

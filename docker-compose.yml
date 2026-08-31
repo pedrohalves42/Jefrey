@@ -9,10 +9,11 @@ services:
   postgres:
     image: ankane/pgvector:latest
     container_name: jefrey-postgres
+    env_file: [.env]
     environment:
-      POSTGRES_USER: jefrey
-      POSTGRES_PASSWORD: jefrey
-      POSTGRES_DB: jefrey
+      POSTGRES_USER: ${JEFREY_DATABASE__USER:-jefrey}
+      POSTGRES_PASSWORD: ${JEFREY_DATABASE__PASSWORD:-jefrey}
+      POSTGRES_DB: ${JEFREY_DATABASE__DB:-jefrey}
     ports:
       - "5432:5432"
     volumes:
@@ -27,13 +28,13 @@ services:
   redis:
     image: redis:7.2-alpine
     container_name: jefrey-redis
-    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${JEFREY_REDIS__PASSWORD:-jefrey_redis_2026}"]
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${JEFREY_REDIS__PASSWORD}"]
     ports:
       - "6379:6379"
     volumes:
       - jefrey_redisdata:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG || redis-cli -a \"$${JEFREY_REDIS__PASSWORD}\" ping | grep -q PONG"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -53,15 +54,16 @@ services:
     working_dir: /app
     volumes:
       - .:/app
+    env_file: [.env]
     environment:
-      JEFREY_DATABASE__URL: postgresql+psycopg://jefrey:jefrey@postgres:5432/jefrey
-      JEFREY_REDIS__URL: redis://:${JEFREY_REDIS__PASSWORD:-jefrey_redis_2026}@redis:6379/0
-      JEFREY_DATABASE__HOST: postgres
-      JEFREY_REDIS__HOST: redis
-      JEFREY_REDIS__PASSWORD: ${JEFREY_REDIS__PASSWORD:-jefrey_redis_2026}
-      JEFREY_EMBEDDINGS__BASE_URL: http://host.docker.internal:11434
+      JEFREY_DATABASE__URL: ${JEFREY_DATABASE__URL:-postgresql+psycopg://${JEFREY_DATABASE__USER:-jefrey}:${JEFREY_DATABASE__PASSWORD:-jefrey}@postgres:5432/${JEFREY_DATABASE__DB:-jefrey}}
+      JEFREY_REDIS__URL: ${JEFREY_REDIS__URL:-redis://:${JEFREY_REDIS__PASSWORD}@redis:6379/0}
+      JEFREY_DATABASE__HOST: ${JEFREY_DATABASE__HOST:-postgres}
+      JEFREY_REDIS__HOST: ${JEFREY_REDIS__HOST:-redis}
+      JEFREY_REDIS__PASSWORD: ${JEFREY_REDIS__PASSWORD}
+      JEFREY_EMBEDDINGS__BASE_URL: ${JEFREY_EMBEDDINGS__BASE_URL:-http://host.docker.internal:11434}
       JEFREY_API__SECRET_KEY: ${JEFREY_API__SECRET_KEY}
-      JEFREY_API__AUDIT_FALLBACK_PATH: /app/data/audit_fallback.jsonl
+      JEFREY_API__AUDIT_FALLBACK_PATH: ${JEFREY_API__AUDIT_FALLBACK_PATH:-/app/data/audit_fallback.jsonl}
     ports:
       - "8000:8000"
     extra_hosts:
@@ -93,15 +95,16 @@ services:
     working_dir: /app
     volumes:
       - .:/app
+    env_file: [.env]
     environment:
-      JEFREY_DATABASE__URL: postgresql+psycopg://jefrey:jefrey@postgres:5432/jefrey
-      JEFREY_REDIS__URL: redis://:${JEFREY_REDIS__PASSWORD:-jefrey_redis_2026}@redis:6379/0
-      JEFREY_DATABASE__HOST: postgres
-      JEFREY_REDIS__HOST: redis
-      JEFREY_REDIS__PASSWORD: ${JEFREY_REDIS__PASSWORD:-jefrey_redis_2026}
-      JEFREY_EMBEDDINGS__BASE_URL: http://host.docker.internal:11434
-      JEFREY_MCP__HOST: 0.0.0.0
-      JEFREY_MCP__PORT: 8001
+      JEFREY_DATABASE__URL: ${JEFREY_DATABASE__URL:-postgresql+psycopg://${JEFREY_DATABASE__USER:-jefrey}:${JEFREY_DATABASE__PASSWORD:-jefrey}@postgres:5432/${JEFREY_DATABASE__DB:-jefrey}}
+      JEFREY_REDIS__URL: ${JEFREY_REDIS__URL:-redis://:${JEFREY_REDIS__PASSWORD}@redis:6379/0}
+      JEFREY_DATABASE__HOST: ${JEFREY_DATABASE__HOST:-postgres}
+      JEFREY_REDIS__HOST: ${JEFREY_REDIS__HOST:-redis}
+      JEFREY_REDIS__PASSWORD: ${JEFREY_REDIS__PASSWORD}
+      JEFREY_EMBEDDINGS__BASE_URL: ${JEFREY_EMBEDDINGS__BASE_URL:-http://host.docker.internal:11434}
+      JEFREY_MCP__HOST: ${JEFREY_MCP__HOST:-0.0.0.0}
+      JEFREY_MCP__PORT: ${JEFREY_MCP__PORT:-8001}
     ports:
       - "8001:8001"
     extra_hosts:
@@ -189,12 +192,12 @@ services:
       - "3000:3000"
     environment:
       GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-jefrey_grafana_2026}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/jefrey.json
     volumes:
       - ./docker/grafana/provisioning:/etc/grafana/provisioning
-      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards
+      - ./docker/grafana/dashboards:/var/lib/grafana
       - jefrey_grafana_data:/var/lib/grafana
     depends_on:
       prometheus:

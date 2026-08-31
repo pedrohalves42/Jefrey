@@ -1,8 +1,6 @@
-"""Skill: Calendário (Google Calendar) - Com instruções OAuth."""
+"""Skill: Calendario (Google Calendar) - OAuth"""
 from __future__ import annotations
-from typing import Any
-import os
-import json
+from typing import Final
 import logging
 from pathlib import Path
 
@@ -29,7 +27,7 @@ class CalendarSkill(SkillBase):
         },
     )
     
-    SCOPES = ["https://www.googleapis.com/auth/calendar"]
+    SCOPES: Final[list[str]] = ["https://www.googleapis.com/auth/calendar"]
     
     def __init__(self):
         super().__init__()
@@ -37,60 +35,84 @@ class CalendarSkill(SkillBase):
         self._creds = None
     
     def initialize(self) -> bool:
-        """Inicializa OAuth do Google Calendar."""
+        """Inicializa OAuth do Google Calendar (AXIOM+CIPHER least privilege)."""
         try:
             from google.auth.transport.requests import Request
             from google.oauth2.credentials import Credentials
             from google_auth_oauthlib.flow import InstalledAppFlow
             from googleapiclient.discovery import build
         except ImportError:
-            logger.warning("google-api-python-client não instalado. Instale: pip install google-api-python-client google-auth-oauthlib")
+            logger.warning("google-api-python-client nao instalado. Instale: pip install google-api-python-client google-auth-oauthlib")
+            try:
+                from src.jefrey.core.metrics import SKILL_INIT_TOTAL
+                SKILL_INIT_TOTAL.labels(skill="calendar", status="skip").inc()
+            except Exception:
+                pass
             return False
-        
         cfg = get_settings().integrations.google_calendar
         creds_file = Path(cfg.credentials_file)
         token_file = Path(cfg.token_file)
-        
         if not creds_file.exists():
-            logger.warning(f"Credenciais Google Calendar não encontradas: {creds_file}")
-            logger.info("""
-            ╔══════════════════════════════════════════════════════════════╗
-            ║  CONFIGURAÇÃO GOOGLE CALENDAR OAUTH                          ║
-            ╠═════════════════════════════════════════════════════════════╣
-            ║  1. Acesse: https://console.cloud.google.com/               ║
-            ║  2. Crie projeto ou selecione existente                     ║
-            ║  3. APIs & Services → Library → "Google Calendar API"      ║
-            ║  4. Enable API                                              ║
-            ║  5. Credentials → Create Credentials → OAuth Client ID     ║
-            ║  6. Application type: Desktop app                           ║
-            ║  7. Download JSON → salve como config/credentials/         ║
-            ║     google_calendar.json                                    ║
-            ║  8. Execute: python -m scripts.setup_google_calendar       ║
-            ╚═════════════════════════════════════════════════════════════╝
-            """)
+            logger.warning(f"Credenciais Google Calendar nao encontradas: {creds_file}")
+            logger.info("Criar em https://console.cloud.google.com -> APIs & Services -> Library -> Google Calendar API -> Enable -> Credentials -> OAuth Client ID (Desktop) -> Download JSON -> config/credentials/google_calendar.json")
+            try:
+                from src.jefrey.core.metrics import SKILL_INIT_TOTAL
+                SKILL_INIT_TOTAL.labels(skill="calendar", status="skip").inc()
+            except Exception:
+                pass
             return False
-        
-        # Carrega credenciais salvas
-        if token_file.exists():
-            self._creds = Credentials.from_authorized_user_file(str(token_file), self.SCOPES)
-        
-        # Refresh ou novo flow
-        if not self._creds or not self._creds.valid:
-            if self._creds and self._creds.expired and self._creds.refresh_token:
-                self._creds.refresh(Request())
-            else:
-                flow = InstalledAppFlow.from_client_secrets_file(str(creds_file), self.SCOPES)
-                self._creds = flow.run_local_server(port=0)
-            
-            # Salva token
-            token_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(token_file, "w") as f:
-                f.write(self._creds.to_json())
-        
-        self._service = build("calendar", "v3", credentials=self._creds)
-        logger.info("Google Calendar conectado com sucesso")
-        return True
-    
+        try:
+            if token_file.exists():
+                self._creds = Credentials.from_authorized_user_file(str(token_file), self.SCOPES)
+            if not self._creds or not self._creds.valid:
+                if self._creds and self._creds.expired and self._creds.refresh_token:
+                    try:
+                        self._creds.refresh(Request())
+                        try:
+                            from src.jefrey.core.metrics import OAUTH_REFRESH_TOTAL
+                            OAUTH_REFRESH_TOTAL.labels(skill="calendar", status="ok").inc()
+                        except Exception:
+                            pass
+                    except Exception as e:
+                        logger.warning(f"Calendar token refresh falhou: {type(e).__name__}")
+                        try:
+                            from src.jefrey.core.metrics import OAUTH_REFRESH_TOTAL
+                            OAUTH_REFRESH_TOTAL.labels(skill="calendar", status="fail").inc()
+                        except Exception:
+                            pass
+                        return False
+                else:
+                    flow = InstalledAppFlow.from_client_secrets_file(str(creds_file), self.SCOPES)
+                    self._creds = flow.run_local_server(port=0)
+                token_file.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    token_file.parent.chmod(0o700)
+                except Exception:
+                    pass
+                with open(token_file, "w", encoding="utf-8") as f:
+                    f.write(self._creds.to_json())
+                try:
+                    token_file.chmod(0o600)
+                except Exception:
+                    pass
+            self._service = build("calendar", "v3", credentials=self._creds)
+            logger.info("Google Calendar conectado com sucesso")
+            try:
+                from src.jefrey.core.metrics import SKILL_INIT_TOTAL
+                SKILL_INIT_TOTAL.labels(skill="calendar", status="ok").inc()
+            except Exception:
+                pass
+            return True
+        except Exception as e:
+            logger.warning(f"Calendar initialize falhou: {type(e).__name__}")
+            try:
+                from src.jefrey.core.metrics import SKILL_INIT_TOTAL
+                SKILL_INIT_TOTAL.labels(skill="calendar", status="fail").inc()
+            except Exception:
+                pass
+            return False
+
+
     def get_tools(self) -> list:
         if not self._service:
             return []
@@ -103,7 +125,7 @@ class CalendarSkill(SkillBase):
             self.get_calendar_list,
         ]
     
-    @tool(description="Lista eventos do calendário em um período")
+    @tool(description="Lista eventos do calendario em um periodo")
     async def list_events(
         self,
         time_min: str | None = None,
@@ -132,7 +154,7 @@ class CalendarSkill(SkillBase):
             events = events_result.get("items", [])
             return [{
                 "id": e["id"],
-                "summary": e.get("summary", "(sem título)"),
+                "summary": e.get("summary", "(sem titulo)"),
                 "start": e["start"].get("dateTime", e["start"].get("date")),
                 "end": e["end"].get("dateTime", e["end"].get("date")),
                 "location": e.get("location"),
@@ -144,7 +166,7 @@ class CalendarSkill(SkillBase):
             logger.error(f"Erro ao listar eventos: {e}")
             return [{"error": str(e)}]
     
-    @tool(description="Cria novo evento no calendário")
+    @tool(description="Cria novo evento no calendario")
     async def create_event(
         self,
         summary: str,
@@ -191,7 +213,7 @@ class CalendarSkill(SkillBase):
                 "start": created["start"],
                 "end": created["end"],
                 "html_link": created.get("htmlLink"),
-                "message": "✅ Evento criado com sucesso",
+                "message": "Evento criado com sucesso",
             }
         except Exception as e:
             logger.error(f"Erro ao criar evento: {e}")
@@ -219,20 +241,20 @@ class CalendarSkill(SkillBase):
                 event["attendees"] = [{"email": a} for a in updates["attendees"]]
             
             updated = self._service.events().update(calendarId=calendar_id, eventId=event_id, body=event).execute()
-            return {"id": updated["id"], "message": "✅ Evento atualizado"}
+            return {"id": updated["id"], "message": "Evento atualizado"}
         except Exception as e:
             return {"error": str(e)}
     
-    @tool(description="Remove evento do calendário")
+    @tool(description="Remove evento do calendario")
     async def delete_event(self, event_id: str, calendar_id: str = "primary") -> dict:
         """Remove evento."""
         try:
             self._service.events().delete(calendarId=calendar_id, eventId=event_id).execute()
-            return {"success": True, "message": "✅ Evento removido"}
+            return {"success": True, "message": "Evento removido"}
         except Exception as e:
             return {"error": str(e)}
     
-    @tool(description="Encontra horários livres em um período")
+    @tool(description="Encontra horarios livres em um periodo")
     async def find_free_slots(
         self,
         time_min: str,
@@ -260,17 +282,17 @@ class CalendarSkill(SkillBase):
                 busy.append((start, end))
             
             # Calcula slots livres (simplificado)
-            # Em produção, use freebusy API
+            # Em producao, use freebusy API
             return [{
-                "message": f"Use freebusy API para cálculo preciso. {len(busy)} eventos ocupados no período.",
+                "message": f"Use freebusy API para calculo preciso. {len(busy)} eventos ocupados no periodo.",
                 "busy_count": len(busy),
             }]
         except Exception as e:
             return [{"error": str(e)}]
     
-    @tool(description="Lista calendários disponíveis")
+    @tool(description="Lista calendarios disponiveis")
     async def get_calendar_list(self) -> list[dict]:
-        """Lista calendários do usuário."""
+        """Lista calendarios do usuario."""
         try:
             result = self._service.calendarList().list().execute()
             return [{

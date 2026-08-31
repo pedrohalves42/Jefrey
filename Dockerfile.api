@@ -6,15 +6,24 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# SECURITY (P0.5): usuário não-root — evita que exploit no container dê root no host
+RUN groupadd --gid 1001 jefrey \
+    && useradd --uid 1001 --gid 1001 --no-create-home --shell /bin/false jefrey \
+    && chown -R jefrey:jefrey /app
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# SECURITY (P0.5): rodar como usuário não-root
-RUN groupadd -r jefrey && useradd -r -g jefrey -d /app -s /sbin/nologin jefrey \
-    && chown -R jefrey:jefrey /app
+COPY . .
+
+# Ajustar permissões antes de trocar usuário
+RUN chown -R jefrey:jefrey /app
+
+# Trocar para usuário sem privilégios
 USER jefrey
 
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=20s \
-  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health',timeout=2).status==200 else 1)"
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" \
+  || exit 1
 
 CMD ["python", "-m", "src.jefrey.api"]

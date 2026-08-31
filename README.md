@@ -1,5 +1,9 @@
 # Jefrey – Assistente Pessoal de IA Avançado
 
+> **P1.1 READY 2026-08-31 - docs/JEFREY-AUDIT/acceptance_p1.1.md - 92.0%/67.2%/60.4% - Skills READY (drive.file + web_search fallback + OAuth hardening)**
+
+> **P0 Accepted 2026-08-31 - docs/JEFREY-AUDIT/acceptance_p0_to_p1.md - 86.0%/62.8%/56.5% - gate P0->P1 PASS**
+
 ## Visão Geral
 
 **Jefrey** é um assistente pessoal de IA projetado para profissionais e empreendedores que precisam de um agente inteligente capaz de:
@@ -47,10 +51,16 @@ O projeto está estruturado para **escalabilidade**, **performance** e **facilid
    cp .env.example .env
    # Edite .env e adicione suas chaves (OpenAI, Tavily, Google, etc.)
    ```
-4. **Execute o setup inicial** (cria diretórios, testa OAuth, smoke test)
+4. **Suba a infra e valide - Tracer Bullet 6.4 (fresh machine)**
    ```bash
-   python -m scripts.setup
+   python scripts/setup.py --dev --non-interactive --force
+   docker compose up -d --wait
+   python scripts/run_tests.py --quick   # 2 PASS ~40s (smoke)
+   # ou completo:
+   python scripts/run_tests.py --ci      # 5 PASS ~115s
+   python scripts/compute_readiness.py   # 86.0% impl (P0) / 92.0% com --status '{"Skills":"READY"}' (P1.1) / 62.8% prod / 56.5% comercial
    ```
+   > Aceite: `docs/JEFREY-AUDIT/acceptance_p0_to_p1.md` - gate P0->P1 PASS
 5. **Inicie o assistente**
    ```bash
    jefrey chat   # comando instalado pelo pyproject

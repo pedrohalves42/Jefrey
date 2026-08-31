@@ -1,7 +1,6 @@
-"""Skill: E-mail (Gmail) - Com instruções OAuth."""
+"""Skill: E-mail (Gmail) - Com instrucoes OAuth."""
 from __future__ import annotations
 from typing import Any
-import os
 import logging
 from pathlib import Path
 
@@ -27,70 +26,92 @@ class EmailSkill(SkillBase):
         },
     )
     
-    SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
+    SCOPES: Final[list[str]] = ["https://www.googleapis.com/auth/gmail.modify"]
     
     def __init__(self):
         super().__init__()
         self._service = None
+        self._creds = None
     
     def initialize(self) -> bool:
-        """Inicializa OAuth do Gmail."""
+        """Inicializa OAuth do Gmail (AXIOM+CIPHER least privilege)."""
         try:
             from google.auth.transport.requests import Request
             from google.oauth2.credentials import Credentials
             from google_auth_oauthlib.flow import InstalledAppFlow
             from googleapiclient.discovery import build
         except ImportError:
-            logger.warning("google-api-python-client não instalado. Instale: pip install google-api-python-client google-auth-oauthlib")
+            logger.warning("google-api-python-client nao instalado. Instale: pip install google-api-python-client google-auth-oauthlib")
+            try:
+                from src.jefrey.core.metrics import SKILL_INIT_TOTAL
+                SKILL_INIT_TOTAL.labels(skill="email", status="skip").inc()
+            except Exception:
+                pass
             return False
-        
         cfg = get_settings().integrations.gmail
         creds_file = Path(cfg.credentials_file)
         token_file = Path(cfg.token_file)
-        
         if not creds_file.exists():
-            logger.warning(f"Credenciais Gmail não encontradas: {creds_file}")
-            logger.info("""
-            ╔══════════════════════════════════════════════════════════════╗
-            ║  CONFIGURAÇÃO GMAIL OAUTH                                    ║
-            ╠══════════════════════════════════════════════════════════════╣
-            ║  1. Acesse: https://console.cloud.google.com/               ║
-            ║  2. APIs & Services → Library → "Gmail API"                ║
-            ║  3. Enable API                                              ║
-            ║  4. Credentials → Create Credentials → OAuth Client ID     ║
-            ║  5. Application type: Desktop app                           ║
-            ║  6. Download JSON → salve como config/credentials/gmail.json║
-            ║  7. Execute: python -m scripts.setup_gmail                 ║
-            ╚══════════════════════════════════════════════════════════════╝
-            """)
+            logger.warning(f"Credenciais Gmail nao encontradas: {creds_file}")
+            logger.info("Criar em https://console.cloud.google.com -> APIs & Services -> Library -> Gmail API -> Enable -> Credentials -> OAuth Client ID (Desktop) -> Download JSON -> config/credentials/gmail.json")
+            try:
+                from src.jefrey.core.metrics import SKILL_INIT_TOTAL
+                SKILL_INIT_TOTAL.labels(skill="email", status="skip").inc()
+            except Exception:
+                pass
             return False
-        
-        from google.auth.transport.requests import Request
-        from google.oauth2.credentials import Credentials
-        from google_auth_oauthlib.flow import InstalledAppFlow
-        from googleapiclient.discovery import build
-        
-        # Carrega credenciais salvas
-        if token_file.exists():
-            self._creds = Credentials.from_authorized_user_file(str(token_file), self.SCOPES)
-        
-        # Refresh ou novo flow
-        if not self._creds or not self._creds.valid:
-            if self._creds and self._creds.expired and self._creds.refresh_token:
-                self._creds.refresh(Request())
-            else:
-                flow = InstalledAppFlow.from_client_secrets_file(str(creds_file), self.SCOPES)
-                self._creds = flow.run_local_server(port=0)
-            
-            # Salva token
-            token_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(token_file, "w") as f:
-                f.write(self._creds.to_json())
-        
-        self._service = build("gmail", "v1", credentials=self._creds)
-        logger.info("Gmail conectado com sucesso")
-        return True
-    
+        try:
+            if token_file.exists():
+                self._creds = Credentials.from_authorized_user_file(str(token_file), self.SCOPES)
+            if not self._creds or not self._creds.valid:
+                if self._creds and self._creds.expired and self._creds.refresh_token:
+                    try:
+                        self._creds.refresh(Request())
+                        try:
+                            from src.jefrey.core.metrics import OAUTH_REFRESH_TOTAL
+                            OAUTH_REFRESH_TOTAL.labels(skill="email", status="ok").inc()
+                        except Exception:
+                            pass
+                    except Exception as e:
+                        logger.warning(f"Gmail token refresh falhou: {type(e).__name__}")
+                        try:
+                            from src.jefrey.core.metrics import OAUTH_REFRESH_TOTAL
+                            OAUTH_REFRESH_TOTAL.labels(skill="email", status="fail").inc()
+                        except Exception:
+                            pass
+                        return False
+                else:
+                    flow = InstalledAppFlow.from_client_secrets_file(str(creds_file), self.SCOPES)
+                    self._creds = flow.run_local_server(port=0)
+                token_file.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    token_file.parent.chmod(0o700)
+                except Exception:
+                    pass
+                with open(token_file, "w", encoding="utf-8") as f:
+                    f.write(self._creds.to_json())
+                try:
+                    token_file.chmod(0o600)
+                except Exception:
+                    pass
+            self._service = build("gmail", "v1", credentials=self._creds)
+            logger.info("Gmail conectado com sucesso")
+            try:
+                from src.jefrey.core.metrics import SKILL_INIT_TOTAL
+                SKILL_INIT_TOTAL.labels(skill="email", status="ok").inc()
+            except Exception:
+                pass
+            return True
+        except Exception as e:
+            logger.warning(f"Gmail initialize falhou: {type(e).__name__}")
+            try:
+                from src.jefrey.core.metrics import SKILL_INIT_TOTAL
+                SKILL_INIT_TOTAL.labels(skill="email", status="fail").inc()
+            except Exception:
+                pass
+            return False
+
+
     def get_tools(self) -> list:
         if not self._service:
             return []
@@ -129,7 +150,7 @@ class EmailSkill(SkillBase):
             
             # Busca detalhes de cada mensagem
             detailed = []
-            for msg in messages[:10]:  # Limita para não estourar quota
+            for msg in messages[:10]:  # Limita para nao estourar quota
                 detail = self._service.users().messages().get(
                     userId="me", id=msg["id"], format="metadata"
                 ).execute()
@@ -152,9 +173,9 @@ class EmailSkill(SkillBase):
             logger.error(f"Erro ao listar e-mails: {e}")
             return [{"error": str(e)}]
     
-    @tool(description="Lê e-mail completo por ID")
+    @tool(description="Le e-mail completo por ID")
     async def get_message(self, message_id: str) -> dict:
-        """Lê e-mail completo com corpo."""
+        """Le e-mail completo com corpo."""
         try:
             msg = self._service.users().messages().get(userId="me", id=message_id, format="full").execute()
             
@@ -229,7 +250,7 @@ class EmailSkill(SkillBase):
             if bcc:
                 message["bcc"] = ", ".join(bcc)
             
-            # Detecta se é HTML
+            # Detecta se e HTML
             if "<html" in body.lower() or "<body" in body.lower():
                 message.attach(MIMEText(body, "html"))
             else:
@@ -245,7 +266,7 @@ class EmailSkill(SkillBase):
             return {
                 "id": sent["id"],
                 "thread_id": sent["threadId"],
-                "message": "✅ E-mail enviado com sucesso",
+                "message": "E-mail enviado com sucesso",
             }
         except Exception as e:
             logger.error(f"Erro ao enviar e-mail: {e}")
@@ -286,7 +307,7 @@ class EmailSkill(SkillBase):
                 userId="me", body={"raw": raw, "threadId": original["threadId"]}
             ).execute()
             
-            return {"id": sent["id"], "message": "✅ Resposta enviada"}
+            return {"id": sent["id"], "message": "Resposta enviada"}
         except Exception as e:
             return {"error": str(e)}
     
@@ -306,16 +327,16 @@ class EmailSkill(SkillBase):
                 body["removeLabelIds"] = remove_labels
             
             self._service.users().messages().modify(userId="me", id=message_id, body=body).execute()
-            return {"success": True, "message": "✅ Labels atualizados"}
+            return {"success": True, "message": "Labels atualizados"}
         except Exception as e:
             return {"error": str(e)}
     
-    @tool(description="Busca avançada de e-mails")
+    @tool(description="Busca avancada de e-mails")
     async def search_messages(self, query: str, max_results: int = 20) -> list[dict]:
         """Busca usando sintaxe Gmail completa."""
         return await self.list_messages(query=query, max_results=max_results)
     
-    @tool(description="Lista todos os labels disponíveis")
+    @tool(description="Lista todos os labels disponiveis")
     async def list_labels(self) -> list[dict]:
         """Lista labels do Gmail."""
         try:

@@ -137,6 +137,11 @@ def register_default_tools() -> None:
     reg.register(name="send_message", risk=R.HIGH, required_role=Role.USER, source="skill")
     reg.register(name="reply_message", risk=R.HIGH, required_role=Role.USER, source="skill")
 
+    # --- drive (Google, externo) ---
+    reg.register(name="drive_list_files", risk=R.LOW, required_role=Role.GUEST, source="skill")
+    reg.register(name="drive_read_file", risk=R.LOW, required_role=Role.GUEST, source="skill")
+    reg.register(name="drive_create_file", risk=R.MEDIUM, required_role=Role.USER, source="skill")
+
     # --- integration stubs (gateway MCP) ---
     reg.register(name="email_send", risk=R.HIGH, required_role=Role.USER, source="integration")
     reg.register(name="calendar_create", risk=R.HIGH, required_role=Role.USER, source="integration")

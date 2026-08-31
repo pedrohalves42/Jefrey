@@ -1,0 +1,55 @@
+name: test
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: ankane/pgvector:latest
+        env:
+          POSTGRES_USER: jefrey
+          POSTGRES_PASSWORD: jefrey
+          POSTGRES_DB: jefrey
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U jefrey -d jefrey"
+          --health-interval=5s --health-timeout=5s --health-retries=10
+      redis:
+        image: redis:7.2-alpine
+        ports:
+          - 6379:6379
+        # 6.4 FIX G2: CI redis com senha igual ao .env --dev (jefrey_redis_2026) para nao dar WRONGPASS
+        env:
+          JEFREY_REDIS__PASSWORD: jefrey_redis_2026
+        options: >-
+          --health-cmd="redis-cli -a jefrey_redis_2026 ping | grep -q PONG"
+          --health-interval=5s --health-timeout=3s --health-retries=10
+        # command precisa estar em options quando usa services: ; alternativa eh sobrescrever via step
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install deps
+        run: pip install -r requirements.txt
+      - name: Setup Redis auth (CI)
+        run: |
+          # Services.redis nao suporta command custom facil; configura senha via redis-cli
+          until redis-cli ping | grep -q PONG; do sleep 1; done
+          redis-cli config set requirepass jefrey_redis_2026 || true
+          redis-cli -a jefrey_redis_2026 ping | grep -q PONG
+      - name: Bootstrap DEV
+        run: python scripts/setup.py --dev --non-interactive --force
+      - name: Suite 6.4 (CI)
+        run: python scripts/run_tests.py --ci
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: reports/

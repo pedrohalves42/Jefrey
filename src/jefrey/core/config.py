@@ -101,6 +101,13 @@ class GmailSettings(BaseSettings):
     credentials_file: str = "config/credentials/gmail.json"
     token_file: str = "config/tokens/gmail_token.json"
 
+class GoogleDriveSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="JEFREY_INTEGRATIONS__GOOGLE_DRIVE__", extra="ignore")
+    
+    enabled: bool = False
+    credentials_file: str = "config/credentials/google_drive.json"
+    token_file: str = "config/tokens/google_drive_token.json"
+
 class NotionSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="JEFREY_INTEGRATIONS__NOTION__", extra="ignore")
     
@@ -118,6 +125,7 @@ class IntegrationsSettings(BaseSettings):
     
     google_calendar: GoogleCalendarSettings = GoogleCalendarSettings()
     gmail: GmailSettings = GmailSettings()
+    google_drive: GoogleDriveSettings = GoogleDriveSettings()
     notion: NotionSettings = NotionSettings()
     composio: ComposioSettings = ComposioSettings()
 
@@ -129,6 +137,7 @@ class SkillsSettings(BaseSettings):
     web_search: bool = True
     notes: bool = True
     automation: bool = True
+    drive: bool = True
     weather: bool = False
     stocks: bool = False
 
@@ -285,7 +294,7 @@ class AppSettings(BaseSettings):
     name: str = "Jefrey"
     version: str = "0.1.0"
     user_name: str = "Usuario"
-    debug: bool = False
+    debug: bool = Field(default=False, validation_alias="JEFREY_DEBUG")
     
     llm: LLMSettings = LLMSettings()
     memory: MemorySettings = MemorySettings()

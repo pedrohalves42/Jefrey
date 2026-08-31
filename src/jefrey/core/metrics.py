@@ -119,3 +119,29 @@ MEMORY_LATENCY = Histogram(
     labelnames=["operation", "layer"],
     buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0),
 )
+# =============================================================================
+# 8. SKILL INIT + OAUTH + WEB SEARCH CACHE - P1.1 (AXIOM observabilidade)
+# =============================================================================
+SKILL_INIT_TOTAL = Counter(
+    name="jefrey_skill_init_total",
+    documentation="Total de inicializacoes de skills por status",
+    labelnames=["skill", "status"],
+)
+
+OAUTH_REFRESH_TOTAL = Counter(
+    name="jefrey_oauth_refresh_total",
+    documentation="Total de refreshes OAuth por skill",
+    labelnames=["skill", "status"],
+)
+
+WEB_SEARCH_CACHE_HIT = Counter(
+    name="jefrey_web_search_cache_hit_total",
+    documentation="Total de cache hits em web_search",
+    labelnames=["mode"],
+)
+
+CONFIG_VALID = Gauge(
+    name="jefrey_config_valid",
+    documentation="Config valida (1) ou invalida (0) - CIPHER-019/002/001",
+)
+

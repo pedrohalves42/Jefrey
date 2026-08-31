@@ -30,6 +30,26 @@ def create_app() -> FastAPI:
     for warning in cfg.api.validate_for_production():
         logger.warning(warning)
         print(warning)
+    # N2 AXIOM observabilidade: CONFIG_VALID gauge mirror verify_env (CIPHER-019/002/001)
+    try:
+        from src.jefrey.core.metrics import CONFIG_VALID
+        _sk = cfg.api.secret_key or ""
+        _pw = cfg.database.password or ""
+        _ok = True
+        if "CHANGE_ME" in _sk or not _sk or len(_sk) < 32:
+            _ok = False
+        if "CHANGE_ME" in _pw or (_pw == "jefrey" and not cfg.debug):
+            _ok = False
+        if cfg.mcp.service_role not in cfg.mcp.allowed_roles:
+            _ok = False
+        try:
+            _ = cfg.database.dsn
+            _ = cfg.redis.dsn
+        except Exception:
+            _ok = False
+        CONFIG_VALID.set(1 if _ok else 0)
+    except Exception:
+        pass
 
     app = FastAPI(
         title="Jefrey API",
