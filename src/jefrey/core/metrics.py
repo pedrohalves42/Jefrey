@@ -140,6 +140,12 @@ WEB_SEARCH_CACHE_HIT = Counter(
     labelnames=["mode"],
 )
 
+RATE_LIMIT_TOTAL = Counter(
+    name="jefrey_rate_limit_total",
+    documentation="Total de rate-limit decisions (allow/deny) por ferramenta",
+    labelnames=["tool_name", "decision"],
+)
+
 CONFIG_VALID = Gauge(
     name="jefrey_config_valid",
     documentation="Config valida (1) ou invalida (0) - CIPHER-019/002/001",

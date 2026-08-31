@@ -190,6 +190,8 @@ class PolicySettings(BaseSettings):
 
     mode: Literal["enforce", "audit", "off"] = "enforce"
     autonomous: bool = True
+    rate_limit_max: int = Field(default=20, ge=1, le=10000)
+    rate_limit_window: float = Field(default=60.0, gt=0, le=86400)
 
 class HITLSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="JEFREY_HITL__", extra="ignore")

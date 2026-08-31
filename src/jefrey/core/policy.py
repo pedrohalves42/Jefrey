@@ -97,11 +97,28 @@ class PolicyEngine:
         if rbac_res.decision == "deny":
             return PolicyResult(Decision.DENY, risk, rbac_res.reason)
 
-        # --- 2) risco não declarado => bloqueia (fail-safe, AXIOM #5) ---
+        # --- 2) risco nao declarado => bloqueia (fail-safe, AXIOM #5) ---
+        # G1: UNKNOWN antes de rate-limit -> nao conta quota nem gasta EVAL pra ferramenta inexistente.
         if risk == RiskLevel.UNKNOWN:
             return PolicyResult(
-                Decision.DENY, risk, "ferramenta não registrada no ToolRegistry (risco desconhecido)",
+                Decision.DENY, risk, "ferramenta nao registrada no ToolRegistry (risco desconhecido)",
             )
+
+        # --- 1b) Rate-limit (P1.2 E1, CIPHER-025, Anderson least privilege) ---
+        # Fail-open degradado: se rate-limit deny -> DENY (nao bypass), mas se Redis fora -> fallback local.
+        # Diferente de auth/HITL (fail-closed), rate-limit degrada para in-memory sem quebrar request.
+        # G2 INTENCIONAL: admin sofre rate-limit (infra protection). Se isentar admin, mover bypass antes.
+        # G3 INTENCIONAL: rate-limit roda mesmo com mode=off (defense in depth, Anderson).
+        #                 Se quiser respeitar off, mover este bloco apos o check de off.
+        try:
+            from src.jefrey.core.rate_limit import get_rate_limiter
+
+            _rl = get_rate_limiter()
+            _rl_dec = _rl.is_allowed(ctx.user_id, tool_name)
+            if _rl_dec == "deny":
+                return PolicyResult(Decision.DENY, risk, "rate limit exceeded")
+        except Exception:
+            pass  # fail-open para rate-limit apenas (nao afeta RBAC/HITL)
 
         if self._mode == "off":
             return PolicyResult(Decision.ALLOW, risk, "policy desligada (RBAC mantido)")
