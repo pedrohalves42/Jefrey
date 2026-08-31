@@ -57,3 +57,18 @@ config/credentials/
 .env.production
 .env.staging
 
+
+# Temp scripts
+scripts/_fix_*.py
+scripts/_verify_*_quick.py
+0.20.0
+.cache/
+
+# Backups com segredos - nunca versionar (CIPHER-002)
+.env.bak.*
+.env.bak.*/
+
+# Suite 6.4 reports (CI artifacts, not source)
+reports/test_run_*.md
+reports/junit.xml
+!reports/.gitkeep
