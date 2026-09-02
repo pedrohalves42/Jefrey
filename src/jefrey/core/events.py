@@ -27,7 +27,7 @@ class EventBus:
 
     Usa referências fortes (listas) para handlers e wildcards — deliberadamente, para
     que handlers registrados não sejam coletados pelo GC antes de disparar (ver BUG-5:
-    weakref causava AssertionError porque handlers sumiam antes do emit).
+    **Nenhum weakref é usado** (resolução do BUG‑5: handlers são mantidos em lista normal).
     """
     
     __slots__ = ("_handlers", "_wildcard_handlers", "_lock")

@@ -46,7 +46,7 @@ async def search_memory(
 async def memory_health():
     """Retorna o estado operacional e métricas básicas dos subsistemas de memória.
 
-    SECURITY: health check é público (não filtra por user_id — métricas agregadas).
+    SECURITY: health check protegido pelo middleware auth (requiere Bearer token + X-User-Id).
     """
     try:
         mm = get_memory_manager()

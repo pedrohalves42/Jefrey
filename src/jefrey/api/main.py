@@ -45,11 +45,12 @@ def create_app() -> FastAPI:
         try:
             _ = cfg.database.dsn
             _ = cfg.redis.dsn
-        except Exception:
+        except Exception as e:
+            logger.warning("CONFIG_VALID DSN check falhou: %s", e)
             _ok = False
         CONFIG_VALID.set(1 if _ok else 0)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("CONFIG_VALID check falhou (observabilidade): %s", e)
 
     app = FastAPI(
         title="Jefrey API",
@@ -57,21 +58,23 @@ def create_app() -> FastAPI:
         description="API REST unificada do assistente Jefrey (FastAPI + Starlette)",
     )
 
-    # SECURITY (P0.5): CORS restrito -- origins configuraveis via env
-    # Em producao, JEFREY_API__CORS_ORIGINS deve listar os dominios permitidos.
-    cors_origins_raw = os.getenv("JEFREY_API__CORS_ORIGINS", "")
-    if cors_origins_raw:
-        cors_origins = [o.strip() for o in cors_origins_raw.split(",") if o.strip()]
-    else:
-        # Default: apenas localhost (desenvolvimento)
-        cors_origins = ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:3000"]
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=cors_origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # CIPHER-031: CORS origins must be explicitly configured via env var
+    # In production, JEFREY_API__CORS_ORIGINS must be set to specific allowed domains
+    # Without explicit config, CORS is NOT enabled (fail-closed security)
+    # This prevents accidental open CORS in production without env var setup
+    cors_origins_raw = os.getenv("JEFREY_API__CORS_ORIGINS")
+    cors_origins = [] if not cors_origins_raw else [o.strip() for o in cors_origins_raw.split(",") if o.strip()]
+    
+    # Only add CORS middleware if origins are explicitly configured
+    # Fail-closed: no CORS env var = no CORS middleware added
+    if cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_origins,
+            allow_credentials=False,
+            allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            allow_headers=["Authorization", "Content-Type", "X-User-Id"],
+        )
 
     # SECURITY (P6-pre): autenticacao Bearer + user context (multi-tenant)
     app.add_middleware(FastAPIAuthMiddleware)

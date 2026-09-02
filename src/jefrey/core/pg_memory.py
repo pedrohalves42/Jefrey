@@ -139,8 +139,10 @@ class PostgresLongTermMemory:
         metadata: dict[str, Any] | None = None,
         memory_id: str | None = None,
         layer: str | None = None,
-        user_id: str = "system",
+        user_id: str | None = None,
     ) -> str:
+        if not user_id:
+            raise ValueError("user_id obrigatorio para isolamento (Axiom #2, pg_memory.add)")
         import time as _time
         _layer = layer or self._default_layer
         _start = _time.monotonic()
@@ -183,7 +185,7 @@ class PostgresLongTermMemory:
         top_k: int | None = None,
         filter_metadata: dict | None = None,
         layer: str | None = None,
-        user_id: str = "system",
+        user_id: str | None = None,
     ) -> list[dict]:
         import time as _time
         _layer = layer or self._default_layer
@@ -216,7 +218,9 @@ class PostgresLongTermMemory:
             MEMORY_OPS.labels(operation="search", layer=_layer).inc()
             raise
 
-    def get(self, memory_id: str, layer: str | None = None, user_id: str = "system") -> dict | None:
+    def get(self, memory_id: str, layer: str | None = None, user_id: str | None = None) -> dict | None:
+        if not user_id:
+            raise ValueError("user_id obrigatorio para isolamento (Axiom #2, pg_memory.get)")
         table = memory_table(layer or self._default_layer)
         with get_db() as session:
             rec = session.get(table, uuid.UUID(memory_id))
@@ -234,7 +238,7 @@ class PostgresLongTermMemory:
         content: str | None = None,
         metadata: dict | None = None,
         layer: str | None = None,
-        user_id: str = "system",
+        user_id: str | None = None,
     ) -> bool:
         table = memory_table(layer or self._default_layer)
         with get_db() as session:
@@ -265,7 +269,7 @@ class PostgresLongTermMemory:
             session.add(rec)
         return True
 
-    def delete(self, memory_id: str, layer: str | None = None, user_id: str = "system") -> bool:
+    def delete(self, memory_id: str, layer: str | None = None, user_id: str | None = None) -> bool:
         table = memory_table(layer or self._default_layer)
         with get_db() as session:
             rec = session.get(table, uuid.UUID(memory_id))
@@ -284,7 +288,7 @@ class PostgresLongTermMemory:
         limit: int = 20,
         filter_metadata: dict | None = None,
         layer: str | None = None,
-        user_id: str = "system",
+        user_id: str | None = None,
     ) -> list[dict]:
         table = memory_table(layer or self._default_layer)
         stmt = (

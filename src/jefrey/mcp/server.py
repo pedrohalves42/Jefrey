@@ -11,12 +11,13 @@ o SDK mcp já instalado (2.x) sem downgrade (evita regressão em P2).
 """
 from __future__ import annotations
 
-import sys
+# CIPHER-026: Rate limiting per user_id/tool_name using Redis token bucket
 import os
 import types
 import typing
 import logging
 import asyncio
+from src.jefrey.core.rate_limit import RateLimiter
 import contextvars
 import json
 from pathlib import Path
@@ -69,6 +70,10 @@ async def _run_guarded(tool: StructuredTool, args: dict, thread_id: str) -> str:
     from src.jefrey.core.registry import register_default_tools
 
     policy = get_policy_engine()
+    # CIPHER-026: Rate limiting check
+    _rl_dec = await RateLimiter().is_allowed(ctx.user_id, tool_name)
+    if _rl_dec == "deny":
+        return f"[RATE LIMITED] thread={thread_id}"
     ctx = PolicyContext(thread_id=thread_id, user_role=_resolve_role(), autonomous=policy.autonomous)
     res = policy.decide(tool.name, args, ctx)
     policy.audit(tool.name, res, ctx)

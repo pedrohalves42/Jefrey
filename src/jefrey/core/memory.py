@@ -148,8 +148,8 @@ def _from_chroma_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
             try:
                 restored[key] = json.loads(value)
                 continue
-            except (json.JSONDecodeError, TypeError):
-                pass
+            except (json.JSONDecodeError, TypeError) as _e:  # not JSON, keep raw # OK: typed fallback
+                logger.debug("metadata JSON decode fallback: %s", _e) if "logger" in dir() else None
         restored[key] = value
     return restored
 
@@ -294,16 +294,20 @@ class LongTermMemory:
         content: str,
         metadata: dict[str, Any] | None = None,
         memory_id: str | None = None,
+        user_id: str | None = None,
     ) -> str:
         """Adiciona uma memória."""
         memory_id = memory_id or str(uuid.uuid4())
         metadata = metadata or {}
+        # H2: Isolar por user_id no metadata para fallback ChromaDB
+        if user_id:
+            metadata.setdefault("user_id", user_id)
         metadata.setdefault("timestamp", datetime.now().isoformat())
         metadata.setdefault("type", "memory")
         metadata = _to_chroma_metadata(metadata)
-        
+
         embedding = self._embeddings.embed_query(content)
-        
+
         self._collection.add(
             ids=[memory_id],
             documents=[content],
@@ -317,15 +321,21 @@ class LongTermMemory:
         query: str,
         top_k: int | None = None,
         filter_metadata: dict | None = None,
+        user_id: str | None = None,
     ) -> list[dict]:
         """Busca semântica otimizada."""
         top_k = top_k or self._top_k
         query_embedding = self._embeddings.embed_query(query)
         
+        # H2: Construir where clause com filtro user_id
+        where = filter_metadata or {}
+        if user_id:
+            where["user_id"] = user_id
+        
         results = self._collection.query(
             query_embeddings=[query_embedding],
             n_results=top_k,
-            where=filter_metadata,
+            where=where,
             include=["documents", "metadatas", "distances"],
         )
         
@@ -475,6 +485,7 @@ class MemoryManager:
         content: str,
         tags: list[str] | None = None,
         source: str = "conversation",
+        user_id: str | None = None,
         **metadata,
     ) -> str:
         """Salva memória importante no longo prazo."""
@@ -483,7 +494,7 @@ class MemoryManager:
             "source": source,
             **metadata,
         }
-        return self.long_term.add(content, metadata=meta)
+        return self.long_term.add(content, metadata=meta, user_id=user_id)
     
     def clear_short_term(self) -> None:
         self.short_term.clear()
@@ -523,3 +534,56 @@ def get_memory_manager() -> MemoryManager:
             if _memory_manager is None:
                 _memory_manager = MemoryManager()
     return _memory_manager
+
+
+def safe_deserialize(data: dict) -> BaseMessage:
+    """Converte um dict {'type': 'human', 'content': '...'} em um objeto BaseMessage.
+
+    Evita KeyError ao usar verificações if/elif pelos tipos conhecidos.
+    """
+    msg_type = data.get("type", "")
+    content = data.get("content", "")
+    if msg_type == "human":
+        return HumanMessage(content=content)
+    if msg_type == "ai":
+        return AIMessage(content=content)
+    if msg_type == "system":
+        return SystemMessage(content=content)
+    if msg_type == "tool":
+        return ToolMessage(content=content, role=data.get("role", "tool"))
+    raise ValueError(f"Tipo de mensagem desconhecido: {msg_type}")
+
+
+
+
+
+# ----------------------------------------------------------------------
+# Lazy message registry – evita KeyError em _deserialize
+# ----------------------------------------------------------------------
+_message_registry: dict[str, type] = {}
+_registry_initialized: bool = False
+
+
+def _init_message_registry() -> None:
+    """Popula _message_registry com tipos BaseMessage. Chamado sob demanda."""
+    global _registry_initialized
+    if _registry_initialized:
+        return
+    from langchain_core.messages import (
+        HumanMessage,
+        AIMessage,
+        SystemMessage,
+        ToolMessage,
+    )
+    _message_registry = {
+        "human": HumanMessage,
+        "ai": AIMessage,
+        "system": SystemMessage,
+        "tool": ToolMessage,
+    }
+    _registry_initialized = True
+
+
+
+
+

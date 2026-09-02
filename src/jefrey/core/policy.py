@@ -39,15 +39,15 @@ class Decision(str, enum.Enum):
 class RunContext:
     """Contexto passado ao runtime do agente (compat)."""
     thread_id: str = "default"
-    user_role: str = "user"  # admin | user | guest (RBAC, P4)
+    user_role: str = "guest"  # admin | user | guest (RBAC, P4)
     autonomous: bool = True  # se False, tudo vira HITL
 
 
 @dataclass
 class PolicyContext:
     thread_id: str = "default"
-    user_role: str = "user"   # admin | user | guest (RBAC, P4)
-    user_id: str = "system"   # SECURITY: multi-tenant isolation
+    user_role: str = "guest"   # admin | user | guest (RBAC, P4)
+    user_id: str | None = None   # SECURITY: multi-tenant isolation (Axiom #2, fail-closed)
     autonomous: bool = True   # True => gateway (sem humano): HIGH/CRITICAL => DENY
                               # False => agente (humano no loop): HIGH/CRITICAL => HITL (aguarda)
 
@@ -114,11 +114,18 @@ class PolicyEngine:
             from src.jefrey.core.rate_limit import get_rate_limiter
 
             _rl = get_rate_limiter()
-            _rl_dec = _rl.is_allowed(ctx.user_id, tool_name)
+            # sync wrapper para nao quebrar PolicyEngine.decide sync (C1b, CIPHER-026)
+            if ctx.user_id is None:
+                return PolicyResult(Decision.DENY, risk, "rate limit: user_id ausente (Axiom #2)")
+            _rl_dec = _rl.is_allowed_sync(ctx.user_id, tool_name)
             if _rl_dec == "deny":
                 return PolicyResult(Decision.DENY, risk, "rate limit exceeded")
-        except Exception:
-            pass  # fail-open para rate-limit apenas (nao afeta RBAC/HITL)
+        except RuntimeError as e:
+            return PolicyResult(Decision.DENY, risk, f"rate limit indisponivel (fail-closed): {e}")
+        except Exception as e:
+            import logging as _lg
+            _lg.getLogger(__name__).error("rate_limit unexpected: %s", e)
+            return PolicyResult(Decision.DENY, risk, "rate limit error (fail-closed)")
 
         if self._mode == "off":
             return PolicyResult(Decision.ALLOW, risk, "policy desligada (RBAC mantido)")

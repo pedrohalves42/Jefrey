@@ -1,4 +1,10 @@
-"""Working memory (curto prazo) apoiada em Redis com fallback em memoria local."""
+"""Working memory (curto prazo) apoiada em Redis com fallback em memoria local.
+
+    CIPHER-032: Suporte a isolamento por user_id. Chaves Redis prefixadas com
+    user_id quando fornecido (e.g., jefrey:wm:{user_id}:{session_id}) para
+    isolamento multi-tenant. Working memory por sessao (thread_id) com
+    isolamento opcional por user_id.
+"""
 from __future__ import annotations
 
 import json
@@ -54,8 +60,9 @@ class RedisWorkingMemory:
         max_messages: int = 20,
         max_tokens: int = 8000,
         redis_url: Optional[str] = None,
-        redis_client=None,
+        redis_client = None,
         prefix: str = "jefrey:wm:",
+        user_id: Optional[str] = None,
     ):
         self.session_id = session_id
         self.max_messages = max_messages
@@ -64,6 +71,7 @@ class RedisWorkingMemory:
         self._lock = threading.RLock()
         self._local: dict[str, list[dict]] = {}
         self._redis = redis_client
+        self.user_id = user_id or "system"
         if self._redis is None and redis_url is not None:
             try:
                 import redis
@@ -90,6 +98,8 @@ class RedisWorkingMemory:
 
     # ---- armazenamento ----
     def _key(self) -> str:
+        if self.user_id and self.user_id != "system":
+            return f"{self.prefix}{self.user_id}:{self.session_id}"
         return f"{self.prefix}{self.session_id}"
 
     def _load(self) -> list[dict]:
@@ -112,14 +122,22 @@ class RedisWorkingMemory:
             self._trim(items)
             self._save(items)
 
-    def add_user(self, content: str) -> None:
+    def add_user(self, content: str, user_id: Optional[str] = None) -> None:
         from langchain_core.messages import HumanMessage
 
+        # CIPHER-032: user_id isolation for Redis working memory
+        effective_user_id = user_id or self.user_id
+        if effective_user_id and effective_user_id != "system":
+            self.user_id = effective_user_id
         self.add(HumanMessage(content=content))
 
-    def add_assistant(self, content: str) -> None:
+    def add_assistant(self, content: str, user_id: Optional[str] = None) -> None:
         from langchain_core.messages import AIMessage
 
+        # CIPHER-032: user_id isolation for Redis working memory
+        effective_user_id = user_id or self.user_id
+        if effective_user_id and effective_user_id != "system":
+            self.user_id = effective_user_id
         self.add(AIMessage(content=content))
 
     def add_system(self, content: str) -> None:
@@ -163,22 +181,39 @@ class RedisWorkingMemory:
 
     def list_sessions(self) -> list[str]:
         if self._redis is not None:
-            return [k.replace(self.prefix, "") for k in self._redis.keys(f"{self.prefix}*")]
+            # High Performance Python: SCAN O(1) por iteracao vs KEYS O(N) bloqueante
+            out: list[str] = []
+            cursor = 0
+            while True:
+                cursor, keys = self._redis.scan(cursor=cursor, match=f"{self.prefix}*", count=100)
+                out.extend(k.replace(self.prefix, "") for k in keys)
+                if cursor == 0:
+                    break
+            return out
         return list(self._local.keys())
 
     def health_check(self) -> dict:
         """Verifica saude do backend de working memory.
 
-        Retorna 'ok' (Redis acessivel com auth), 'local_fallback' (Redis indisponivel,
+        Returns 'ok' (Redis acessivel com auth), 'local_fallback' (Redis indisponivel,
         usando memoria local) ou 'error' (falha inesperada ao pingar o Redis).
+        
+        CIPHER-033: Validates actual Redis auth by attempting a read operation,
+        not just ping which may succeed without authentication.
         """
         if self._redis is None:
             return {"status": "local_fallback", "backend": "local"}
         try:
-            # SECURITY: ping valida nao apenas conectividade mas tambem autenticacao
+            # CIPHER-033: Validate auth with actual read/write operation
+            # ping may succeed without auth in some Redis configs
             self._redis.ping()
-            # Verifica se auth funciona realmente (ping pode passar sem auth em configs sem senha)
-            self._redis.echo(b"health")
+            # Try a simple SET/GET to verify auth actually works
+            test_key = "_jefrey_auth_test"
+            self._redis.set(test_key, "ok")
+            result = self._redis.get(test_key)
+            self._redis.delete(test_key)
+            if result != "ok":
+                raise Exception("Auth verification failed")
             return {"status": "ok", "backend": "redis"}
         except Exception as e:  # noqa: BLE001
             logger.warning("health_check redis falhou: %s", e)

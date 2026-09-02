@@ -273,13 +273,13 @@ class OpenAIAgent:
         logger.info("run fim thread=%s", thread_id)
         return final
 
-    async def stream(self, user_input: str, thread_id: str = "default"):
+    async def stream(self, user_input: str, thread_id: str = "default", user_id: str = "system"):
         history = await self._sessions.load(thread_id)
         run_input = history + [{"role": "user", "content": user_input}]
 
         result = Runner.run_streamed(
             self._agent, input=run_input,
-            context=RunContext(thread_id=thread_id, autonomous=self._policy.autonomous),
+            context=RunContext(thread_id=thread_id, user_id=user_id, autonomous=self._policy.autonomous),
         )
         async for event in result.stream_events():
             data = getattr(event, "data", None)

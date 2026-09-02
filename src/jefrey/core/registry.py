@@ -48,11 +48,11 @@ class ToolRegistry:
         server: "str | None" = None,
         source: str = "skill",
         external: bool = False,
-        overwrite: bool = True,
+        overwrite: bool = False,
     ) -> ToolRegistration:
         role = as_role(required_role)
         if not overwrite and name in self._tools:
-            return self._tools[name]
+            raise ValueError(f"Tool {name!r} ja registrada (overwrite=False, least privilege)")
         reg = ToolRegistration(
             name=name, risk=risk, required_role=role,
             description=description, server=server, source=source, external=external,
@@ -146,5 +146,15 @@ def register_default_tools() -> None:
     reg.register(name="email_send", risk=R.HIGH, required_role=Role.USER, source="integration")
     reg.register(name="calendar_create", risk=R.HIGH, required_role=Role.USER, source="integration")
 
+    # CIPHER-027 through CIPHER-030: n8n integration tools
+    # n8n Engine Integration tools (P2)
+    reg.register(name="n8n_execute_workflow", risk=R.MEDIUM, required_role=Role.USER, source="integration")
+    reg.register(name="n8n_get_workflow_status", risk=R.LOW, required_role=Role.GUEST, source="integration")
+    reg.register(name="n8n_pause_workflow", risk=R.HIGH, required_role=Role.USER, source="integration")
+    reg.register(name="n8n_resume_workflow", risk=R.HIGH, required_role=Role.USER, source="integration")
+    reg.register(name="n8n_cancel_workflow", risk=R.HIGH, required_role=Role.USER, source="integration")
+
+    reg.register(name="health_check", risk=R.LOW, required_role=Role.GUEST, source="skill")
+    reg.register(name="ping", risk=R.LOW, required_role=Role.GUEST, source="skill")
     _registered = True
     logger.info("ToolRegistry: %d ferramentas registradas", len(reg.registered_names()))

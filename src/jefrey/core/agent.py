@@ -45,7 +45,7 @@ class AgentState:
     error: str | None = None
     metadata: dict = field(default_factory=dict)
     thread_id: str = "default"
-    user_id: str = "system"
+    user_id: str | None = None
 
 
 class JefreyAgent:
@@ -350,7 +350,7 @@ class JefreyAgent:
         return state
     
     @traceable(name="agent_run")
-    async def run(self, user_input: str, thread_id: str = "default", user_id: str = "system") -> str:
+    async def run(self, user_input: str, thread_id: str = "default", user_id: str | None = None) -> str:
         """Executa o agente para uma entrada do usuário.
 
         SECURITY (P0.5): user_id propagado para ToolExecutor para isolamento multi-tenant.
@@ -370,7 +370,7 @@ class JefreyAgent:
             "thread_id": thread_id,
         })
 
-        config = {"configurable": {"thread_id": thread_id}}
+        config = {"configurable": {"thread_id": thread_id, "user_id": user_id}}
         compiled = await self._compile()
         final_state = await compiled.ainvoke(initial_state, config=config)
 
@@ -385,7 +385,7 @@ class JefreyAgent:
         return response
     
     @traceable(name="agent_stream")
-    async def stream(self, user_input: str, thread_id: str = "default", user_id: str = "system"):
+    async def stream(self, user_input: str, thread_id: str = "default", user_id: str | None = None):
         """Stream da resposta (para UI em tempo real)."""
         if self._backend is not None:
             async for delta in self._backend.stream(user_input, thread_id):
@@ -399,7 +399,7 @@ class JefreyAgent:
             user_id=user_id,
         )
 
-        config = {"configurable": {"thread_id": thread_id}}
+        config = {"configurable": {"thread_id": thread_id, "user_id": user_id}}
 
         await event_bus.emit_sync(SystemEvents.USER_MESSAGE, {
             "input": user_input,

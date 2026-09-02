@@ -12,7 +12,7 @@ services:
     env_file: [.env]
     environment:
       POSTGRES_USER: ${JEFREY_DATABASE__USER:-jefrey}
-      POSTGRES_PASSWORD: ${JEFREY_DATABASE__PASSWORD:-jefrey}
+      POSTGRES_PASSWORD: ${JEFREY_DATABASE__PASSWORD:?required}
       POSTGRES_DB: ${JEFREY_DATABASE__DB:-jefrey}
     ports:
       - "5432:5432"
@@ -28,13 +28,13 @@ services:
   redis:
     image: redis:7.2-alpine
     container_name: jefrey-redis
-    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${JEFREY_REDIS__PASSWORD}"]
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${JEFREY_REDIS__PASSWORD:?required}"]
     ports:
       - "6379:6379"
     volumes:
       - jefrey_redisdata:/data
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG || redis-cli -a \"$${JEFREY_REDIS__PASSWORD}\" ping | grep -q PONG"]
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG || redis-cli -a \"$${JEFREY_REDIS__PASSWORD:?required}\" ping | grep -q PONG"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -52,18 +52,32 @@ services:
     image: jefrey-api:local
     container_name: jefrey-api
     working_dir: /app
+    read_only: true
+    tmpfs:
+      - /tmp
     volumes:
-      - .:/app
+      - ./:/app:ro
     env_file: [.env]
     environment:
-      JEFREY_DATABASE__URL: ${JEFREY_DATABASE__URL:-postgresql+psycopg://${JEFREY_DATABASE__USER:-jefrey}:${JEFREY_DATABASE__PASSWORD:-jefrey}@postgres:5432/${JEFREY_DATABASE__DB:-jefrey}}
-      JEFREY_REDIS__URL: ${JEFREY_REDIS__URL:-redis://:${JEFREY_REDIS__PASSWORD}@redis:6379/0}
+      JEFREY_DATABASE__URL: ${JEFREY_DATABASE__URL:-postgresql+psycopg://${JEFREY_DATABASE__USER:-jefrey}:${JEFREY_DATABASE__PASSWORD:?required}@postgres:5432/${JEFREY_DATABASE__DB:-jefrey}}
+      JEFREY_REDIS__URL: ${JEFREY_REDIS__URL:-redis://:${JEFREY_REDIS__PASSWORD:?required}@redis:6379/0}
       JEFREY_DATABASE__HOST: ${JEFREY_DATABASE__HOST:-postgres}
       JEFREY_REDIS__HOST: ${JEFREY_REDIS__HOST:-redis}
-      JEFREY_REDIS__PASSWORD: ${JEFREY_REDIS__PASSWORD}
+      JEFREY_REDIS__PASSWORD: ${JEFREY_REDIS__PASSWORD:?required}
       JEFREY_EMBEDDINGS__BASE_URL: ${JEFREY_EMBEDDINGS__BASE_URL:-http://host.docker.internal:11434}
       JEFREY_API__SECRET_KEY: ${JEFREY_API__SECRET_KEY}
       JEFREY_API__AUDIT_FALLBACK_PATH: ${JEFREY_API__AUDIT_FALLBACK_PATH:-/app/data/audit_fallback.jsonl}
+      JEFREY_ENV: ${JEFREY_ENV:-dev}
+      JEFREY_EVENTBUS__HMAC_KEY: ${JEFREY_EVENTBUS__HMAC_KEY:?required em prod — ver .env.example}
+      JEFREY_EVENTBUS__HMAC_KEYS_JSON: ${JEFREY_EVENTBUS__HMAC_KEYS_JSON:-}
+      JEFREY_EVENTBUS__HMAC_KID: ${JEFREY_EVENTBUS__HMAC_KID:-v1}
+      JEFREY_OAUTH__CLIENT_ID: ${JEFREY_OAUTH__CLIENT_ID:-}
+      JEFREY_OAUTH__CLIENT_SECRET: ${JEFREY_OAUTH__CLIENT_SECRET:-}
+      JEFREY_OAUTH__TOKEN_URI: ${JEFREY_OAUTH__TOKEN_URI:-}
+      JEFREY_OAUTH__AUD: ${JEFREY_OAUTH__AUD:-}
+      JEFREY_OAUTH__ISS: ${JEFREY_OAUTH__ISS:-}
+      JEFREY_OAUTH__JWKS_URI: ${JEFREY_OAUTH__JWKS_URI:-}
+      JEFREY_API__CORS_ORIGINS: ${JEFREY_API__CORS_ORIGINS:-}
     ports:
       - "8000:8000"
     extra_hosts:
@@ -93,18 +107,32 @@ services:
     image: jefrey-mcp:local
     container_name: jefrey-mcp
     working_dir: /app
+    read_only: true
+    tmpfs:
+      - /tmp
     volumes:
-      - .:/app
+      - ./:/app:ro
     env_file: [.env]
     environment:
-      JEFREY_DATABASE__URL: ${JEFREY_DATABASE__URL:-postgresql+psycopg://${JEFREY_DATABASE__USER:-jefrey}:${JEFREY_DATABASE__PASSWORD:-jefrey}@postgres:5432/${JEFREY_DATABASE__DB:-jefrey}}
-      JEFREY_REDIS__URL: ${JEFREY_REDIS__URL:-redis://:${JEFREY_REDIS__PASSWORD}@redis:6379/0}
+      JEFREY_DATABASE__URL: ${JEFREY_DATABASE__URL:-postgresql+psycopg://${JEFREY_DATABASE__USER:-jefrey}:${JEFREY_DATABASE__PASSWORD:?required}@postgres:5432/${JEFREY_DATABASE__DB:-jefrey}}
+      JEFREY_REDIS__URL: ${JEFREY_REDIS__URL:-redis://:${JEFREY_REDIS__PASSWORD:?required}@redis:6379/0}
       JEFREY_DATABASE__HOST: ${JEFREY_DATABASE__HOST:-postgres}
       JEFREY_REDIS__HOST: ${JEFREY_REDIS__HOST:-redis}
-      JEFREY_REDIS__PASSWORD: ${JEFREY_REDIS__PASSWORD}
+      JEFREY_REDIS__PASSWORD: ${JEFREY_REDIS__PASSWORD:?required}
       JEFREY_EMBEDDINGS__BASE_URL: ${JEFREY_EMBEDDINGS__BASE_URL:-http://host.docker.internal:11434}
       JEFREY_MCP__HOST: ${JEFREY_MCP__HOST:-0.0.0.0}
       JEFREY_MCP__PORT: ${JEFREY_MCP__PORT:-8001}
+      JEFREY_ENV: ${JEFREY_ENV:-dev}
+      JEFREY_EVENTBUS__HMAC_KEY: ${JEFREY_EVENTBUS__HMAC_KEY:?required em prod — ver .env.example}
+      JEFREY_EVENTBUS__HMAC_KEYS_JSON: ${JEFREY_EVENTBUS__HMAC_KEYS_JSON:-}
+      JEFREY_EVENTBUS__HMAC_KID: ${JEFREY_EVENTBUS__HMAC_KID:-v1}
+      JEFREY_OAUTH__CLIENT_ID: ${JEFREY_OAUTH__CLIENT_ID:-}
+      JEFREY_OAUTH__CLIENT_SECRET: ${JEFREY_OAUTH__CLIENT_SECRET:-}
+      JEFREY_OAUTH__TOKEN_URI: ${JEFREY_OAUTH__TOKEN_URI:-}
+      JEFREY_OAUTH__AUD: ${JEFREY_OAUTH__AUD:-}
+      JEFREY_OAUTH__ISS: ${JEFREY_OAUTH__ISS:-}
+      JEFREY_OAUTH__JWKS_URI: ${JEFREY_OAUTH__JWKS_URI:-}
+      JEFREY_API__CORS_ORIGINS: ${JEFREY_API__CORS_ORIGINS:-}
     ports:
       - "8001:8001"
     extra_hosts:
@@ -192,7 +220,7 @@ services:
       - "3000:3000"
     environment:
       GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?required}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/jefrey.json
     volumes:

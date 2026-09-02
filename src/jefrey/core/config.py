@@ -156,7 +156,9 @@ class DatabaseSettings(BaseSettings):
     port: int = 5432
     user: str = "jefrey"
     # SECURITY NOTE: password default e 'jefrey' para DEV. Em producao, via env var.
-    password: str = "jefrey"
+    # Senha obrigatoria — definir via JEFREY_DATABASE__PASSWORD no .env.
+    # Sem ela, o middleware de auth recusa todas as requests (CIPHER-018/025).
+    password: str = Field(default="", alias="JEFREY_DATABASE__PASSWORD")
     db: str = "jefrey"
     pool_size: int = 10
     max_overflow: int = 20
@@ -292,11 +294,37 @@ class AppSettings(BaseSettings):
         env_nested_delimiter="__",
         extra="ignore",
     )
-    
+
+    # FASE 0 — JEFREY_ENV enum fail-closed (Axiom #6, Security Eng ch.4)
+    # dev = permissivo (auto-key warn ok), prod = fail-closed (RuntimeError se secret ausente)
+    # Reproducao C1a: JEFREY_ENV=prod JEFREY_EVENTBUS__HMAC_KEY= python -c "from src.jefrey.eventbus.signing import _get_hmac_key; _get_hmac_key()" -> RuntimeError
+    env: Literal["dev", "prod"] = Field(default="dev", validation_alias="JEFREY_ENV")
     name: str = "Jefrey"
     version: str = "0.1.0"
     user_name: str = "Usuario"
     debug: bool = Field(default=False, validation_alias="JEFREY_DEBUG")
+
+    @property
+    def is_prod(self) -> bool:
+        return self.env == "prod"
+
+    def validate_for_production(self) -> list[str]:
+        """FASE 0 — valida segredos obrigatorios quando JEFREY_ENV=prod (fail-closed, Axiom #6)."""
+        warnings: list[str] = []
+        warnings.extend(self.api.validate_for_production())
+        if self.is_prod:
+            import os
+            hmac_key = os.getenv("JEFREY_EVENTBUS__HMAC_KEY", "")
+            if not hmac_key or len(hmac_key) < 32:
+                warnings.append("JEFREY_EVENTBUS__HMAC_KEY ausente ou <32 chars em prod (C1a) — deve dar RuntimeError, nao warn")
+            for k in ["JEFREY_OAUTH__CLIENT_ID", "JEFREY_OAUTH__TOKEN_URI", "JEFREY_OAUTH__AUD", "JEFREY_OAUTH__ISS"]:
+                if not os.getenv(k):
+                    warnings.append(f"{k} ausente em prod (A6) — OAuth sem AUD/ISS aceita token de outro issuer")
+            if not os.getenv("JEFREY_REDIS__PASSWORD"):
+                warnings.append("JEFREY_REDIS__PASSWORD vazio em prod (A6)")
+            if self.api.secret_key and "CHANGE_ME" in self.api.secret_key:
+                warnings.append("JEFREY_API__SECRET_KEY ainda CHANGE_ME em prod")
+        return warnings
     
     llm: LLMSettings = LLMSettings()
     memory: MemorySettings = MemorySettings()

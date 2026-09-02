@@ -25,6 +25,21 @@ _cm = None  # context manager retornado por from_conn_string (para fechar o pool
 _lock = asyncio.Lock()
 
 
+def _ns_thread_id(thread_id: str, user_id: str | None) -> str:
+    """Namespacing para isolamento multi-tenant (M3, Axiom #2).
+
+    Se user_id for informado, prefixa: `user_id:thread_id` para que checkpoints
+    de usuarios diferentes nunca se misturem no mesmo saver upstream
+    (AsyncPostgresSaver nao filtra por user_id nativamente).
+    Sem user_id retorna thread_id original (compat).
+    """
+    if not user_id:
+        return thread_id
+    if thread_id.startswith(f"{user_id}:"):
+        return thread_id
+    return f"{user_id}:{thread_id}"
+
+
 def _psycopg_dsn() -> str:
     """DSN psycopg puro ('postgresql://') a partir do DSN SQLAlchemy ('postgresql+psycopg://')."""
     return get_settings().database.dsn.replace("+psycopg", "")
@@ -43,6 +58,11 @@ async def get_postgres_checkpointer() -> AsyncPostgresSaver:
                 _saver = await _cm.__aenter__()
                 await _saver.setup()
     return _saver
+
+
+def make_checkpoint_config(thread_id: str, user_id: str | None = None) -> dict:
+    """Cria config para LangGraph com thread_id namespaced por user_id (M3)."""
+    return {"configurable": {"thread_id": _ns_thread_id(thread_id, user_id)}}
 
 
 async def close_postgres_checkpointer() -> None:

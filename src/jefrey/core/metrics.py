@@ -151,3 +151,9 @@ CONFIG_VALID = Gauge(
     documentation="Config valida (1) ou invalida (0) - CIPHER-019/002/001",
 )
 
+# FASE1 C2: kid legacy sem user_id label (Prometheus cardinality - Brazil ch.5)
+EVENTBUS_KID_LEGACY_TOTAL = Counter(
+    name="jefrey_eventbus_kid_legacy_total",
+    documentation="Total de mensagens EventBus sem kid (v0 compat, DeprecationWarning)",
+    labelnames=[],
+)

@@ -101,7 +101,9 @@ def main() -> int:
     logger.info("Contagem por camada: episodic=%d", mem.count("episodic"))
 
     logger.info("Testando working memory (Redis)...")
-    wm = RedisWorkingMemory(session_id="verify-session", redis_url="redis://localhost:6379/0")
+    from src.jefrey.core.config import get_settings as _gs
+    _redis_url = _gs().redis.dsn
+    wm = RedisWorkingMemory(session_id="verify-session", redis_url=_redis_url)
     wm.clear()  # garante um estado limpo (Redis é persistente entre execuções)
     wm.add_user("Olá Jefrey")
     wm.add_assistant("Olá! Como posso ajudar?")

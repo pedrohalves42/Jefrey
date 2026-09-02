@@ -1,0 +1,31 @@
+# .pre-commit-config.yaml — FASE 0 — 6 greps + ruff/black (PLANO_MESTRE v1.1)
+# Axiom #6 FAIL-CLOSED + CIPHER-033/026/031 + Security Eng + DDIA + MCP Spec
+# Instalacao: pip install pre-commit && pre-commit install
+repos:
+  - repo: local
+    hooks:
+      - id: guard-anti-patterns
+        name: guard_anti_patterns.sh (6 greps C1a/C1b/C2/A1/A4/M5/A6)
+        entry: bash scripts/guard_anti_patterns.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: jefrey-env-prod-audit
+        name: audit_pessimista JEFREY_ENV=prod (0 CRITICO)
+        entry: bash -c 'JEFREY_ENV=prod python audit_pessimista.py 2>&1 | grep -q "CRITICO.*ISSUE" && { echo "audit_pessimista.py CRITICO em JEFREY_ENV=prod — corrija antes de commit"; exit 1; } || exit 0'
+        language: system
+        pass_filenames: false
+        always_run: true
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.11.2
+    hooks:
+      - id: mypy
+        additional_dependencies: [pydantic, pydantic-settings, types-PyYAML]
+        args: [--ignore-missing-imports]
+        exclude: ^(tests/|scripts/verify_)

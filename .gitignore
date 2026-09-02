@@ -74,3 +74,11 @@ scripts/_verify_*_quick.py
 reports/test_run_*.md
 reports/junit.xml
 !reports/.gitkeep
+
+# P4-01 temporarios (historico em docs/archive)
+_fix_*.py
+fix_*.py
+_fase*.py
+2.0.0*
+tmp_test.py
+validate_e2_fixed.py

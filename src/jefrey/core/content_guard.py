@@ -10,6 +10,15 @@ import logging
 import re
 
 logger = logging.getLogger(__name__)
+# M2 — redact PII antes de logar ou retornar ao LLM (Security Eng ch.8)
+_PII_RE = re.compile(
+    r"(sk-[a-zA-Z0-9]{20,}|Bearer\s+[a-zA-Z0-9._\-]+|[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}|cpf\s*\d{3}\.?\d{3}\.?\d{3}-?\d{2})",
+    re.IGNORECASE,
+)
+
+def redact_pii(s: str) -> str:
+    return _PII_RE.sub("[REDACTED]", s)
+
 
 # Padroes que indicam tentativa de prompt injection no conteudo retornado.
 _INJECTION_PATTERNS: list[str] = [
@@ -56,11 +65,16 @@ _INJECTION_PATTERNS: list[str] = [
 def sanitize_tool_output(content: str, source: str = "external") -> str:
     """Sanitiza output de ferramenta externa antes de passar ao LLM.
 
-    Retorna o conteudo original se seguro, ou um marcador de bloqueio se contiver
-    padrao suspeito de injecao de prompt.
+    M2: redact_pii antes de injection check e log para nao vazar PII (Security Eng).
+    Retorna o conteudo original (redigido) se seguro, ou marcador se bloqueado.
     """
     if not content:
         return content
+    # M2: redact PII antes de qualquer processamento/log
+    try:
+        content = redact_pii(content)
+    except Exception as e:
+        logger.warning("content_guard redact_pii falhou: %s", e)
     for pattern in _INJECTION_PATTERNS:
         # FIX: usa re.MULTILINE para que ^ funcione por linha (evita falsos positivos
         # de "Human:" no meio de texto normal)

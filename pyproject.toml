@@ -43,6 +43,11 @@ dependencies = [
     "uvicorn>=0.34.0",
     "fastapi>=0.110.0",
     "prometheus-client>=0.20.0",
+    "packaging>=24.0",
+    "cachetools>=5.3.0",
+    "PyJWT>=2.9.0",
+    "cryptography>=42.0.0",
+    "redis>=5.0.0",
     "google-api-python-client>=2.0",
     "google-auth-oauthlib>=1.1",
     "google-auth>=2.0",
@@ -113,9 +118,9 @@ target_version = "py312"
 
 [tool.pytest.ini_options]
 asyncio_mode = "strict"
-asyncio_default_fixture_style = "function"
+asyncio_default_fixture_loop_scope = "function"
 python_files = ["test_*.py", "*_test.py"]
-python_paths = ["src"]
+pythonpath = ["src"]
 
 [tool.coverage.run]
 source = ["src/jefrey"]
