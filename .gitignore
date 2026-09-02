@@ -104,3 +104,4 @@ scripts/mcp_n8n_client.py
 src/jefrey/eventbus/_/
 .venv_placeholder 
 docs/security-audit/.venv_placeholder 
+!PLANO_FASE_P5*.md 
