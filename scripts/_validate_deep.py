@@ -259,14 +259,6 @@ if _bad:
     bugs.append(f"P5-01 metrics com user_id label: {_bad}")
 else:
     oks.append("P5-01 metrics no user_id label OK (Livro4 cap5)")
-print(f"\nWARNS: {len(warns)}")
-for w in warns: print(f"  WARN {w}")
-print(f"\nBUGS: {len(bugs)}")
-for b in bugs: print(f"  BUG {b}")
-
-# % projeto
-# heuristic: count principle gates
-
 print("== Q. P5-02 promtool (L4 cap10) ==")
 _txt_prom = read("docker/prometheus/prometheus.yml")
 if "rule_files:" in _txt_prom and "/etc/prometheus/alerts.yml" in _txt_prom:
@@ -286,6 +278,14 @@ if "promtool check rules" in read(".github/workflows/ci.yml"):
     oks.append("ci promtool check rules OK (P5-02)")
 else:
     warns.append("ci sem promtool check rules (P5-02) - WARN ate instalar promtool")
+print(f"\nWARNS: {len(warns)}")
+for w in warns: print(f"  WARN {w}")
+print(f"\nBUGS: {len(bugs)}")
+for b in bugs: print(f"  BUG {b}")
+
+# % projeto
+# heuristic: count principle gates
+
 
 total_gates = len(oks)+len(bugs)+len(warns)
 pct = len(oks)/total_gates*100 if total_gates else 0
