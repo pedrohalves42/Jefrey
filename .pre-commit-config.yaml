@@ -16,6 +16,12 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      - id: metrics-no-user-id
+        name: metrics no user_id label (Livro 4 cap5 P5-01)
+        entry: bash -c 'grep -rn labelnames.*user_id src/ && exit 1 || exit 0'
+        language: system
+        pass_filenames: false
+        always_run: true
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.6.9
     hooks:

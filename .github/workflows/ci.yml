@@ -35,6 +35,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt 2>/dev/null || pip install -e .[dev]
           pip install pytest pytest-asyncio httpx redis PyJWT cryptography cachetools packaging
+      - name: Metrics cardinality — no user_id label (P5-01 Livro 4 cap5)
+        run: |
+          grep -rn "labelnames.*user_id" src/ && exit 1 || echo "no user_id label OK"
+          grep -rn "Counter.*user_id" src/ | grep -i labelnames && exit 1 || echo "no Counter user_id OK"
       - name: Guard 6 greps (fail-closed)
         run: |
           chmod +x scripts/guard_anti_patterns.sh

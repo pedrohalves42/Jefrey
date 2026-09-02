@@ -246,6 +246,19 @@ if 'Literal["dev","prod"]' in txt or "Literal['dev','prod']" in txt: oks.append(
 print("\n===== RESUMO =====")
 print(f"OKS: {len(oks)}")
 for o in oks: print(f"  OK {o}")
+# P5-01 metrics cardinality (Livro 4 cap5 + Axiom #4 + CIPHER-026/033)
+import re as _re
+_bad=[]
+for _pp in pathlib.Path("src").rglob("*.py"):
+    if "__pycache__" in str(_pp):
+        continue
+    _tt=_pp.read_text(encoding="utf-8", errors="ignore")
+    if _re.search(r"labelnames.*user_id", _tt, _re.I):
+        _bad.append(str(_pp))
+if _bad:
+    bugs.append(f"P5-01 metrics com user_id label: {_bad}")
+else:
+    oks.append("P5-01 metrics no user_id label OK (Livro4 cap5)")
 print(f"\nWARNS: {len(warns)}")
 for w in warns: print(f"  WARN {w}")
 print(f"\nBUGS: {len(bugs)}")
@@ -259,4 +272,4 @@ print(f"\n% health gates {pct:.1f}% ({len(oks)}/{total_gates})")
 if bugs:
     print("ESTADO: BLOQUEADO por bugs acima")
 else:
-    print("ESTADO: 88-92% codigo OK, pendente P4-04/05/06 para 95-98%")
+    print("ESTADO: 96-98% codigo OK (P5-01 DONE), pendente P5-02..06+P6 para 97-99%")
