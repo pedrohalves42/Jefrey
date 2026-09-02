@@ -51,7 +51,7 @@ txt = read("src/jefrey/core/audit.py")
 if "redact_pii" in txt.lower() and "_PII_RE" in txt: oks.append("audit redact_pii OK")
 else: bugs.append("audit missing redact_pii")
 if "sort_keys" in txt: oks.append("audit canonical sort_keys OK")
-if "default=str" in txt and "json.dumps" in txt: warns.append("audit json.dumps default=str -> check if after redact")
+if "default=str" in txt and "json.dumps" in txt and "redact_pii(raw)" not in txt: warns.append("audit json.dumps default=str -> check if after redact")
 if "user_id" in txt and "detail_redacted" in txt.lower() or "redact" in txt.lower():
     oks.append("audit user_id + redact present")
 

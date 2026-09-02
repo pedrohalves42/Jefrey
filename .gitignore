@@ -59,7 +59,6 @@ config/credentials/
 .env.production
 .env.staging
 
-
 # Temp scripts
 scripts/_fix_*.py
 scripts/_verify_*_quick.py
@@ -82,3 +81,26 @@ _fase*.py
 2.0.0*
 tmp_test.py
 validate_e2_fixed.py
+
+# P4-FINAL: temp/planos e audits na raiz (nao versionar) — apenas raiz
+.goose/
+check_*.py
+debug_*.py
+remove_*.py
+run_validation.py
+test_*.py
+p3_*.py
+audit_*.py
+PLANO_*.md
+P2_*.md
+P3_*.md
+FINAL_*.md
+FIX_PLAN*.md
+RESUMO_*.md
+REFERENCES_MAPPING.md
+scripts/_validate_e1_full.py
+scripts/_validate_full.py
+scripts/mcp_n8n_client.py
+src/jefrey/eventbus/_/
+.venv_placeholder 
+docs/security-audit/.venv_placeholder 
