@@ -107,4 +107,6 @@ docs/security-audit/.venv_placeholder
 !PLANO_FASE_P5*.md
 !tests/test_p4*.py
 !tests/test_p5*.py
+data/audit_fallback.jsonl
+!data/.gitkeep
 !tests/__init__.py 

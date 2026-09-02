@@ -1,0 +1,13 @@
+P5-05+06 Audit Fallback + CI Metrics — 2026-09-02T18:34:19.314335+00:00 (DDIA cap3, SWE cap14, Axiom #6)
+deep: 136/136 100% WARNS0 BUGS0
+deep: % health gates 100.0% (136/136)
+ESTADO: 97-99% codigo OK - P5 DONE 136/136, pendente P6 para P8
+drill_audit_fallback --help RC0
+drill_audit_fallback: [drill] audit fallback OK -> C:\Users\Pedro\AppData\Local\Temp\tmp20ap2zjq.jsonl (449 bytes, redact OK)
+drill_audit_fallback --all: [drill] all DONE [tmpntw_0rk8.jsonl, tmpbm0wppyf_none.jsonl]
+drill prod gate: FAIL-CLOSED RC=2 (expected 2) OK
+pytest P5 4 suites: 15 passed, 2 warnings in 9.69s
+grafana 8 panels editable:false by(le)2 OK
+promtool check 6 rules SUCCESS (preserved P5-04)
+compileall src OK
+audit redact_before_json + redact_pii(raw) OK

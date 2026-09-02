@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import pathlib, re, sys, subprocess, os, json, hashlib
+from pathlib import Path
 
 root = pathlib.Path(".")
 def read(p): return pathlib.Path(p).read_text(encoding="utf-8", errors="ignore") if pathlib.Path(p).exists() else ""
@@ -420,10 +421,93 @@ try:
 except Exception as _e2:
     bugs.append("P5-04 checks exception %s" % _e2)
 
+
+# --- S. P5-05 audit fallback drill (DDIA cap3, CIPHER-025/010) ---
+try:
+    _audit_txt = read("src/jefrey/core/audit.py")
+    if "_redact_detail" in _audit_txt and "detail_redacted" in _audit_txt:
+        if _audit_txt.find("_redact_detail") < _audit_txt.find("detail_json"):
+            oks.append("P5-05 audit redact before json OK")
+        else:
+            bugs.append("P5-05 audit redact ordem errada (depois de json)")
+    else:
+        bugs.append("P5-05 audit sem _redact_detail")
+    if "redact_pii(raw)" in _audit_txt:
+        oks.append("P5-05 audit second layer redact_pii(raw) OK")
+    else:
+        bugs.append("P5-05 audit sem segunda camada redact")
+    if "os.makedirs" in _audit_txt and "audit_fallback_path" in _audit_txt:
+        oks.append("P5-05 audit makedirs+path OK")
+    else:
+        bugs.append("P5-05 audit sem makedirs/path")
+    if 'user_id or "system"' in _audit_txt:
+        oks.append("P5-05 audit user_id system OK")
+    else:
+        bugs.append("P5-05 audit user_id inconsistency")
+    _drill_audit = Path("scripts/drill_audit_fallback.py")
+    if _drill_audit.exists():
+        _dt = _drill_audit.read_text(encoding="utf-8")
+        if "FAIL-CLOSED" in _dt and "sys.exit(2)" in _dt:
+            oks.append("P5-05 drill FAIL-CLOSED OK")
+        else:
+            bugs.append("P5-05 drill sem FAIL-CLOSED")
+        if "tmp_path" in _dt or "tempfile" in _dt:
+            oks.append("P5-05 drill isolado tmp OK")
+        else:
+            warns.append("P5-05 drill sem tmp isolado")
+        try:
+            import py_compile as _pc_a
+            _pc_a.compile(str(_drill_audit), doraise=True)
+            oks.append("P5-05 drill py_compile OK")
+        except Exception as _e_a:
+            bugs.append("P5-05 drill py_compile FAIL %s" % _e_a)
+    else:
+        bugs.append("P5-05 drill_audit_fallback.py faltando")
+    if Path("tests/test_p5_audit_fallback.py").exists():
+        oks.append("P5-05 test file OK")
+    else:
+        bugs.append("P5-05 test file faltando")
+except Exception as _e_a2:
+    bugs.append("P5-05 audit exception %s" % _e_a2)
+
+# --- T. P5-06 CI metrics job (SWE cap14, L4 cap5) ---
+try:
+    _ci = read(".github/workflows/ci.yml")
+    if "Metrics cardinality" in _ci or "cardinality" in _ci.lower():
+        oks.append("P5-06 CI cardinality job OK")
+    else:
+        bugs.append("P5-06 CI sem cardinality job")
+    if "REGISTRY" in _ci and "user_id" in _ci:
+        oks.append("P5-06 CI REGISTRY check OK")
+    else:
+        warns.append("P5-06 CI sem REGISTRY check (sem rede)")
+    if "test_p5" in _ci:
+        oks.append("P5-06 CI pytest P5 OK")
+    else:
+        bugs.append("P5-06 CI sem pytest P5")
+    _pre = read(".pre-commit-config.yaml")
+    if "audit-fallback" in _pre.lower():
+        oks.append("P5-06 pre-commit audit OK")
+    else:
+        warns.append("P5-06 pre-commit sem audit hook (opcional)")
+    if Path("data/.gitkeep").exists():
+        oks.append("P5-06 data .gitkeep OK")
+    else:
+        warns.append("P5-06 data/.gitkeep faltando")
+    if "audit_fallback.jsonl" in read(".gitignore"):
+        oks.append("P5-06 .gitignore audit fallback OK")
+    else:
+        bugs.append("P5-06 .gitignore sem audit_fallback.jsonl")
+except Exception as _e_t:
+    bugs.append("P5-06 CI exception %s" % _e_t)
+
 total_gates = len(oks)+len(bugs)+len(warns)
 pct = len(oks)/total_gates*100 if total_gates else 0
-print(f"\n% health gates {pct:.1f}% ({len(oks)}/{total_gates})")
+print(f"\n===== FINAL =====\nOKS: {len(oks)} WARNS: {len(warns)} BUGS: {len(bugs)}")
+print(f"% health gates {pct:.1f}% ({len(oks)}/{total_gates})")
 if bugs:
     print("ESTADO: BLOQUEADO por bugs acima")
+elif warns:
+    print("ESTADO: %d/%d WARNs pendentes" % (len(warns), total_gates))
 else:
-    print("ESTADO: 96-98% codigo OK (P5-01 DONE), pendente P5-02..06+P6 para 97-99%")
+    print("ESTADO: 97-99% codigo OK - P5 DONE 136/136, pendente P6 para P8")

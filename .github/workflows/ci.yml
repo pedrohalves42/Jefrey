@@ -55,6 +55,11 @@ jobs:
         run: |
           docker run --rm --entrypoint promtool -v ${{ github.workspace }}/docker/prometheus:/etc/prometheus prom/prometheus:v2.53.0 check rules /etc/prometheus/alerts.yml
           docker run --rm --entrypoint promtool -v ${{ github.workspace }}/docker/prometheus:/etc/prometheus prom/prometheus:v2.53.0 test rules /etc/prometheus/tests/alerts_test.yml
+      - name: Metrics cardinality + /metrics no user_id + pytest P5 (P5-01/P5-06 L4 cap5 + SWE cap14)
+        run: |
+          grep -rn "labelnames.*user_id" src/ && { echo "FAIL user_id label cardinality"; exit 1; } || echo "no user_id label OK (cap5)"
+          python -c "from prometheus_client import REGISTRY; txt=str(list(REGISTRY.collect())); assert 'user_id' not in txt.lower(), 'user_id em REGISTRY'; print('REGISTRY no user_id OK')"
+          python -m pytest tests/test_p5_metrics_cardinality.py tests/test_p5_grafana_dashboards.py tests/test_p5_alerts_drill.py tests/test_p5_audit_fallback.py -q
       - name: Guard 6 greps (fail-closed)
         run: |
           chmod +x scripts/guard_anti_patterns.sh

@@ -40,6 +40,18 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      - id: promtool-test-rules
+        name: promtool test rules 6/6 firing (Livro4 cap10)
+        entry: bash -c 'python -c "import yaml; d=yaml.safe_load(open(\"docker/prometheus/tests/alerts_test.yml\",encoding=\"utf-8\")); assert len(d["tests"])==6; assert all(\"alert_rule_test\" in tt for tt in d["tests"]); print(\"promtool-test 6/6 OK\")"'
+        language: system
+        files: ^docker/prometheus/(alerts\.yml|tests/alerts_test\.yml)$
+        pass_filenames: false
+      - id: audit-fallback-redact
+        name: audit fallback redact_pii before json (DDIA cap3, CIPHER-025)
+        entry: bash -c 'python -c "import pathlib; t=pathlib.Path(\"src/jefrey/core/audit.py\").read_text(encoding=\"utf-8\"); assert \"_redact_detail\" in t and t.find(\"_redact_detail\") < t.find(\"detail_json\"), \"redact order\"; assert \"redact_pii(raw)\" in t, \"second layer\"; print(\"audit redact order OK\")"'
+        language: system
+        files: ^src/jefrey/core/audit\.py$
+        pass_filenames: false
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.6.9
     hooks:
@@ -53,10 +65,3 @@ repos:
         additional_dependencies: [pydantic, pydantic-settings, types-PyYAML]
         args: [--ignore-missing-imports]
         exclude: ^(tests/|scripts/verify_)
-
-  - id: promtool-test-rules
-    name: promtool test rules 6/6 firing (Livro4 cap10)
-    entry: bash -c 'python -c "import yaml; d=yaml.safe_load(open(\"docker/prometheus/tests/alerts_test.yml\",encoding=\"utf-8\")); assert len(d["tests"])==6; assert all(\"alert_rule_test\" in tt for tt in d["tests"]); print(\"promtool-test 6/6 OK\")"'
-    language: system
-    files: ^docker/prometheus/(alerts\.yml|tests/alerts_test\.yml)$
-    pass_filenames: false
