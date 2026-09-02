@@ -1,0 +1,73 @@
+=== P6-A HNSW Proof 2026-09-02 ===
+db_init RC=0
+
+--- \d+ episodic_memory ---
+                                                           Table "public.episodic_memory"
+    Column     |           Type           | Collation | Nullable |           Default           | Storage  | Compression | Stats target | Description 
+---------------+--------------------------+-----------+----------+-----------------------------+----------+-------------+--------------+-------------
+ id            | uuid                     |           | not null |                             | plain    |             |              | 
+ content       | text                     |           | not null |                             | extended |             |              | 
+ embedding     | vector(768)              |           | not null |                             | extended |             |              | 
+ title         | character varying(512)   |           |          |                             | extended |             |              | 
+ source        | character varying(128)   |           |          |                             | extended |             |              | 
+ tags          | character varying[]      |           | not null |                             | extended |             |              | 
+ metadata_json | jsonb                    |           | not null |                             | extended |             |              | 
+ importance    | double precision         |           |          |                             | plain    |             |              | 
+ created_at    | timestamp with time zone |           | not null | now()                       | plain    |             |              | 
+ updated_at    | timestamp with time zone |           | not null | now()                       | plain    |             |              | 
+ user_id       | character varying(128)   |           | not null | 'system'::character varying | extended |             |              | 
+Indexes:
+    "episodic_memory_pkey" PRIMARY KEY, btree (id)
+    "episodic_embedding_idx" hnsw (embedding vector_cosine_ops)
+    "ix_episodic_memory_user_id" btree (user_id)
+    "ix_episodicmemory_embedding_hnsw" hnsw (embedding vector_cosine_ops) WITH (m='16', ef_construction='64')
+Access method: heap
+
+
+
+--- pg_indexes ---
+              indexname              |                                                                          indexdef                                                                          
+-------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------
+ episodic_embedding_idx              | CREATE INDEX episodic_embedding_idx ON public.episodic_memory USING hnsw (embedding vector_cosine_ops)
+ episodic_memory_pkey                | CREATE UNIQUE INDEX episodic_memory_pkey ON public.episodic_memory USING btree (id)
+ ix_episodic_memory_user_id          | CREATE INDEX ix_episodic_memory_user_id ON public.episodic_memory USING btree (user_id)
+ ix_episodicmemory_embedding_hnsw    | CREATE INDEX ix_episodicmemory_embedding_hnsw ON public.episodic_memory USING hnsw (embedding vector_cosine_ops) WITH (m='16', ef_construction='64')
+ ix_operational_memory_user_id       | CREATE INDEX ix_operational_memory_user_id ON public.operational_memory USING btree (user_id)
+ ix_operationalmemory_embedding_hnsw | CREATE INDEX ix_operationalmemory_embedding_hnsw ON public.operational_memory USING hnsw (embedding vector_cosine_ops) WITH (m='16', ef_construction='64')
+ operational_embedding_idx           | CREATE INDEX operational_embedding_idx ON public.operational_memory USING hnsw (embedding vector_cosine_ops)
+ operational_memory_pkey             | CREATE UNIQUE INDEX operational_memory_pkey ON public.operational_memory USING btree (id)
+ ix_preference_memory_user_id        | CREATE INDEX ix_preference_memory_user_id ON public.preference_memory USING btree (user_id)
+ ix_preferencememory_embedding_hnsw  | CREATE INDEX ix_preferencememory_embedding_hnsw ON public.preference_memory USING hnsw (embedding vector_cosine_ops) WITH (m='16', ef_construction='64')
+ preference_embedding_idx            | CREATE INDEX preference_embedding_idx ON public.preference_memory USING hnsw (embedding vector_cosine_ops)
+ preference_memory_pkey              | CREATE UNIQUE INDEX preference_memory_pkey ON public.preference_memory USING btree (id)
+ ix_procedural_memory_user_id        | CREATE INDEX ix_procedural_memory_user_id ON public.procedural_memory USING btree (user_id)
+ ix_proceduralmemory_embedding_hnsw  | CREATE INDEX ix_proceduralmemory_embedding_hnsw ON public.procedural_memory USING hnsw (embedding vector_cosine_ops) WITH (m='16', ef_construction='64')
+ procedural_embedding_idx            | CREATE INDEX procedural_embedding_idx ON public.procedural_memory USING hnsw (embedding vector_cosine_ops)
+ procedural_memory_pkey              | CREATE UNIQUE INDEX procedural_memory_pkey ON public.procedural_memory USING btree (id)
+ ix_semantic_memory_user_id          | CREATE INDEX ix_semantic_memory_user_id ON public.semantic_memory USING btree (user_id)
+ ix_semanticmemory_embedding_hnsw    | CREATE INDEX ix_semanticmemory_embedding_hnsw ON public.semantic_memory USING hnsw (embedding vector_cosine_ops) WITH (m='16', ef_construction='64')
+ semantic_embedding_idx              | CREATE INDEX semantic_embedding_idx ON public.semantic_memory USING hnsw (embedding vector_cosine_ops)
+ semantic_memory_pkey                | CREATE UNIQUE INDEX semantic_memory_pkey ON public.semantic_memory USING btree (id)
+(20 rows)
+
+
+
+--- vector extension ---
+  oid  | extname | extowner | extnamespace | extrelocatable | extversion | extconfig | extcondition 
+-------+---------+----------+--------------+----------------+------------+-----------+--------------
+ 16389 | vector  |       10 |         2200 | t              | 0.5.1      |           | 
+(1 row)
+
+
+
+--- EXPLAIN vector scan ---
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
+ Limit  (cost=1.02..1.03 rows=1 width=234)
+   ->  Sort  (cost=1.02..1.03 rows=1 width=234)
+         Sort Key: ((embedding <=> '[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8]'::vector))
+         ->  Seq Scan on episodic_memory  (cost=0.00..1.01 rows=1 width=234)
+               Filter: ((user_id)::text = 'u-test'::text)
+(5 rows)
+
+

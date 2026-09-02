@@ -1,4 +1,5 @@
-"""Inicialização do schema (extension + tabelas + índices HNSW)."""
+"""Inicializacao do schema (extension + tabelas + indices HNSW)."""
+
 from __future__ import annotations
 
 from sqlalchemy import text
@@ -8,18 +9,18 @@ from src.jefrey.core.models import Base as ModelsBase, MEMORY_TABLES
 
 
 def init_db() -> None:
-    """Cria extension vector, tabelas e índices HNSW de similaridade coseno."""
+    """Cria extension vector, tabelas e indices HNSW de similaridade coseno."""
     engine = get_engine()
     with engine.begin() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     ModelsBase.metadata.create_all(engine)
     DbBase.metadata.create_all(engine)
-    # P4: adiciona coluna expires_at na tabela approvals (já existente desde P3). Idempotente.
+    # P4: adiciona coluna expires_at na tabela approvals (ja existente desde P3). Idempotente.
     with engine.begin() as conn:
         conn.execute(text("ALTER TABLE approvals ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ"))
     with engine.begin() as conn:
-        # Garante que metadata_json seja JSONB (idempotente; no-op se já for jsonb).
-        # Necessário porque filtros usam os operadores @> / ->> da JSONB.
+        # Garante que metadata_json seja JSONB (idempotente; no-op se ja for jsonb).
+        # Necessario porque filtros usam os operadores @> / ->> da JSONB.
         for name in MEMORY_TABLES:
             conn.execute(
                 text(
@@ -38,16 +39,32 @@ def init_db() -> None:
                     """
                 )
             )
-    with engine.begin() as conn:
+    # P6-A: HNSW indices CONCURRENTLY IF NOT EXISTS — idempotente, zero downtime (DDIA cap12).
+    # CREATE INDEX CONCURRENTLY nao pode rodar dentro de transacao -> usa AUTOCOMMIT.
+    # Index spec deve casar com models.py: m=16 ef_construction=64 vector_cosine_ops.
+    with engine.connect() as conn:
+        conn = conn.execution_options(isolation_level="AUTOCOMMIT")
         for name in MEMORY_TABLES:
+            idx = f"ix_{name}memory_embedding_hnsw"
             conn.execute(
                 text(
-                    f"CREATE INDEX IF NOT EXISTS {name}_embedding_idx "
-                    f"ON {name}_memory USING hnsw (embedding vector_cosine_ops)"
+                    f"CREATE INDEX CONCURRENTLY IF NOT EXISTS {idx} "
+                    f"ON {name}_memory USING hnsw (embedding vector_cosine_ops) "
+                    f"WITH (m='16', ef_construction='64')"
+                )
+            )
+        # Compat: mantem alias antigo {name}_embedding_idx se ainda usado por queries legado
+        for name in MEMORY_TABLES:
+            legacy = f"{name}_embedding_idx"
+            conn.execute(
+                text(
+                    f"CREATE INDEX CONCURRENTLY IF NOT EXISTS {legacy} "
+                    f"ON {name}_memory USING hnsw (embedding vector_cosine_ops) "
+                    f"WITH (m='16', ef_construction='64')"
                 )
             )
 
 
 if __name__ == "__main__":
     init_db()
-    print("✅ Banco de dados Jefrey inicializado (PostgreSQL + pgvector).")
+    print("Banco de dados Jefrey inicializado (PostgreSQL + pgvector).")
