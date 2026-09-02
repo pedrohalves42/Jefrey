@@ -1,7 +1,7 @@
 # Jefrey SLOs & Runbooks
 
-**Status**: DRAFT - P3 Planning Phase  
-**Related**: P3 Plan (CIPHER-031/032/033), P8 Roadmap  
+**Status**: FINAL - P4 Prod Hardening  
+**Related**: P4 Prod Hardening (SLOs CI/CD Prometheus, kid rotation, HNSW), P8 Roadmap  
 
 ---
 
@@ -228,6 +228,21 @@
 
 ---
 
+## 5.1 Alerts (P4-04)
+
+| Alert | Expr | SLO |
+|-------|------|-----|
+| JefreyConfigInvalid | jefrey_config_valid==0 | config |
+| JefreyApiHighErrorRate | blocked/tool_exec >1% | error_rate |
+| JefreyRateLimitDenialsHigh | deny/total >0.1% | rate_limit |
+| JefreyKidLegacyHigh | increase(kid_legacy[10m])>10 | eventbus |
+| JefreyMemoryLatencyHigh | p95 memory >300ms | latency |
+| JefreyServiceDown | up==0 | availability |
+
+Regras em `docker/prometheus/alerts.yml`, carregadas via `rule_files` em `docker/prometheus/prometheus.yml`. CI roda `guard + audit prod + pytest -q + compose config -q` em `.github/workflows/ci.yml`.
+
+---
+
 ## 6. Related Documentation
 
 - `THREAT_MODEL.md` - Security assumptions and controls
@@ -239,7 +254,7 @@
 
 ---
 
-**Document Version**: 1.0  
-**Last Updated**: 2026-08-31  
-**Next Review**: P3 planning review or upon CIPHER-031 implementation  
+**Document Version**: 1.1  
+**Last Updated**: 2026-09-02  
+**Next Review**: P4 post-merge review  
 **Owner**: Project maintainer

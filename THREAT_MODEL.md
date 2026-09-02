@@ -1,9 +1,9 @@
 # Jefrey Threat Model
 
-**Version**: 1.0  
+**Version**: 1.1  
 **Created**: 2026-08-31  
-**Last Updated**: 2026-08-31  
-**Status**: DRAFT - P3 Planning Phase  
+**Last Updated**: 2026-09-02  
+**Status**: FINAL - P4 Prod Hardening  
 
 ---
 
@@ -51,6 +51,16 @@ This threat model documents the security assumptions, assets, adversaries, and d
 | 8 | **Session Fixation/Replay** | Unauthorized session takeover | Token introspection (planned CIPHER-031), /approvals/pending isolation | **PLANNED** |
 
 ---
+
+
+### 2.3 Novos vetores P4 (IdP, HNSW, Streams, kid rotation)
+
+| # | Vector | Impact | Mitigacao P4 | Gap |
+|---|--------|--------|-------------|-----|
+| 9 | **IdP token theft / jti replay** (CIPHER-031) | Reuso de refresh_token, replay de access_token | token_refresh.py httpx POST token_uri + client_id/secret, validacao aud/iss/exp/kid/alg, revogacao via Redis sadd+expire 86400 (jti TTL = exp-now), valid_ stub apenas dev | RESOLVED (P4-02) |
+| 10 | **EventBus replay** (CIPHER-033) | Replay de evento assinado fora da janela | HMAC user_id.timestamp.canonical + janela 5m (timestamp Z), dual-verify kid v1/v2, legacy v0 DeprecationWarning + metric EVENTBUS_KID_LEGACY_TOTAL sem user_id label | RESOLVED (P4-03) |
+| 11 | **HNSW poisoning / cross-user leak** | Vetor de outro user retornado, recall degradado | Filtro user_id em pg_memory add/search/get (Axiom #2), HNSW m=16 ef64 + ix_user_created, content_guard redact_pii antes de indexar | RESOLVED (P4-06/M1-M3) |
+| 12 | **HMAC kid rotation quebra Stream** | Mensagens antigas invalidas apos rotacao | ADR-001: HMAC_KEYS_JSON dict kid->key, dual-verify, rollout v1->v2 sem incluir kid no HMAC input, TTL Stream maxlen 10000 | RESOLVED (ADR-001) |
 
 ## 3. Assets & Their Protection
 
@@ -111,9 +121,9 @@ This threat model documents the security assumptions, assets, adversaries, and d
 | **Input parameter sanitization** | CIPHER-028 | core/policy.py | ✅ Implemented (P2) |
 | **Enhanced audit logging with user_id** | CIPHER-029 | core/policy.py | ✅ Implemented (P2) |
 | **n8n tool registrations with risk/role** | CIPHER-027 context | core/registry.py | ✅ 5 tools registered (P2) |
-| **OAuth2 introspection (planned)** | CIPHER-031 | oauth2/introspect.py | 📋 P3 planned |
-| **Skill risk assessment** | CIPHER-032 | core/policy.py + skills/registry.py | 📋 P3 planned |
-| **EventBus HMAC signing** | CIPHER-033 | core/eventbus/publisher.py | 📋 P3 planned |
+| **OAuth2 introspection** | CIPHER-031 | oauth2/introspect.py | ✅ P4-02 (jwt.decode aud/iss, hash, sismember TTL) |
+| **Skill risk assessment** | CIPHER-032 | skills/risk_assessment.py + version.py | ✅ P4 (packaging semver, HITL MAJOR) |
+| **EventBus HMAC signing + Streams** | CIPHER-033 | eventbus/publisher.py + subscriber.py (XADD/XREADGROUP, DLQ, kid v1/v2) | ✅ P4-03 |
 
 ### 5.2. Process Controls
 
@@ -167,6 +177,8 @@ This threat model documents the security assumptions, assets, adversaries, and d
 | Date | Version | Change | Author |
 |------|---------|--------|--------|
 | 2026-08-31 | 1.0 | Initial threat model creation | Project maintainer |
+| 2026-09-02 | 1.1 | P4 FINAL: IdP/jti/HNSW/Streams/kid rotation (ADR-001), SLOs CI/CD | Maintainer |
+| 2026-09-02 | 1.1 | P4 FINAL: IdP/jti/HNSW/Streams/kid rotation (ADR-001), SLOs CI/CD | Maintainer |
 | | | | |
 
 ---

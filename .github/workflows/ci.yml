@@ -1,0 +1,59 @@
+name: ci
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  guard-audit-pytest:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: ankane/pgvector:latest
+        env:
+          POSTGRES_USER: jefrey
+          POSTGRES_PASSWORD: jefrey
+          POSTGRES_DB: jefrey
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U jefrey -d jefrey"
+          --health-interval=5s --health-timeout=5s --health-retries=10
+      redis:
+        image: redis:7.2-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd="redis-cli ping | grep -q PONG"
+          --health-interval=5s --health-timeout=3s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt 2>/dev/null || pip install -e .[dev]
+          pip install pytest pytest-asyncio httpx redis PyJWT cryptography cachetools packaging
+      - name: Guard 6 greps (fail-closed)
+        run: |
+          chmod +x scripts/guard_anti_patterns.sh
+          bash scripts/guard_anti_patterns.sh
+      - name: Audit pessimista prod (0 CRITICO)
+        env:
+          JEFREY_ENV: prod
+          JEFREY_EVENTBUS__HMAC_KEY: "0123456789abcdef0123456789abcdef"
+          JEFREY_EVENTBUS__HMAC_KEYS_JSON: '{"v1":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}'
+          JEFREY_OAUTH__AUD: jefrey
+          JEFREY_OAUTH__ISS: https://auth.jefrey.test
+          JEFREY_REDIS__PASSWORD: jefrey_redis_2026
+          JEFREY_DATABASE__PASSWORD: jefrey_test_123
+          JEFREY_API__SECRET_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+          JEFREY_API__CORS_ORIGINS: http://localhost:3000
+        run: python audit_pessimista.py
+      - name: Compile check
+        run: python -m compileall -q src
+      - name: Pytest -q (P4 suite)
+        run: python -m pytest tests -q
+      - name: Compose config -q
+        run: docker compose config -q
