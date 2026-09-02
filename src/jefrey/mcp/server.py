@@ -12,15 +12,17 @@ o SDK mcp já instalado (2.x) sem downgrade (evita regressão em P2).
 from __future__ import annotations
 
 # CIPHER-026: Rate limiting per user_id/tool_name using Redis token bucket
+import sys
 import os
 import types
 import typing
 import logging
 import asyncio
-from src.jefrey.core.rate_limit import RateLimiter
 import contextvars
 import json
 from pathlib import Path
+
+from src.jefrey.core.rate_limit import RateLimiter
 
 # garante que o pacote 'src' seja importável independente de como o processo sobe
 _ROOT = Path(__file__).resolve().parents[3]
@@ -70,11 +72,15 @@ async def _run_guarded(tool: StructuredTool, args: dict, thread_id: str) -> str:
     from src.jefrey.core.registry import register_default_tools
 
     policy = get_policy_engine()
-    # CIPHER-026: Rate limiting check
-    _rl_dec = await RateLimiter().is_allowed(ctx.user_id, tool_name)
+    ctx = PolicyContext(thread_id=thread_id, user_role=_resolve_role(), autonomous=policy.autonomous)
+    # CIPHER-026: Rate limiting check (Axiom #2 surrogate thread_id, fail-closed deny)
+    try:
+        _rl_dec = await RateLimiter().is_allowed(thread_id, tool.name)
+    except RuntimeError as _e:
+        logger.warning("rate limit check falhou (fail-closed deny): %s", _e)
+        return f"[RATE LIMITED] thread={thread_id} (rate limiter unavailable)"
     if _rl_dec == "deny":
         return f"[RATE LIMITED] thread={thread_id}"
-    ctx = PolicyContext(thread_id=thread_id, user_role=_resolve_role(), autonomous=policy.autonomous)
     res = policy.decide(tool.name, args, ctx)
     policy.audit(tool.name, res, ctx)
 

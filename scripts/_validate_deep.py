@@ -259,7 +259,7 @@ if _bad:
     bugs.append(f"P5-01 metrics com user_id label: {_bad}")
 else:
     oks.append("P5-01 metrics no user_id label OK (Livro4 cap5)")
-print("== Q. P5-02 promtool (L4 cap10) ==")
+print("== Q. P5-02/P5-03 HOTFIX (L4 cap10/11) ==")
 _txt_prom = read("docker/prometheus/prometheus.yml")
 if "rule_files:" in _txt_prom and "/etc/prometheus/alerts.yml" in _txt_prom:
     oks.append("prometheus.yml rule_files OK (P5-02)")
@@ -278,6 +278,78 @@ if "promtool check rules" in read(".github/workflows/ci.yml"):
     oks.append("ci promtool check rules OK (P5-02)")
 else:
     warns.append("ci sem promtool check rules (P5-02) - WARN ate instalar promtool")
+# P5-03 HOTFIX — CRIT-1/2/3
+if "import sys" in read("src/jefrey/mcp/server.py"):
+    oks.append("mcp/server.py import sys OK (HOTFIX CRIT-1)")
+else:
+    bugs.append("mcp/server.py missing import sys (CRIT-1)")
+if "RateLimiter().is_allowed(thread_id, tool.name)" in read("src/jefrey/mcp/server.py") and "ctx = PolicyContext" in read("src/jefrey/mcp/server.py"):
+    # verify order: ctx before RateLimiter
+    _msrv = read("src/jefrey/mcp/server.py")
+    if _msrv.find("ctx = PolicyContext") < _msrv.find("RateLimiter().is_allowed(thread_id"):
+        oks.append("mcp/server.py ctx before RateLimiter + thread_id/tool.name OK (CRIT-2)")
+    else:
+        bugs.append("mcp/server.py ctx order wrong (CRIT-2)")
+else:
+    bugs.append("mcp/server.py RateLimiter thread_id/tool.name not fixed (CRIT-2)")
+if "DbBase" in read("src/jefrey/core/schema.py") and "ModelsBase" in read("src/jefrey/core/schema.py") and read("src/jefrey/core/schema.py").count("create_all") >= 2:
+    oks.append("schema.py dual Base create_all OK (CRIT-3)")
+else:
+    bugs.append("schema.py not dual Base (CRIT-3 oauth2_clients missing)")
+# P5-03b/c — provisioning + 8 panels
+try:
+    import yaml as _yaml
+    _ds = _yaml.safe_load(read("docker/grafana/provisioning/datasources/datasource.yml") or "")
+    if _ds and "datasources" in _ds and _ds["datasources"][0].get("orgId") == 1 and _ds["datasources"][0].get("jsonData", {}).get("httpMethod") == "POST":
+        oks.append("grafana datasource orgId+httpMethod OK (P5-03b)")
+    else:
+        bugs.append("grafana datasource orgId/httpMethod missing (P5-03b)")
+    _dp = _yaml.safe_load(read("docker/grafana/provisioning/dashboards/dashboard.yml") or "")
+    if _dp and "providers" in _dp and _dp["providers"][0].get("editable") is False and _dp["providers"][0].get("allowUiUpdates") is False and _dp["providers"][0].get("updateIntervalSeconds") == 10:
+        oks.append("grafana dashboard.yml editable false allowUiUpdates false 10s OK (P5-03b)")
+    else:
+        bugs.append("grafana dashboard.yml editable/allowUiUpdates/interval wrong (P5-03b)")
+except Exception as _e:
+    bugs.append(f"grafana yaml safe_load failed: {_e}")
+import json as _json
+try:
+    _dj = _json.loads(read("docker/grafana/dashboards/jefrey.json") or "{}")
+    _panels = _dj.get("panels", [])
+    if len(_panels) == 8:
+        oks.append("grafana 8 panels OK (P5-03c)")
+    else:
+        bugs.append(f"grafana panels {len(_panels)} !=8 (P5-03c)")
+    if _dj.get("editable") is False:
+        oks.append("grafana editable false OK (P5-03c)")
+    else:
+        bugs.append("grafana editable not false (P5-03c)")
+    if _dj.get("uid") == "jefrey-main" and _dj.get("schemaVersion") == 39:
+        oks.append("grafana uid+schemaVersion OK (P5-03c)")
+    else:
+        bugs.append("grafana uid/schemaVersion wrong (P5-03c)")
+    _raw = read("docker/grafana/dashboards/jefrey.json")
+    if "by (le)" in _raw and _raw.count("by (le)") >= 2:
+        oks.append("grafana PromQL by (le) >=2 OK (P5-03c Livro4 cap6)")
+    else:
+        bugs.append("grafana PromQL missing by (le) >=2 (P5-03c)")
+    if "user_id" not in _raw:
+        oks.append("grafana no user_id label OK (cap5)")
+    else:
+        bugs.append("grafana has user_id label cardinality bug")
+except Exception as _e:
+    bugs.append(f"grafana json check failed: {_e}")
+if "Grafana lint" in read(".github/workflows/ci.yml") or "grafana-lint" in read(".github/workflows/ci.yml").lower():
+    oks.append("ci grafana-lint OK (P5-03d)")
+else:
+    bugs.append("ci missing grafana-lint (P5-03d)")
+if "grafana-json-lint" in read(".pre-commit-config.yaml") and "grafana-yaml-lint" in read(".pre-commit-config.yaml"):
+    oks.append("pre-commit grafana hooks OK (P5-03d)")
+else:
+    bugs.append("pre-commit missing grafana hooks (P5-03d)")
+if "guard_grafana.sh" in read(".pre-commit-config.yaml") or "guard_grafana" in read("scripts/guard_grafana.sh"):
+    oks.append("guard_grafana.sh OK (P5-03d)")
+else:
+    warns.append("guard_grafana.sh maybe missing")
 print(f"\nWARNS: {len(warns)}")
 for w in warns: print(f"  WARN {w}")
 print(f"\nBUGS: {len(bugs)}")

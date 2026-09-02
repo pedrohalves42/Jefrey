@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from sqlalchemy import text
 
-from src.jefrey.core.db import get_engine
-from src.jefrey.core.models import Base, MEMORY_TABLES
+from src.jefrey.core.db import get_engine, Base as DbBase
+from src.jefrey.core.models import Base as ModelsBase, MEMORY_TABLES
 
 
 def init_db() -> None:
@@ -12,7 +12,8 @@ def init_db() -> None:
     engine = get_engine()
     with engine.begin() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-    Base.metadata.create_all(engine)
+    ModelsBase.metadata.create_all(engine)
+    DbBase.metadata.create_all(engine)
     # P4: adiciona coluna expires_at na tabela approvals (já existente desde P3). Idempotente.
     with engine.begin() as conn:
         conn.execute(text("ALTER TABLE approvals ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ"))

@@ -6,8 +6,9 @@ providers:
     folder: "Jefrey"
     type: file
     disableDeletion: false
-    editable: true
-    updateIntervalSeconds: 30
+    editable: false
+    allowUiUpdates: false
+    updateIntervalSeconds: 10
     options:
       path: /var/lib/grafana/dashboards
       foldersFromFilesStructure: false

@@ -22,6 +22,18 @@ repos:
         language: system
         files: ^docker/prometheus/(alerts|prometheus)\.yml$
         pass_filenames: false
+      - id: grafana-json-lint
+        name: grafana dashboard json valid + editable false + sum by(le)
+        entry: bash scripts/guard_grafana.sh
+        language: system
+        files: ^docker/grafana/dashboards/jefrey\.json$
+        pass_filenames: false
+      - id: grafana-yaml-lint
+        name: grafana provisioning yaml safe_load
+        entry: bash -c 'python -c "import yaml; yaml.safe_load(open(''docker/grafana/provisioning/datasources/datasource.yml'')); yaml.safe_load(open(''docker/grafana/provisioning/dashboards/dashboard.yml''))"'
+        language: system
+        files: ^docker/grafana/provisioning/.*\.yml$
+        pass_filenames: false
       - id: metrics-no-user-id
         name: metrics no user_id label (Livro 4 cap5 P5-01)
         entry: bash -c 'grep -rn labelnames.*user_id src/ && exit 1 || exit 0'
