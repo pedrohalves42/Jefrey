@@ -39,11 +39,11 @@ jobs:
         run: |
           grep -rn "labelnames.*user_id" src/ && exit 1 || echo "no user_id label OK"
           grep -rn "Counter.*user_id" src/ | grep -i labelnames && exit 1 || echo "no Counter user_id OK"
-            - name: promtool check rules
+      - name: promtool check rules
         run: docker run --rm --entrypoint promtool -v ${{ github.workspace }}/docker/prometheus:/etc/prometheus prom/prometheus:v2.53.0 check rules /etc/prometheus/alerts.yml
       - name: promtool check config
         run: docker run --rm --entrypoint promtool -v ${{ github.workspace }}/docker/prometheus:/etc/prometheus prom/prometheus:v2.53.0 check config /etc/prometheus/prometheus.yml
-- name: Guard 6 greps (fail-closed)
+      - name: Guard 6 greps (fail-closed)
         run: |
           chmod +x scripts/guard_anti_patterns.sh
           bash scripts/guard_anti_patterns.sh
