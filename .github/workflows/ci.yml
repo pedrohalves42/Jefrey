@@ -51,6 +51,10 @@ jobs:
           bash -c 'grep -q "by (le)" docker/grafana/dashboards/jefrey.json && echo "histogram sum by(le) OK" || { echo "FAIL PromQL missing by (le)"; exit 1; }'
           bash -c 'grep -q ""editable": false" docker/grafana/dashboards/jefrey.json && echo "grafana editable false OK" || { echo "FAIL editable not false"; exit 1; }'
           bash -c 'grep -q "orgId: 1" docker/grafana/provisioning/datasources/datasource.yml && echo "datasource orgId OK" || { echo "FAIL datasource orgId"; exit 1; }'
+      - name: Prometheus alerts test (6/6 firing drill, Livro4 cap10)
+        run: |
+          docker run --rm --entrypoint promtool -v ${{ github.workspace }}/docker/prometheus:/etc/prometheus prom/prometheus:v2.53.0 check rules /etc/prometheus/alerts.yml
+          docker run --rm --entrypoint promtool -v ${{ github.workspace }}/docker/prometheus:/etc/prometheus prom/prometheus:v2.53.0 test rules /etc/prometheus/tests/alerts_test.yml
       - name: Guard 6 greps (fail-closed)
         run: |
           chmod +x scripts/guard_anti_patterns.sh

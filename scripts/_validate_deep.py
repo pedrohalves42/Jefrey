@@ -359,6 +359,67 @@ for b in bugs: print(f"  BUG {b}")
 # heuristic: count principle gates
 
 
+
+# --- R. P5-04 alerts firing drill 6/6 (Livro4 cap10) ---
+try:
+    import yaml as _yaml2, pathlib as _pl2, json as _js2
+    _at2 = _pl2.Path("docker/prometheus/tests/alerts_test.yml")
+    if _at2.exists():
+        _ad2 = _yaml2.safe_load(_at2.read_text(encoding="utf-8"))
+        if len(_ad2.get("tests",[]))==6:
+            oks.append("P5-04 alerts_test.yml 6 groups OK")
+        else:
+            bugs.append("P5-04 alerts_test 6 groups expected got %s" % len(_ad2.get("tests",[])))
+        if all("alert_rule_test" in tt for tt in _ad2["tests"]):
+            oks.append("P5-04 alert_rule_test format OK (promtool 2.53)")
+        else:
+            bugs.append("P5-04 missing alert_rule_test")
+        _names2 = [tt["alert_rule_test"][0]["alertname"] for tt in _ad2["tests"] if "alert_rule_test" in tt]
+        for _exp2 in ["JefreyConfigInvalid","JefreyApiHighErrorRate","JefreyRateLimitDenialsHigh","JefreyKidLegacyHigh","JefreyMemoryLatencyHigh","JefreyServiceDown"]:
+            if _exp2 in _names2:
+                oks.append("P5-04 contains %s OK" % _exp2)
+            else:
+                bugs.append("P5-04 missing %s" % _exp2)
+    else:
+        bugs.append("P5-04 alerts_test.yml missing")
+    _dr2 = _pl2.Path("scripts/drill_alerts.py")
+    _dt2 = _dr2.read_text(encoding="utf-8") if _dr2.exists() else ""
+    if "FAIL-CLOSED" in _dt2 and "JEFREY_ENV" in _dt2:
+        oks.append("P5-04 drill FAIL-CLOSED prod gate OK")
+    else:
+        bugs.append("P5-04 drill missing FAIL-CLOSED")
+    if _dr2.exists():
+        try:
+            import py_compile as _pc2
+            _pc2.compile(str(_dr2), doraise=True)
+            oks.append("P5-04 drill py_compile OK")
+        except Exception as _e2:
+            bugs.append("P5-04 drill py_compile FAIL %s" % _e2)
+    if "labelnames.*user_id" not in _dt2 and not any("labelnames" in _l and "user_id" in _l for _l in _dt2.splitlines()):
+        oks.append("P5-04 drill no user_id label OK (cap5)")
+    else:
+        bugs.append("P5-04 drill user_id label forbidden")
+    _ci2 = _pl2.Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+    if "promtool" in _ci2 and "test rules" in _ci2 and "alerts_test.yml" in _ci2:
+        oks.append("P5-04 ci promtool test rules OK")
+    else:
+        warns.append("P5-04 ci missing promtool test rules")
+    _slo2 = _pl2.Path("SLO_RUNBOOK.md").read_text(encoding="utf-8")
+    if "P5-04" in _slo2:
+        oks.append("P5-04 SLO_RUNBOOK appendix OK")
+    else:
+        warns.append("P5-04 SLO missing appendix")
+    try:
+        _dash2 = _js2.loads(_pl2.Path("docker/grafana/dashboards/jefrey.json").read_text(encoding="utf-8"))
+        if len(_dash2.get("panels",[]))==8:
+            oks.append("P5-04 grafana 8 panels OK")
+        else:
+            warns.append("P5-04 grafana panels %s !=8" % len(_dash2.get("panels",[])))
+    except Exception as _je2:
+        warns.append("P5-04 grafana json fail %s" % _je2)
+except Exception as _e2:
+    bugs.append("P5-04 checks exception %s" % _e2)
+
 total_gates = len(oks)+len(bugs)+len(warns)
 pct = len(oks)/total_gates*100 if total_gates else 0
 print(f"\n% health gates {pct:.1f}% ({len(oks)}/{total_gates})")

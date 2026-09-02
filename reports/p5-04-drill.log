@@ -1,0 +1,95 @@
+P5-04 Alerts Firing Drill 6/6 — 2026-09-02T13:22:00.888061 (Livro4 cap10, Axiom #1/#6)
+================================================================================
+PROMTOOL CHECK RULES:
+Checking /etc/prometheus/alerts.yml
+  SUCCESS: 6 rules found
+EXIT 0
+--------------------------------------------------------------------------------
+PROMTOOL TEST RULES 6/6:
+Unit Testing:  /etc/prometheus/tests/alerts_test.yml
+  SUCCESS
+EXIT 0
+--------------------------------------------------------------------------------
+DRILL --help:
+usage: drill_alerts.py [-h]
+                       [--alert {ConfigInvalid,RateLimitDenialsHigh,KidLegacyHigh,MemoryLatencyHigh,ApiHighErrorRate,ServiceDown,all}]
+                       [--duration DURATION] [--count COUNT] [--force]
+                       [--list]
+
+P5-04 alerts firing drill 6/6 (Livro4 cap10)
+
+options:
+  -h, --help            show this help message and exit
+  --alert {ConfigInvalid,RateLimitDenialsHigh,KidLegacyHigh,MemoryLatencyHigh,ApiHighErrorRate,ServiceDown,all}
+                        qual alerta drillar
+  --duration DURATION   duracao ConfigInvalid (s)
+  --count COUNT         count para RateLimit/KidLegacy/Memory
+  --force               permite em prod (perigoso)
+  --list                lista drills
+EXIT 0
+--------------------------------------------------------------------------------
+DRILL all:
+[drill] ConfigInvalid: set 0 for 0s (for 1m)
+[drill] RateLimitDenialsHigh: inc deny x5 (tool=memory.search)
+[drill] RateLimitDenialsHigh: done
+[drill] KidLegacyHigh: inc x5 (global, sem user_id per cap5)
+[drill] KidLegacyHigh: done
+[drill] MemoryLatencyHigh: observe 0.9s x50 (p95>0.3, operation=search layer=episodic)
+[drill] MemoryLatencyHigh: done
+[drill] ApiHighErrorRate: blocked x10 (tool=memory.search reason=policy)
+[drill] ApiHighErrorRate: done (via Registry)
+[drill] ServiceDown: nao injetavel via metrica - validar via promtool test rules (up==0 for 1m)
+[drill] ServiceDown: SKIP live, PASS via alerts_test.yml group 6
+[drill] DONE ['ConfigInvalid', 'RateLimitDenialsHigh', 'KidLegacyHigh', 'MemoryLatencyHigh', 'ApiHighErrorRate', 'ServiceDown']
+EXIT 0
+--------------------------------------------------------------------------------
+DRILL prod gate (should fail-closed RC2):
+FAIL-CLOSED: JEFREY_ENV=prod - recusa drill sem --force (Axiom #1)
+EXIT 2
+--------------------------------------------------------------------------------
+PYTEST:
+============================= test session starts =============================
+platform win32 -- Python 3.14.7, pytest-9.1.1, pluggy-1.6.0 -- C:\Python314\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\Pedro\jarvis
+configfile: pyproject.toml
+plugins: anyio-4.14.2, langsmith-0.11.2, asyncio-1.4.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collecting ... collected 4 items
+
+tests/test_p5_alerts_drill.py::test_alerts_test_yaml_valid PASSED        [ 25%]
+tests/test_p5_alerts_drill.py::test_drill_script_py_compile_and_no_user_id PASSED [ 50%]
+tests/test_p5_alerts_drill.py::test_drill_help_lists_6 PASSED            [ 75%]
+tests/test_p5_alerts_drill.py::test_alerts_yaml_has_6_with_for_and_severity PASSED [100%]
+
+============================== 4 passed in 0.45s ==============================
+EXIT 0
+--------------------------------------------------------------------------------
+YAML 6/6 OK
+--------------------------------------------------------------------------------
+GRAFANA panels 8 editable False uid jefrey-main
+--------------------------------------------------------------------------------
+DEEP TAIL:
+  OK env JEFREY_OAUTH__CLIENT_ID OK
+  OK env JEFREY_OAUTH__CLIENT_SECRET OK
+  OK pyproject pythonpath OK
+  OK pyproject asyncio fix OK
+  OK pyproject dep cachetools OK
+  OK pyproject dep PyJWT OK
+  OK pyproject dep cryptography OK
+  OK pyproject dep redis OK
+  OK pyproject dep packaging OK
+  OK pyproject dep httpx OK
+  OK config validate_for_production OK
+  OK config is_prod OK
+== Q. P5-02/P5-03 HOTFIX (L4 cap10/11) ==
+
+WARNS: 0
+
+BUGS: 0
+
+% health gates 100.0% (122/122)
+ESTADO: 96-98% codigo OK (P5-01 DONE), pendente P5-02..06+P6 para 97-99%
+EXIT 0
+================================================================================
+DONE P5-04 6/6 — expected 114/114
