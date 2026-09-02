@@ -16,7 +16,13 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
-      - id: metrics-no-user-id
+      - id: promtool-check-rules
+    name: promtool check rules (L4 cap10 P5-02)
+    entry: bash -c 'command -v promtool >/dev/null 2>&1 && promtool check rules docker/prometheus/alerts.yml || echo "promtool ausente local - skip (CI valida)"'
+    language: system
+    files: ^docker/prometheus/(alerts|prometheus)\.yml$
+    pass_filenames: false
+  - id: metrics-no-user-id
         name: metrics no user_id label (Livro 4 cap5 P5-01)
         entry: bash -c 'grep -rn labelnames.*user_id src/ && exit 1 || exit 0'
         language: system

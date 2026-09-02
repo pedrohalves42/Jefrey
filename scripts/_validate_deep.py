@@ -266,6 +266,27 @@ for b in bugs: print(f"  BUG {b}")
 
 # % projeto
 # heuristic: count principle gates
+
+print("== Q. P5-02 promtool (L4 cap10) ==")
+_txt_prom = read("docker/prometheus/prometheus.yml")
+if "rule_files:" in _txt_prom and "/etc/prometheus/alerts.yml" in _txt_prom:
+    oks.append("prometheus.yml rule_files OK (P5-02)")
+else:
+    bugs.append("prometheus.yml sem rule_files (P5-02 L4 cap10)")
+_txt_alerts = read("docker/prometheus/alerts.yml")
+if _txt_alerts.count("alert:") >= 6 and "for:" in _txt_alerts and "severity:" in _txt_alerts:
+    oks.append("alerts.yml 6 alerts com for/severity OK (P5-02)")
+else:
+    bugs.append("alerts.yml sem 6 alerts ou sem for/severity (P5-02)")
+if "alerts.yml:ro" in read("docker-compose.yml"):
+    oks.append("compose alerts mount :ro OK (P5-02)")
+else:
+    bugs.append("compose alerts mount sem :ro (P5-02)")
+if "promtool check rules" in read(".github/workflows/ci.yml"):
+    oks.append("ci promtool check rules OK (P5-02)")
+else:
+    warns.append("ci sem promtool check rules (P5-02) - WARN ate instalar promtool")
+
 total_gates = len(oks)+len(bugs)+len(warns)
 pct = len(oks)/total_gates*100 if total_gates else 0
 print(f"\n% health gates {pct:.1f}% ({len(oks)}/{total_gates})")
