@@ -1,0 +1,24 @@
+P6-B Streams 2-processos -- 2026-09-02T19:50:00+00:00 (DDIA cap5/6, CIPHER-033, Axiom #1/#2)
+[drill] XADD jefrey.events.u-stream.jefrey.test kid=v1 sig=67ab856a... OK (memory_fallback=0)
+[drill] XADD Redis xlen=1 maxlen 10000 approximate OK
+[drill] ensure_consumer_group jefrey-workers mkstream OK (idempotente 1)
+[drill] ensure_consumer_group idempotente 2 OK (BUSYGROUP tratado)
+[drill] XREADGROUP verify True kid=v1 OK
+[drill] XACK b'1788389403784-0' OK pending=0
+[drill] DLQ jefrey:dlq:u-stream xlen=1 memory=1 OK (bad sig)
+[drill] ISOLATION u-stream != u-stream2 OK (u-stream2 xlen=1)
+DONE STREAM 2proc v1 + DLQ + ISOLATION OK
+[drill] KID ROTATION v1->v2 DUAL verify True/True OK
+[drill] KID negative v2 sem v2 no JSON fail OK err=unknown_kid_v2
+[drill] DEPRECATION v0 DeprecationWarning OK + verify True
+[drill] METRIC EVENTBUS_KID_LEGACY_TOTAL labelnames=[] 1 serie OK
+DONE KID ROTATION v1->v2 DUAL OK + v0 DEPRECATION OK
+--- markers ---
+XADD jefrey.events.u-stream.jefrey.test kid=v1 OK
+XREADGROUP jefrey-workers verify True OK
+XACK pending 0 OK
+DLQ jefrey:dlq:u-stream xlen 1 OK
+ISOLATION u-stream != u-stream2 OK
+KID ROTATION v1->v2 DUAL OK
+DEPRECATION v0 DeprecationWarning OK
+METRIC EVENTBUS_KID_LEGACY_TOTAL labelnames=[] 1 serie OK
