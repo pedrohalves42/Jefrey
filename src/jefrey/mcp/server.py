@@ -235,6 +235,7 @@ INTEGRATION_TOOLS: list[StructuredTool] = [
 # Construção do servidor
 # ---------------------------------------------------------------------------
 def build_server() -> MCPServer:
+    from src.jefrey.core.registry import register_default_tools
     from src.jefrey.skills import skill_registry, load_skills
 
     mcp_server = MCPServer(
