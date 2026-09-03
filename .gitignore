@@ -116,3 +116,10 @@ data/audit_fallback.jsonl
 !reports/p7-cprofile.txt
 !reports/p7-cprofile.prof
 !reports/p7-evals.log
+
+# UI-1 Shell
+ui/node_modules/
+ui/dist/
+# keep built static versionado para Docker sem npm
+!src/jefrey/static/
+!src/jefrey/static/**
