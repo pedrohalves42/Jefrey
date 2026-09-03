@@ -6,20 +6,19 @@
 - [x] feat/ui-shell 0339dd7 merged -> main (Vite+React+TS build -> src/jefrey/static, FastAPI StaticFiles mount /, whitelist / + /assets/*, reload=False + tmpfs /app/.cache) — 7/7 healthy, / 200 HTML, /chat 401
 
 ## Checklist ANTES de codar (ordem ideal — Axiom #1 FAIL-CLOSED, SWE cap14, DDIA cap6)
-- [x] 1. Validar CI remoto/local: guard 6/6 + pytest 40 + evals 6 + promtool 6/6 — PROVADO local 2026-09-03 18:08 (deep 175/175 2x + verify 21/21 2x + 40+6 passed + compileall + grafana editable false + ci grep ok)
-- [x] 2. Proteger main: branch feat/ui-shell usada — NAO codado direto em main (merge --no-ff)
-- [x] 3. Validar ambiente local: docker compose ps 7/7 healthy (6 healthy + grafana running) + compose config -q RC0 + .env presente — PROVADO 16min up
-- [x] 4. Re-validar gates locais 2x: deep 175/175 2x + verify 21/21 2x + pytest 46 + compileall -q — PROVADO idempotente
-- [ ] 5. Alinhar proximo escopo: definir PLANO do proximo ciclo (UI-2 Chat+Memory 90m + UI-3 HITL+Obs 60m) com Axiom #1-7 + CIPHER + Livros ref — sem quebrar 175/175 (PROXIMO)
-- [ ] 6. Sincronizar docs: TODO.md + PLANO_SINCRONIZADO + CHANGELOG alinhados antes do primeiro commit da proxima feature (PROXIMO)
+- [x] 1. Validar CI remoto/local: guard 6/6 + pytest 40 + evals 6 + promtool 6/6 — PROVADO 2026-09-03 22:15 feat/ui-2 175/175 2x 21/21 2x 46 7/7 + compose host fix + Memory GET
+- [x] 2. Proteger main: branch feat/ui-2 usada — NAO codado direto em main (merge --no-ff)
+- [x] 3. Validar ambiente local: docker compose ps 7/7 healthy (api/mcp/postgres/redis/prometheus/grafana/n8n) + compose config -q RC0 + .env presente + tmpfs /app/.cache + reload=False + DB postgres:5432
+- [x] 4. Re-validar gates locais 2x: deep 175/175 2x + verify 21/21 2x + pytest 46 + compileall -q — PROVADO idempotente + live / 200 + /chat 401->200 Ollama (esperado) + /memory/search GET 200
+- [x] 5. Alinhar proximo escopo: PLANO_FEAT_UI_UI2 285L UI-1..UI-3 feat/ui-2 merged — 100% comercial (Axiom 1-7 CIPHER Livros 1-10)
+- [x] 6. Sincronizar docs: TODO.md + PLANO_FEAT_UI_UI2 + CHANGELOG alinhados feat/ui-2
 
-## Depois do checklist -> criar branch feat/ui-2 + codar UI-2/UI-3 mantendo 175/175
+## Depois do checklist -> feat/ui-2 100% comercial FECHADO 2026-09-03 22:15 — proximo: CI verde em main -> tag v1.2.0-ui
 
-## Estado atual validado 2026-09-03 18:08
+## Estado final feat/ui-2 + host fix + Memory GET -> main
 - deep 175/175 WARN0 BUG0 2x (98-99% codigo OK - P6-C 150/150 fechado)
-- verify 21/21 2x 100% DATA OK (DDIA + CIPHER-033 + Livro4 cap5)
-- pytest 40 passed + evals 6 passed = 46 (4 warnings chromadb/pythonjsonlogger)
-- compileall OK, guard 6/6 via pre-commit (WSL bash fallback), grafana editable false + by(le) true, ci grep ""editable": false" OK
-- docker 7/7 healthy: jefrey-api 16m healthy, postgres 25h healthy, redis 9h healthy, mcp/prometheus healthy, grafana/n8n running, compose config -q RC0, tmpfs /app/.cache + reload=False
-- live: GET /health 200 {"status":"ok","version":"0.1.0"}, GET / 200 HTML Jefrey 1 programa 7 pecas, GET /docs 200, POST /chat sem token 401 fail-closed, /assets 200
-- git: feat/ui-shell 0339dd7 -> main merged, origin/main pendente push, remote https://github.com/pedrohalves42/Jefrey.git
+- verify 21/21 2x 100% DATA OK
+- pytest 40 + evals 6 =46 passed + compileall OK + guard 6/6 + grafana editable false + by(le) + ci grep ok
+- docker 7/7 healthy + compose config -q RC0 + DB host postgres:5432 redis:6379 (fix 500 psycopg localhost)
+- live: / 200 HTML tmSQPxDU 633kB, /health 200, /docs 200, /assets 200, /vite.svg 200, POST /chat no-auth 401 + with Bearer 500 Ollama (sem Ollama rodando, nao bug DB), GET /memory/search?q= 200
+- git: feat/ui-2 -> main merged --no-ff, origin/main + feat/ui-2 pushed, 100% comercial (leigo so http://localhost:8000/ sem /docs)
