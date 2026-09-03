@@ -15,4 +15,4 @@
 - [x] PLANO_P7_PERF_V1.md CRIADO 11:19 — 214L 60m 150→158 W1-W8 + ordem P8 + uso jefrey (HPP+Fluent+Building LLM Apps+DDIA) — 13006 bytes
 - [x] T3 P8 TAG 60m 150→167 FECHADO v1.0.0 56bf14d — SLO_RUNBOOK 6 alerts + THREAT_MODEL ADR-001 + PERF_TUNING GO/NO-GO + HNSW S5 + CHANGELOG bdcae44..HEAD + deep 167/167 WARNS0 BUGS0 + 21/21 2x + 40 passed + 7/7 healthy (Ordem B Axiom #1-7, CIPHER-033, Livro4/DDIA/SWE)
 - [x] T2 P7 PERF 60m 167→175 FECHADO v1.1.0 eb67b45 — cProfile vivo 3.1MB 7.3M calls 15.5s + bench p50 48.1ms p95 55.0ms + evals 6/6 + lru_cache/orjson/WeakValueDictionary + deep 175/175 2x + 21/21 2x + 40+6 passed 46 (HPP cap1-4, Fluent 19-21, Building LLM Apps, DDIA cap12, Livro4 cap5/6, SWE cap14, GO/NO-GO <5% Ordem B)
-- [ ] D5 push tags: v1.0.0-p5-c local + v1.0.0 56bf14d local → remoto (git push --tags pendente, sem origin)
+- [x] D5 push tags: v1.0.0-p5-c + v1.0.0 f93578a + v1.1.0 eb67b45 FECHADO -> origin/main 2ebb200 + 3 tags pushed (git push -u origin main + git push --tags)
