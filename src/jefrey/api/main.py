@@ -104,7 +104,7 @@ def create_app() -> FastAPI:
     # UI-1 Shell — serve Vite build em / (Axiom #1: 1 programa, 7 pecas -> sem novo container)
     # FastAPI StaticFiles serve src/jefrey/static com html=True; rotas /api/* tem precedencia sobre mount "/"
     try:
-        _static_dir = Path(__file__).parent / "static"
+        _static_dir = Path(__file__).resolve().parent.parent / "static"  # src/jefrey/static (fix: api/ -> jefrey/)
         if _static_dir.exists():
             # mount em "/" depois das rotas — /health, /chat, /memory, /approvals continuam com prioridade
             app.mount("/", StaticFiles(directory=str(_static_dir), html=True), name="ui-static")

@@ -23,7 +23,10 @@ from src.jefrey.oauth2.introspect import introspect_token, IntrospectionResult
 
 logger = logging.getLogger(__name__)
 
-_PUBLIC_PATHS = {"/health", "/docs", "/openapi.json", "/redoc", "/metrics"}
+_PUBLIC_PATHS = {"/health", "/docs", "/openapi.json", "/redoc", "/metrics", "/", "/vite.svg", "/favicon.ico"}
+# UI-1 Shell public — Axiom 5 least privilege (Livro 3 Security Eng cap8, CIPHER-019)
+# /chat|/memory|/approvals continuam protegidos; /assets/* sao build Vite hashados sem user data
+_PUBLIC_PREFIXES = ("/assets/",)
 
 # A5: cache com TTL 60s, max 1024, chave = hash(token) nunca token raw
 _CACHE_TTL = 60
@@ -69,7 +72,8 @@ class FastAPIAuthMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
-        if path in _PUBLIC_PATHS:
+        # UI-1 public whitelist — FAIL-CLOSED exceto UI estatica (Axiom 5, CIPHER-019)
+        if path in _PUBLIC_PATHS or path.startswith(_PUBLIC_PREFIXES):
             request.state.user_id = "system"
             return await call_next(request)
 
