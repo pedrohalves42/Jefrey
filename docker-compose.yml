@@ -63,8 +63,8 @@ services:
       - ./:/app:ro
     env_file: [.env]
     environment:
-      JEFREY_DATABASE__URL: ${JEFREY_DATABASE__URL:-postgresql+psycopg://${JEFREY_DATABASE__USER:-jefrey}:${JEFREY_DATABASE__PASSWORD:?required}@postgres:5432/${JEFREY_DATABASE__DB:-jefrey}}
-      JEFREY_REDIS__URL: ${JEFREY_REDIS__URL:-redis://:${JEFREY_REDIS__PASSWORD:?required}@redis:6379/0}
+      JEFREY_DATABASE__URL: postgresql+psycopg://${JEFREY_DATABASE__USER:-jefrey}:${JEFREY_DATABASE__PASSWORD:?required}@postgres:5432/${JEFREY_DATABASE__DB:-jefrey}
+      JEFREY_REDIS__URL: redis://:${JEFREY_REDIS__PASSWORD:?required}@redis:6379/0
       JEFREY_DATABASE__HOST: ${JEFREY_DATABASE__HOST:-postgres}
       JEFREY_REDIS__HOST: ${JEFREY_REDIS__HOST:-redis}
       JEFREY_REDIS__PASSWORD: ${JEFREY_REDIS__PASSWORD:?required}
@@ -120,8 +120,8 @@ services:
       - ./:/app:ro
     env_file: [.env]
     environment:
-      JEFREY_DATABASE__URL: ${JEFREY_DATABASE__URL:-postgresql+psycopg://${JEFREY_DATABASE__USER:-jefrey}:${JEFREY_DATABASE__PASSWORD:?required}@postgres:5432/${JEFREY_DATABASE__DB:-jefrey}}
-      JEFREY_REDIS__URL: ${JEFREY_REDIS__URL:-redis://:${JEFREY_REDIS__PASSWORD:?required}@redis:6379/0}
+      JEFREY_DATABASE__URL: postgresql+psycopg://${JEFREY_DATABASE__USER:-jefrey}:${JEFREY_DATABASE__PASSWORD:?required}@postgres:5432/${JEFREY_DATABASE__DB:-jefrey}
+      JEFREY_REDIS__URL: redis://:${JEFREY_REDIS__PASSWORD:?required}@redis:6379/0
       JEFREY_DATABASE__HOST: ${JEFREY_DATABASE__HOST:-postgres}
       JEFREY_REDIS__HOST: ${JEFREY_REDIS__HOST:-redis}
       JEFREY_REDIS__PASSWORD: ${JEFREY_REDIS__PASSWORD:?required}
