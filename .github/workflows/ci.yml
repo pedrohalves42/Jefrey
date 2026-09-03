@@ -49,7 +49,7 @@ jobs:
           python -c "import yaml; yaml.safe_load(open('docker/grafana/provisioning/datasources/datasource.yml')); yaml.safe_load(open('docker/grafana/provisioning/dashboards/dashboard.yml')); print('grafana yaml OK')"
           bash -c 'grep -rn "labelnames.*user_id" src/ && { echo "FAIL user_id label cardinality"; exit 1; } || echo "metrics cardinality OK (0 user_id labels)"'
           bash -c 'grep -q "by (le)" docker/grafana/dashboards/jefrey.json && echo "histogram sum by(le) OK" || { echo "FAIL PromQL missing by (le)"; exit 1; }'
-          bash -c 'grep -q ""editable": false" docker/grafana/dashboards/jefrey.json && echo "grafana editable false OK" || { echo "FAIL editable not false"; exit 1; }'
+          grep -q '"editable": false' docker/grafana/dashboards/jefrey.json && echo "grafana editable false OK" || { echo "FAIL editable not false"; exit 1; }
           bash -c 'grep -q "orgId: 1" docker/grafana/provisioning/datasources/datasource.yml && echo "datasource orgId OK" || { echo "FAIL datasource orgId"; exit 1; }'
       - name: Prometheus alerts test (6/6 firing drill, Livro4 cap10)
         run: |
