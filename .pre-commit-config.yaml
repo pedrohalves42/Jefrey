@@ -46,6 +46,12 @@ repos:
         language: system
         files: ^docker/prometheus/(alerts\.yml|tests/alerts_test\.yml)$
         pass_filenames: false
+      - id: verify-p6-data
+        name: verify_p6_data 21/21 idempotente (P6-C DDIA cap3/6)
+        entry: bash -c 'python scripts/verify_p6_data.py && python scripts/verify_p6_data.py'
+        language: system
+        pass_filenames: false
+        always_run: true
       - id: audit-fallback-redact
         name: audit fallback redact_pii before json (DDIA cap3, CIPHER-025)
         entry: bash -c 'python -c "import pathlib; t=pathlib.Path(\"src/jefrey/core/audit.py\").read_text(encoding=\"utf-8\"); assert \"_redact_detail\" in t and t.find(\"_redact_detail\") < t.find(\"detail_json\"), \"redact order\"; assert \"redact_pii(raw)\" in t, \"second layer\"; print(\"audit redact order OK\")"'

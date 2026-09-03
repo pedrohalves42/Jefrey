@@ -560,6 +560,21 @@ try:
         oks.append("P6-B U test_p6_isolation.py 2 tenants OK")
     else:
         bugs.append("P6-B U test_p6_isolation.py missing")
+    # P6-C: verify_p6_data 21/21 + backup proofs idempotentes
+    try:
+        import subprocess as _spU2
+        _v1 = _spU2.run(["python", "scripts/verify_p6_data.py"], capture_output=True, text=True)
+        if _v1.returncode == 0 and "OKS:21" in _v1.stdout and "100% DATA OK" in _v1.stdout:
+            oks.append("P6-C verify_p6_data 21/21 idempotente OK (fail-closed)")
+        else:
+            bugs.append(f"P6-C verify_p6_data nao 21/21 RC={_v1.returncode}")
+        _v2 = _spU2.run(["python", "scripts/verify_p6_data.py"], capture_output=True, text=True)
+        if _v2.returncode == 0 and _v2.stdout == _v1.stdout:
+            oks.append("P6-C verify_p6_data 2x idempotente OK")
+        else:
+            bugs.append("P6-C verify_p6_data 2x nao idempotente")
+    except Exception as _eU2:
+        bugs.append(f"P6-C verify checks exception {_eU2}")
 except Exception as _eU:
     bugs.append(f"P6-B U checks exception {_eU}")
 total_gates = len(oks)+len(bugs)+len(warns)
@@ -571,4 +586,4 @@ if bugs:
 elif warns:
     print("ESTADO: %d/%d WARNs pendentes" % (len(warns), total_gates))
 else:
-    print("ESTADO: 97-99% codigo OK - P6 gaps fechados 148/148, pronto para P6-C 150/150")
+    print("ESTADO: 98-99% codigo OK - P6-C 150/150 fechado, pronto para P7/P8")

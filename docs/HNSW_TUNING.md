@@ -86,3 +86,12 @@ Ver `src/jefrey/core/schema.py:43-69` — usa `isolation_level="AUTOCOMMIT"` (CO
 - [x] psql \d+ prova hnsw m16/ef64 — reports/p6-hnsw-proof.log (6578 bytes)
 - [x] migration CONCURRENTLY IF NOT EXISTS + AUTOCOMMIT — schema.py 70L
 - [x] alert Prometheus p95 300ms — SLO_RUNBOOK 1.3
+
+## 4. P6-C Verify 21/21 + Compose Healthy (2026-09-03)
+
+**Gate:** `scripts/verify_p6_data.py` 21/21 2x idempotente + `scripts/_validate_deep.py` 150/150 + `docker compose config -q` RC0.
+**Prova:** `reports/p6-backup.log` pg_dump RC0 + BGSAVE ok + `reports/p6-hnsw-proof.log` CONCURRENTLY m16 ef64 AUTOCOMMIT + `reports/p6-bench.log` ef_search 64 vs 200.
+**CI:** `.github/workflows/ci.yml` gate `verify_p6_data 2x` fail-closed antes de Guard.
+**Pre-commit:** `verify-p6-data` hook 21/21 2x.
+**Compose healthy:** `postgres` pgvector `ankane/pgvector:latest` healthy + `redis` `redis-cli -a $${JEFREY_REDIS__PASSWORD} ping` healthy (fix NOAUTH: healthcheck com fallback `-a` + `-a` no BGSAVE).
+

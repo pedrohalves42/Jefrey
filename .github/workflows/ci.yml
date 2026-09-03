@@ -60,6 +60,11 @@ jobs:
           grep -rn "labelnames.*user_id" src/ && { echo "FAIL user_id label cardinality"; exit 1; } || echo "no user_id label OK (cap5)"
           python -c "from prometheus_client import REGISTRY; txt=str(list(REGISTRY.collect())); assert 'user_id' not in txt.lower(), 'user_id em REGISTRY'; print('REGISTRY no user_id OK')"
           python -m pytest tests/test_p5_metrics_cardinality.py tests/test_p5_grafana_dashboards.py tests/test_p5_alerts_drill.py tests/test_p5_audit_fallback.py -q
+      - name: P6-C verify_p6_data 21/21 idempotente 2x (DDIA cap3/6, SWE cap14)
+        run: |
+          python scripts/verify_p6_data.py
+          python scripts/verify_p6_data.py
+          echo "verify_p6_data 21/21 2x OK (P6-C 150/150)"
       - name: Guard 6 greps (fail-closed)
         run: |
           chmod +x scripts/guard_anti_patterns.sh

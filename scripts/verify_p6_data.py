@@ -5,7 +5,8 @@ ASCII-safe. Exit 0 OK, 1 BLOCKED.
 Usado em CI, pre-commit e deep U.
 """
 from __future__ import annotations
-import pathlib, re
+import pathlib
+import re
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -77,24 +78,18 @@ def main() -> int:
     else:
         bugs.append("signing kid rotation missing")
 
-    # 8. metrics — checar definicoes em metrics.py (não em signing.py)
+    # 8. metrics — checar definicoes em metrics.py (nao em signing.py)
     metr = read("src/jefrey/core/metrics.py")
     if "EVENTBUS_KID_LEGACY_TOTAL" in metr:
-        # metric deve ser Counter com labelnames=[] (sem user_id) — checa bracket vazio ou [] 
         if 'EVENTBUS_KID_LEGACY_TOTAL' in metr and 'labelnames=[]' in metr.replace(' ', ''):
             oks.append("metrics EVENTBUS_KID_LEGACY_TOTAL [] no user_id OK (Livro4 cap5)")
-        elif 'EVENTBUS_KID_LEGACY_TOTAL' in metr:
-            # verificar que bloco não contém user_id
-            blocks = re.findall(r'labelnames\s*=\s*\[([^\]]*)\]', metr)
-            # achar bloco da metric LEGACY: procurar 5 linhas ao redor
+        else:
             idx = metr.find('EVENTBUS_KID_LEGACY_TOTAL')
-            snippet = metr[max(0,idx-300):idx+600]
+            snippet = metr[max(0, idx - 300):idx + 600]
             if 'user_id' in snippet:
                 bugs.append("metrics EVENTBUS_KID_LEGACY has user_id label")
             else:
                 oks.append("metrics EVENTBUS_KID_LEGACY_TOTAL no user_id OK (cap5)")
-        else:
-            bugs.append("metrics EVENTBUS_KID_LEGACY label check failed")
     else:
         bugs.append("metrics EVENTBUS_KID_LEGACY_TOTAL missing")
 
@@ -134,12 +129,33 @@ def main() -> int:
         else:
             warns.append(f"report {rep} missing (warn, not bug offline)")
 
-    total = len(oks)+len(warns)+len(bugs)
-    pct = len(oks)/total*100 if total else 0
-    print(f"===== verify_p6_data (DDIA cap3/5/6/12, SWE cap14) =====")
-    for o in oks: print(f"  OK {o}")
-    for w in warns: print(f"  WARN {w}")
-    for b in bugs: print(f"  BUG {b}")
+    # 12. P6-C backup proofs idempotentes (DDIA cap3/6) — leitura reports/p6-backup.log
+    _bk = read("reports/p6-backup.log")
+    if "pg_dump" in _bk.lower():
+        if "RC 0" in _bk or "RC0" in _bk.replace(" ", ""):
+            oks.append("backup pg_dump RC0 prove OK (DDIA cap3)")
+        else:
+            warns.append("backup pg_dump sem RC0 (warn offline)")
+    else:
+        warns.append("backup pg_dump missing (warn precisa postgres vivo)")
+
+    if "BGSAVE" in _bk or "Background saving" in _bk:
+        if "RC 0" in _bk or "ok=true" in _bk.lower() or "Background saving started" in _bk:
+            oks.append("backup redis BGSAVE ok prove OK (DDIA cap3)")
+        else:
+            warns.append("backup BGSAVE sem RC0 (warn offline)")
+    else:
+        warns.append("backup BGSAVE missing (warn precisa redis vivo)")
+
+    total = len(oks) + len(warns) + len(bugs)
+    pct = len(oks) / total * 100 if total else 0
+    print("===== verify_p6_data (DDIA cap3/5/6/12, SWE cap14) =====")
+    for o in oks:
+        print(f"  OK {o}")
+    for w in warns:
+        print(f"  WARN {w}")
+    for b in bugs:
+        print(f"  BUG {b}")
     print(f"OKS:{len(oks)} WARNS:{len(warns)} BUGS:{len(bugs)} total:{total} health:{pct:.1f}%")
     if bugs:
         print("ESTADO: BLOQUEADO")
