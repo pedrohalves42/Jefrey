@@ -95,3 +95,12 @@ Ver `src/jefrey/core/schema.py:43-69` — usa `isolation_level="AUTOCOMMIT"` (CO
 **Pre-commit:** `verify-p6-data` hook 21/21 2x.
 **Compose healthy:** `postgres` pgvector `ankane/pgvector:latest` healthy + `redis` `redis-cli -a $${JEFREY_REDIS__PASSWORD} ping` healthy (fix NOAUTH: healthcheck com fallback `-a` + `-a` no BGSAVE).
 
+
+
+## 5. P8 TAG v1.0.0 - Freeze + Checkout vivo (2026-09-03)
+
+Gate P8: _validate_deep 167/167 (150+17 W+X) + verify 21/21 2x + 7/7 healthy + compose config -q RC0 + promtool 6/6.
+Prova viva: docker ps 7/7 healthy (api healthy, mcp healthy, redis healthy, postgres healthy, prometheus healthy, grafana Up, n8n healthy) + reports/p6-hnsw-proof.log 6578B + reports/p6-bench.log ef64 86ms p95.
+Freeze: m16 ef64 ef_search 64 default, SET LOCAL hnsw.ef_search=200 so query critica (DDIA cap12). Pool pool_pre_ping 3600 preenche P6-B U.
+P7 deferido: baseline 86ms p95 <300ms SLO folga 3.5x; otimizacao orjson/lru_cache/WeakValueDictionary vai v1.1.0 se ganho <5% (docs/PERF_TUNING.md GO/NO-GO, HPP cap1-4, Fluent 19-21).
+Gates P8: 162/162 previsto -> 167/167 efetivo (W8+X9). Referencias: docs/SLO_RUNBOOK.md + docs/PERF_TUNING.md + CHANGELOG.md + ADR-001 kid rotation.

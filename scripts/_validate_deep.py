@@ -599,7 +599,8 @@ try:
     if _plW.Path("reports/p6-backup.log").exists(): oks.append("P7 W backup log exists OK")
     else: bugs.append("P7 W backup log missing")
     _metricsW = _plW.Path("src/jefrey/core/metrics.py").read_text(encoding="utf-8", errors="ignore") if _plW.Path("src/jefrey/core/metrics.py").exists() else ""
-    if "user_id" not in _metricsW or "labelnames" in _metricsW and "user_id" not in _metricsW: oks.append("P7 W cardinality no user_id OK (Livro4 cap5)")
+    import re as _reW2
+    if not _reW2.search(r"labelnames.*user_id", _metricsW): oks.append("P7 W cardinality no user_id OK (Livro4 cap5)")
     else: bugs.append("P7 W cardinality user_id leak")
 except Exception as _eW:
     bugs.append(f"P7 W checks exception {_eW}")
@@ -653,4 +654,4 @@ elif warns:
     print("ESTADO: %d/%d WARNs pendentes" % (len(warns), total_gates))
 else:
     print("ESTADO: 98-99% codigo OK - P6-C 150/150 fechado, pronto para P7/P8")
-
+
