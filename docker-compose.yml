@@ -58,6 +58,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+      - /app/.cache
     volumes:
       - ./:/app:ro
     env_file: [.env]
@@ -81,6 +82,7 @@ services:
       JEFREY_OAUTH__ISS: ${JEFREY_OAUTH__ISS:-}
       JEFREY_OAUTH__JWKS_URI: ${JEFREY_OAUTH__JWKS_URI:-}
       JEFREY_API__CORS_ORIGINS: ${JEFREY_API__CORS_ORIGINS:-}
+      JEFREY_DEBUG: "false"
     ports:
       - "8000:8000"
     extra_hosts:
@@ -113,6 +115,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+      - /app/.cache
     volumes:
       - ./:/app:ro
     env_file: [.env]
@@ -136,6 +139,7 @@ services:
       JEFREY_OAUTH__ISS: ${JEFREY_OAUTH__ISS:-}
       JEFREY_OAUTH__JWKS_URI: ${JEFREY_OAUTH__JWKS_URI:-}
       JEFREY_API__CORS_ORIGINS: ${JEFREY_API__CORS_ORIGINS:-}
+      JEFREY_DEBUG: "false"
     ports:
       - "8001:8001"
     extra_hosts:
@@ -230,6 +234,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+      - /app/.cache
     volumes:
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro

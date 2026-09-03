@@ -123,7 +123,7 @@ def main():
         "src.jefrey.api.main:app",
         host="0.0.0.0",
         port=8000,
-        reload=cfg.debug,
+        reload=False  # docker read_only fix: watchfiles /app/.cache Permission denied (Axiom 1),
     )
 
 if __name__ == "__main__":
