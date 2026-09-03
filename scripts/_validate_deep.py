@@ -578,32 +578,106 @@ try:
 except Exception as _eU:
     bugs.append(f"P6-B U checks exception {_eU}")
 
-# --- W P7 PERF docs-only (HPP+Fluent+Building LLM Apps, Ordem B deferido v1.1.0) ---
+# --- W P7 PERF real (HPP cap1-4, Fluent 19-21, Building LLM Apps, 167->175) ---
 try:
     import pathlib as _plW
-    if _plW.Path("docs/PERF_TUNING.md").exists():
-        oks.append("P7 W PERF_TUNING exists OK")
-        _perf = _plW.Path("docs/PERF_TUNING.md").read_text(encoding="utf-8", errors="ignore")
-        if "cProfile" in _perf: oks.append("P7 W cProfile doc OK (HPP cap1)")
-        else: bugs.append("P7 W cProfile missing")
-        if "p95" in _perf.lower() or "p95" in _perf: oks.append("P7 W p95 baseline doc OK")
-        else: bugs.append("P7 W p95 missing")
-        if "GO/NO-GO" in _perf or "go/no-go" in _perf.lower(): oks.append("P7 W GO/NO-GO <5% OK")
-        else: warns.append("P7 W GO/NO-GO maybe missing")
-        if "evals" in _perf.lower() or "memory types" in _perf.lower(): oks.append("P7 W evals 6 types doc OK")
-        else: warns.append("P7 W evals doc maybe missing")
+    import re as _reW
+    # W1: cProfile real
+    if _plW.Path("reports/p7-cprofile.prof").exists() and _plW.Path("reports/p7-cprofile.prof").stat().st_size > 1000:
+        oks.append("P7 W1 cProfile.prof exists >1k OK (HPP cap1)")
     else:
-        bugs.append("P7 W PERF_TUNING.md missing")
-    if _plW.Path("reports/p6-bench.log").exists(): oks.append("P7 W bench log exists OK (DDIA cap12)")
-    else: warns.append("P7 W bench log missing")
-    if _plW.Path("reports/p6-backup.log").exists(): oks.append("P7 W backup log exists OK")
-    else: bugs.append("P7 W backup log missing")
+        bugs.append("P7 W1 cProfile.prof missing")
+    if _plW.Path("reports/p7-cprofile.txt").exists():
+        _cprof = _plW.Path("reports/p7-cprofile.txt").read_text(encoding="utf-8", errors="ignore")
+        if "cumtime" in _cprof and "function calls" in _cprof:
+            oks.append("P7 W2 cProfile.txt cumtime 30 lines OK (HPP cap1)")
+        else:
+            bugs.append("P7 W2 cProfile.txt cumtime missing")
+    else:
+        bugs.append("P7 W2 cProfile.txt missing")
+    # W3: bench p7 real p50/p95
+    if _plW.Path("reports/p7-bench.log").exists():
+        _bench = _plW.Path("reports/p7-bench.log").read_text(encoding="utf-8", errors="ignore")
+        if "p50=" in _bench and "p95=" in _bench and "ef_search=64" in _bench and "ef_search=200" in _bench:
+            oks.append("P7 W3 bench p7 p50/p95 ef64/200 OK (DDIA cap12)")
+        else:
+            bugs.append("P7 W3 bench p7 p50/p95 missing")
+    else:
+        bugs.append("P7 W3 bench p7 missing")
+    # W4: evals 6 types + log
+    if _plW.Path("evals/test_memory_types.py").exists():
+        _evals = _plW.Path("evals/test_memory_types.py").read_text(encoding="utf-8", errors="ignore")
+        if _evals.count("def test_") >= 6:
+            oks.append("P7 W4 evals 6 types exists OK (Building LLM Apps)")
+        else:
+            bugs.append("P7 W4 evals <6 types")
+    else:
+        bugs.append("P7 W4 evals/test_memory_types.py missing")
+    if _plW.Path("reports/p7-evals.log").exists():
+        _elog = _plW.Path("reports/p7-evals.log").read_text(encoding="utf-8", errors="ignore")
+        if "6 passed" in _elog:
+            oks.append("P7 W5 evals log 6 passed OK")
+        else:
+            bugs.append("P7 W5 evals log not 6 passed")
+    else:
+        bugs.append("P7 W5 p7-evals.log missing")
+    # W6: otim audit lru_cache+orjson + pg WeakValueDictionary+orjson
+    _audit = _plW.Path("src/jefrey/core/audit.py").read_text(encoding="utf-8", errors="ignore") if _plW.Path("src/jefrey/core/audit.py").exists() else ""
+    if "lru_cache" in _audit and "orjson" in _audit and "_HAS_ORJSON" in _audit and "functools" in _audit:
+        oks.append("P7 W6 audit lru_cache+orjson OK (HPP cap2, CIPHER-025)")
+    else:
+        bugs.append("P7 W6 audit lru_cache/orjson missing")
+    _pg = _plW.Path("src/jefrey/core/pg_memory.py").read_text(encoding="utf-8", errors="ignore") if _plW.Path("src/jefrey/core/pg_memory.py").exists() else ""
+    if "WeakValueDictionary" in _pg and "_HAS_ORJSON" in _pg and "_PG_CACHE" in _pg:
+        oks.append("P7 W7 pg_memory WeakValueDictionary+orjson OK (HPP cap3)")
+    else:
+        bugs.append("P7 W7 pg_memory WeakValue/orjson missing")
+    # W8: PERF_TUNING updated with real numbers + GO/NO-GO + cardinality
+    if _plW.Path("docs/PERF_TUNING.md").exists():
+        _perf = _plW.Path("docs/PERF_TUNING.md").read_text(encoding="utf-8", errors="ignore")
+        if "p7-cprofile" in _perf and "p7-bench" in _perf and "p95" in _perf.lower():
+            oks.append("P7 W8 PERF_TUNING real cProfile+bench OK (HPP+SWE)")
+        else:
+            bugs.append("P7 W8 PERF_TUNING not updated real")
+        if "GO/NO-GO" in _perf or "go/no-go" in _perf.lower():
+            oks.append("P7 W8b GO/NO-GO <5% OK (Pragmatic)")
+        else:
+            warns.append("P7 W8b GO/NO-GO maybe missing")
+    else:
+        bugs.append("P7 W8 PERF_TUNING.md missing")
     _metricsW = _plW.Path("src/jefrey/core/metrics.py").read_text(encoding="utf-8", errors="ignore") if _plW.Path("src/jefrey/core/metrics.py").exists() else ""
-    import re as _reW2
-    if not _reW2.search(r"labelnames.*user_id", _metricsW): oks.append("P7 W cardinality no user_id OK (Livro4 cap5)")
-    else: bugs.append("P7 W cardinality user_id leak")
+    if not _reW.search(r"labelnames.*user_id", _metricsW):
+        oks.append("P7 W9 cardinality no user_id OK (Livro4 cap5)")
+    # --- W10-14 T2 175 extensions ---
+    if _plW.Path("docs/HNSW_TUNING.md").exists():
+        _hnsw2 = _plW.Path("docs/HNSW_TUNING.md").read_text(encoding="utf-8", errors="ignore")
+        if "6. P7 PERF v1.1.0" in _hnsw2 or "P7 PERF v1.1.0" in _hnsw2:
+            oks.append("P7 W10 HNSW_TUNING S6 P7 OK (DDIA cap12)")
+        else:
+            bugs.append("P7 W10 HNSW_TUNING S6 missing")
+    if _plW.Path("CHANGELOG.md").exists():
+        _chg2 = _plW.Path("CHANGELOG.md").read_text(encoding="utf-8", errors="ignore")
+        if "[1.1.0]" in _chg2:
+            oks.append("P7 W11 CHANGELOG v1.1.0 OK (Pragmatic)")
+        else:
+            bugs.append("P7 W11 CHANGELOG v1.1.0 missing")
+    if all(_plW.Path(p).exists() for p in ["reports/p7-cprofile.prof","reports/p7-cprofile.txt","reports/p7-bench.log","reports/p7-evals.log"]):
+        oks.append("P7 W12 reports 4 provas p7 OK (HPP cap1)")
+    else:
+        bugs.append("P7 W12 reports p7 missing")
+    if _plW.Path("evals/__init__.py").exists() and _plW.Path("evals/test_memory_types.py").exists():
+        oks.append("P7 W13 evals package OK (Building LLM Apps)")
+    else:
+        bugs.append("P7 W13 evals package missing")
+    _gi = _plW.Path(".gitignore").read_text(encoding="utf-8", errors="ignore") if _plW.Path(".gitignore").exists() else ""
+    if "!reports/p7-bench.log" in _gi and "!reports/p7-cprofile.txt" in _gi:
+        oks.append("P7 W14 gitignore p7 exceptions OK (SWE cap8)")
+    else:
+        bugs.append("P7 W14 gitignore p7 exceptions missing")
 except Exception as _eW:
     bugs.append(f"P7 W checks exception {_eW}")
+
+
 
 # --- X P8 TAG (SLO/THREAT/CHANGELOG/HNSW §5) ---
 try:

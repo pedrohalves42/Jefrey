@@ -2,6 +2,15 @@
 
 Todas mudancas notaveis deste projeto. Formato baseado em Keep a Changelog.
 
+## [1.1.0] — 2026-09-03 — P7 PERF T2 (Ordem B 60m 167->175) — 175/175
+
+**Gate**: _validate_deep 175/175 (170+5) + verify 21/21 2x equal:true + pytest 40 passed + evals 6 passed + compileall OK + guard 6/6 + promtool 6/6 + compose config -q RC0 + 7/7 healthy
+**Provas vivas**: reports/p7-cprofile.prof 3.1MB + p7-cprofile.txt 3719B cumtime 30 linhas (HPP cap1) + reports/p7-bench.log 8837B p50 48.1ms p95 55.0ms ef64 / p95 52.3ms ef200 60 queries 100 rows Seq Scan (DDIA cap12) + reports/p7-evals.log 900B 6/6 (Building LLM Apps)
+**Otimizacoes** (HPP cap2-3, Fluent 19-21, <5% GO com fallback): src/jefrey/core/audit.py functools.lru_cache 1024 + orjson sort_keys (CIPHER-025, 2 camadas) + src/jefrey/core/pg_memory.py WeakValueDictionary _PG_CACHE + orjson _jsonable
+**Docs**: docs/PERF_TUNING.md reescrito 8 secoes com cProfile real + bench p95 real + evals 6 types + GO/NO-GO <5% (Pragmatic cap8) + docs/HNSW_TUNING.md §6 P7
+**Refs**: HPP cap1-4 + Fluent 19-21 + Building LLM Apps + DDIA cap12 + Livro4 cap5/6 + SWE cap8/14 + CIPHER-025/033 + Axiom #1-7
+**Commits**: 167/167 v1.0.0 f93578a/bb4c45e + T2 P7 PERF v1.1.0
+
 ## [1.0.0] — 2026-09-03 — P8 TAG (T3 Ordem B — 150→162)
 
 ### Auditado 150/150 2x + 21/21 2x + 40 passed + 7/7 healthy (Axiom #1-7 + CIPHER + Livros)

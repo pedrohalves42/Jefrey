@@ -1,0 +1,12 @@
+......                                                                   [100%]
+============================== warnings summary ===============================
+evals/test_memory_types.py::test_episodic_memory_add_search
+  C:\Users\Pedro\AppData\Roaming\Python\Python314\site-packages\chromadb\telemetry\opentelemetry\__init__.py:128: DeprecationWarning: 'asyncio.iscoroutinefunction' is deprecated and slated for removal in Python 3.16; use inspect.iscoroutinefunction() instead
+    if asyncio.iscoroutinefunction(f):
+
+evals/test_memory_types.py::test_episodic_memory_add_search
+  C:\Users\Pedro\AppData\Roaming\Python\Python314\site-packages\pythonjsonlogger\jsonlogger.py:11: DeprecationWarning: pythonjsonlogger.jsonlogger has been moved to pythonjsonlogger.json
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+6 passed, 2 warnings in 8.43s

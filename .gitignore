@@ -109,4 +109,10 @@ docs/security-audit/.venv_placeholder
 !tests/test_p5*.py
 data/audit_fallback.jsonl
 !data/.gitkeep
-!tests/__init__.py 
+!tests/__init__.py
+
+# P7 PERF v1.1.0 — provas vivas versionadas (Ordem B, HPP+SWE)
+!reports/p7-bench.log
+!reports/p7-cprofile.txt
+!reports/p7-cprofile.prof
+!reports/p7-evals.log

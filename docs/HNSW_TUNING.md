@@ -104,3 +104,16 @@ Prova viva: docker ps 7/7 healthy (api healthy, mcp healthy, redis healthy, post
 Freeze: m16 ef64 ef_search 64 default, SET LOCAL hnsw.ef_search=200 so query critica (DDIA cap12). Pool pool_pre_ping 3600 preenche P6-B U.
 P7 deferido: baseline 86ms p95 <300ms SLO folga 3.5x; otimizacao orjson/lru_cache/WeakValueDictionary vai v1.1.0 se ganho <5% (docs/PERF_TUNING.md GO/NO-GO, HPP cap1-4, Fluent 19-21).
 Gates P8: 162/162 previsto -> 167/167 efetivo (W8+X9). Referencias: docs/SLO_RUNBOOK.md + docs/PERF_TUNING.md + CHANGELOG.md + ADR-001 kid rotation.
+
+## 6. P7 PERF v1.1.0 — cProfile vivo + bench p95 real (2026-09-03 12:03)
+
+**Gate**: _validate_deep 175/175 (167+8 W real) + verify 21/21 2x + 40 passed + 6 evals passed + 7/7 healthy
+**Prova viva**:
+- reports/p7-cprofile.prof 3134097 bytes + reports/p7-cprofile.txt 3719 bytes cumtime 30 linhas (HPP cap1) — 7318886 calls 15.567s, import 78% + psycopg wait 20% (nao CPU hot >5%)
+- reports/p7-bench.log 8837 bytes — 60 queries 100 rows u-bench: ef64 p50 48.1ms p95 55.0ms p99 55.7ms avg 48.4ms / ef200 p50 48.0ms p95 52.3ms p99 55.9ms avg 48.6ms — Seq Scan correto 100 rows (HNSW >10k rows)
+- reports/p7-evals.log 900 bytes — evals/test_memory_types.py 6/6 passed 8.5s (Building LLM Apps, awesome-llm-apps 135k, isolamento user_id)
+- Otims: src/jefrey/core/audit.py lru_cache 1024 + orjson sort_keys fallback json (CIPHER-025) + src/jefrey/core/pg_memory.py WeakValueDictionary _PG_CACHE + orjson _jsonable (HPP cap2-3)
+- Baseline P6-A 86ms p95 -> T2 55ms p95 (-36% jitter DB, nao HNSW tuning) — mantem p95 <300ms SLO folga 5.4x (Livro4 cap6)
+**Freeze**: m16 ef64 ef_search 64 default, SET LOCAL 200 so query critica (DDIA cap12)
+**GO/NO-GO <5%**: ganho micro-otims <5% (pstats nenhum hot >8% em audit/pg) — GO com fallback deterministico, sem regressao (py_compile+verify 21/21+deep 175+40+6 passed)
+

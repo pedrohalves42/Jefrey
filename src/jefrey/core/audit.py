@@ -1,17 +1,19 @@
-"""Audit Log — gravação em Postgres (P4, CIPHER-010).
+"""Audit Log — gravacao em Postgres (P4, CIPHER-010).
 
 Substitui o log estruturado em docker logs por tabela ``audit_logs``. Toda
-decisão de ferramenta (allow/deny/hitl) e desfecho de aprovação (approved/
-rejected/expired) é persistida para auditoria forense.
+decisao de ferramenta (allow/deny/hitl) e desfecho de aprovacao (approved/
+rejected/expired) eh persistida para auditoria forense.
 
-Resiliência (CIPHER-025): se o Postgres estiver indisponível, NÃO silencia — registra
+Resiliencia (CIPHER-025): se o Postgres estiver indisponivel, NAO silencia — registra
 erro e faz dual-write para arquivo de fallback local (JEFREY_API__AUDIT_FALLBACK_PATH)
-com alerta. O log canônico é o banco; o fallback garante rastro forense mesmo em queda.
-Fail-closed: detail é redigido (redact_pii) antes de json.dumps para não vazar PII.
-"""
+com alerta. O log canonico eh o banco; o fallback garante rastro forense mesmo em queda.
+Fail-closed: detail eh redigido (redact_pii) antes de json.dumps para nao vazar PII.
+HPP cap2: orjson + lru_cache 1024 memoize; manter redact_pii 2 camadas.
+""" 
 from __future__ import annotations
 
 import datetime
+import functools
 import json
 import logging
 import os
@@ -21,12 +23,20 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+try:
+    import orjson as _orjson
+    _HAS_ORJSON = True
+except Exception:
+    _orjson = None  # type: ignore
+    _HAS_ORJSON = False
+
 _PII_RE = re.compile(
     r"(sk-[a-zA-Z0-9]{20,}|Bearer\s+[a-zA-Z0-9._\-]+|[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}|cpf\s*\d{3}\.?\d{3}\.?\d{3}-?\d{2})",
     re.IGNORECASE,
 )
 
 
+@functools.lru_cache(maxsize=1024)
 def redact_pii(s: str) -> str:
     return _PII_RE.sub("[REDACTED]", s)
 
@@ -76,7 +86,7 @@ class AuditLogger:
                 ))
                 s.commit()
         except Exception as e:  # noqa: BLE001
-            # CIPHER-025: falha NÃO é silenciosa — erro visível + dual-write de fallback.
+            # CIPHER-025: falha NAO eh silenciosa — erro visivel + dual-write de fallback.
             logger.error(
                 "audit: FALHA ao gravar no Postgres (thread=%s tool=%s decision=%s): %s",
                 thread_id, tool_name, decision, type(e).__name__,
@@ -95,7 +105,7 @@ class AuditLogger:
         approval_decision: str | None, source: str, detail: dict | None, error: str,
         user_id: str | None = None,
     ) -> None:
-        """CIPHER-025: grava o evento de auditoria em arquivo local quando o Postgres falha."""
+        """CIPHER-025: grava o evento de auditoria em arquivo local quando o Postgres falha.""" 
         path = ""
         try:
             from src.jefrey.core.config import get_settings
@@ -110,9 +120,13 @@ class AuditLogger:
                 "source": source, "detail": detail or {}, "audit_error": error,
                 "user_id": user_id or "system",
             }
-            # redact_pii antes de json.dumps + deterministico
-            raw = json.dumps(record, ensure_ascii=False, default=str)
-            raw = redact_pii(raw)
+            # HPP cap2: orjson + redact_pii deterministico; fallback json se orjson ausente
+            if _HAS_ORJSON:
+                raw = _orjson.dumps(record, option=_orjson.OPT_SORT_KEYS).decode("utf-8")  # type: ignore
+                raw = redact_pii(raw)
+            else:
+                raw = json.dumps(record, ensure_ascii=False, default=str, sort_keys=True)
+                raw = redact_pii(raw)
             with open(path, "a", encoding="utf-8") as f:
                 f.write(raw + "\n")
             logger.warning("audit: fallback local gravado em %s (Postgres indisponivel)", path)

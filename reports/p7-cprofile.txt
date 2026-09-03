@@ -1,0 +1,40 @@
+Thu Sep  3 12:03:55 2026    reports/p7-cprofile.prof
+
+         7318886 function calls (7131452 primitive calls) in 15.567 seconds
+
+   Ordered by: cumulative time
+   List reduced from 19176 to 30 due to restriction <30>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+   4032/1    0.269    0.000   15.641   15.641 {built-in method builtins.exec}
+        1    0.000    0.000   15.641   15.641 scripts/bench_hnsw.py:1(<module>)
+        1    0.004    0.004   15.606   15.606 scripts/bench_hnsw.py:13(run_bench)
+   4440/5    0.042    0.000   12.291    2.458 <frozen importlib._bootstrap>:1360(_find_and_load)
+   3845/5    0.041    0.000   12.291    2.458 <frozen importlib._bootstrap>:1308(_find_and_load_unlocked)
+   3755/8    0.023    0.000   12.287    1.536 <frozen importlib._bootstrap>:914(_load_unlocked)
+   3651/8    0.018    0.000   12.287    1.536 <frozen importlib._bootstrap_external>:753(exec_module)
+ 10981/10    0.017    0.000   12.284    1.228 <frozen importlib._bootstrap>:483(_call_with_frames_removed)
+  3762/52    0.015    0.000   12.186    0.234 {built-in method builtins.__import__}
+        1    0.000    0.000   11.741   11.741 C:\Users\Pedro\jarvis\src\jefrey\core\__init__.py:1(<module>)
+        1    0.000    0.000    7.731    7.731 C:\Users\Pedro\jarvis\src\jefrey\core\memory.py:1(<module>)
+9473/9277    0.191    0.000    6.006    0.001 {built-in method builtins.__build_class__}
+4541/2890    0.010    0.000    4.857    0.002 <frozen importlib._bootstrap>:1409(_handle_fromlist)
+        1    0.000    0.000    4.564    4.564 C:\Users\Pedro\AppData\Roaming\Python\Python314\site-packages\langchain_openai\__init__.py:1(<module>)
+        1    0.000    0.000    4.433    4.433 C:\Users\Pedro\AppData\Roaming\Python\Python314\site-packages\langchain_openai\chat_models\__init__.py:1(<module>)
+        1    0.000    0.000    4.431    4.431 C:\Users\Pedro\AppData\Roaming\Python\Python314\site-packages\langchain_openai\chat_models\azure.py:1(<module>)
+     2077    0.110    0.000    3.192    0.002 C:\Users\Pedro\AppData\Roaming\Python\Python314\site-packages\pydantic\_internal\_model_construction.py:84(__new__)
+      435    0.002    0.000    3.100    0.007 C:\Python314\Lib\site-packages\psycopg\connection.py:476(wait)
+      435    0.003    0.000    3.098    0.007 C:\Python314\Lib\site-packages\psycopg\waiting.py:251(wait_select)
+        1    0.000    0.000    3.088    3.088 C:\Users\Pedro\jarvis\src\jefrey\core\agent.py:1(<module>)
+      326    3.042    0.009    3.042    0.009 {built-in method select.select}
+      188    0.001    0.000    3.033    0.016 C:\Python314\Lib\site-packages\psycopg\cursor.py:100(execute)
+        1    0.000    0.000    2.969    2.969 C:\Python314\Lib\site-packages\openai\__init__.py:1(<module>)
+      125    0.001    0.000    2.964    0.024 C:\Python314\Lib\site-packages\sqlalchemy\engine\base.py:1793(_execute_context)
+      125    0.001    0.000    2.956    0.024 C:\Python314\Lib\site-packages\sqlalchemy\engine\base.py:1852(_exec_single_context)
+      125    0.000    0.000    2.944    0.024 C:\Python314\Lib\site-packages\sqlalchemy\engine\default.py:951(do_execute)
+      122    0.001    0.000    2.934    0.024 C:\Python314\Lib\site-packages\sqlalchemy\engine\base.py:1377(execute)
+      122    0.000    0.000    2.934    0.024 C:\Python314\Lib\site-packages\sqlalchemy\sql\elements.py:517(_execute_on_connection)
+      122    0.002    0.000    2.933    0.024 C:\Python314\Lib\site-packages\sqlalchemy\engine\base.py:1593(_execute_clauseelement)
+        1    0.000    0.000    2.878    2.878 C:\Users\Pedro\AppData\Roaming\Python\Python314\site-packages\chromadb\__init__.py:1(<module>)
+
+

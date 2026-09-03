@@ -5,6 +5,7 @@ O user_id e obrigatorio em add/search/get/update/delete/list_recent.
 """
 from __future__ import annotations
 
+import functools
 import json
 import uuid
 from typing import Any
@@ -14,6 +15,14 @@ import logging
 from sqlalchemy import select, func, and_, not_, cast, Numeric
 
 logger = logging.getLogger(__name__)
+from weakref import WeakValueDictionary
+try:
+    import orjson as _orjson
+    _HAS_ORJSON=True
+except Exception:
+    _orjson=None
+    _HAS_ORJSON=False
+_PG_CACHE = WeakValueDictionary()  # HPP cap3
 from sqlalchemy.dialects.postgresql import JSONB
 
 from src.jefrey.core.db import get_db
@@ -22,6 +31,12 @@ from src.jefrey.core.config import get_settings
 from src.jefrey.core.metrics import MEMORY_OPS, MEMORY_LATENCY
 
 def _jsonable(value: Any) -> Any:
+    if _HAS_ORJSON:
+        try:
+            _orjson.dumps(value)
+            return value
+        except Exception:
+            return str(value)
     try:
         json.dumps(value)
         return value

@@ -14,5 +14,5 @@
 - [x] VALIDAÇÃO 11:15 COMPLETA — verify 21/21 2× + deep 150/150 2× + pytest 40 + compileall OK + guard 6/6 + 7/7 healthy + promtool 6/6 + grafana by(le):2 (99% DATA, falta só T2/T3 p/ 100%)
 - [x] PLANO_P7_PERF_V1.md CRIADO 11:19 — 214L 60m 150→158 W1-W8 + ordem P8 + uso jefrey (HPP+Fluent+Building LLM Apps+DDIA) — 13006 bytes
 - [x] T3 P8 TAG 60m 150→167 FECHADO v1.0.0 56bf14d — SLO_RUNBOOK 6 alerts + THREAT_MODEL ADR-001 + PERF_TUNING GO/NO-GO + HNSW S5 + CHANGELOG bdcae44..HEAD + deep 167/167 WARNS0 BUGS0 + 21/21 2x + 40 passed + 7/7 healthy (Ordem B Axiom #1-7, CIPHER-033, Livro4/DDIA/SWE)
-- [ ] T2 P7 PERF 60m 150→158 — DEFERIDO v1.1.0 Ordem B (GO/NO-GO <5%): T2.1 cProfile 15m + T2.2 otimização 20m + T2.3 evals 6 types 15m + T2.4 gate 158/158 10m — docs/PERF_TUNING.md já created, cProfile real vai v1.1.0
+- [x] T2 P7 PERF 60m 167→175 FECHADO v1.1.0 175/175 + verify 21/21 2x + 40+6 passed + 4 provas vivas (HPP/Fluent/DDIA/Livro4/SWE, GO/NO-GO) 60m 150→158 — DEFERIDO v1.1.0 Ordem B (GO/NO-GO <5%): T2.1 cProfile 15m + T2.2 otimização 20m + T2.3 evals 6 types 15m + T2.4 gate 158/158 10m — docs/PERF_TUNING.md já created, cProfile real vai v1.1.0
 - [ ] D5 push tags: v1.0.0-p5-c local + v1.0.0 56bf14d local → remoto (git push --tags pendente, sem origin)
