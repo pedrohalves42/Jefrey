@@ -21,19 +21,16 @@ export default function Memory() {
     setError(null); setLoading(true); setLatency(null)
     const t0 = performance.now()
     try {
-      const res = await apiFetch("/memory/search", {
-        method: "POST",
-        body: JSON.stringify({ query: q, user_id: getUserId(), limit, layer }),
-      })
+      const params = new URLSearchParams({ q, limit: String(limit) })
+      const res = await apiFetch(`/memory/search?${params.toString()}`, { method: "GET" })
       const ms = Math.round(performance.now() - t0)
       setLatency(ms)
       if (!res.ok) {
         const body = await res.text()
-        throw new Error(mapHttpError(res.status) + (body ? " — " + body.slice(0, 400) : ""))
+        throw new Error(mapHttpError(res.status) + (body ? " - " + body.slice(0, 400) : ""))
       }
       const data = await res.json().catch(() => ({}))
       const results: Hit[] = data.results || data.hits || data.memories || data.items || []
-      // normaliza: se vier string, vira Hit
       const norm = results.map((r: unknown) => {
         if (typeof r === "string") return { content: r }
         const o = r as Record<string, unknown>
@@ -46,7 +43,7 @@ export default function Memory() {
         }
       })
       setHits(norm)
-      if (norm.length === 0) setError("Nenhum resultado — HNSW m16 ef64 pode retornar Seq Scan em <10k linhas (DDIA cap12). Tente outro termo ou cadastre memoria.")
+      if (norm.length === 0) setError("Nenhum resultado - HNSW m16 ef64 pode retornar Seq Scan em <10k linhas (DDIA cap12). Tente outro termo.")
     } catch (e) {
       setHits([])
       setError(e instanceof Error ? e.message : String(e))
@@ -65,7 +62,7 @@ export default function Memory() {
             {latency !== null && <Badge variant={latency < 300 ? "secondary" : "destructive"}>{latency}ms</Badge>}
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            POST /memory/search vetorial por user_id (<span className="font-mono">{getUserId()}</span>) — p95 &lt;300ms SLO (Livro 5 DDIA cap12). Isolamento Axiom #2.
+            GET /memory/search?q= vetorial por user_id (<span className="font-mono">{getUserId()}</span>) - p95 &lt;300ms SLO (Livro 5 DDIA cap12). Isolamento Axiom #2.
           </p>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -89,7 +86,7 @@ export default function Memory() {
               <option value={10}>10</option>
               <option value={20}>20</option>
             </select>
-            <Button onClick={search} disabled={loading || !query.trim()}>{loading ? "Buscando…" : "Buscar"}</Button>
+            <Button onClick={search} disabled={loading || !query.trim()}>{loading ? "Buscando..." : "Buscar"}</Button>
           </div>
           {error && <div className="rounded-md border bg-muted p-3 text-sm">{error}</div>}
           <div className="space-y-2">
@@ -107,7 +104,7 @@ export default function Memory() {
             {!loading && hits.length === 0 && !error && <p className="text-sm text-muted-foreground">Digite um termo e clique Buscar.</p>}
           </div>
           <p className="text-xs text-muted-foreground">
-            Curl: <code className="font-mono bg-muted px-1 rounded">curl -X POST http://localhost:8000/memory/search -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"{"}query":"teste","user_id":"demo","limit":5{"}"}'</code>
+            Curl: <code className="font-mono bg-muted px-1 rounded">curl "http://localhost:8000/memory/search?q=teste&limit=5" -H "Authorization: Bearer $TOKEN"</code>
           </p>
         </CardContent>
       </Card>
