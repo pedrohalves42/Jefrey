@@ -2,11 +2,11 @@ import { BrowserRouter, Routes, Route } from "react-router-dom"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { Nav } from "@/components/Nav"
 import { HealthBadge } from "@/components/HealthBadge"
-import { Chat } from "@/pages/Chat"
-import { Memory } from "@/pages/Memory"
-import { Approvals } from "@/pages/Approvals"
-import { Observability } from "@/pages/Observability"
-import { Settings } from "@/pages/Settings"
+import Chat from "@/pages/Chat"
+import Memory from "@/pages/Memory"
+import Approvals from "@/pages/Approvals"
+import Observability from "@/pages/Observability"
+import Settings from "@/pages/Settings"
 
 const qc = new QueryClient()
 
