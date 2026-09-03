@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react"
+﻿import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { apiFetch, mapHttpError } from "@/lib/api"
+import { apiFetch, mapHttpError, getToken } from "@/lib/api"
 
 type Approval = { id: string; tool?: string; status?: string; risk?: string; user_id?: string; created_at?: string; reason?: string; [k: string]: unknown }
 
@@ -22,10 +22,11 @@ export default function Approvals() {
   const [acting, setActing] = useState<string | null>(null)
 
   async function load() {
+    if (!getToken()) { setItems([]); setError("Sem token — cole seu Bearer em Settings para ver Approvals (Axiom #1 fail-closed, CIPHER-031). Nenhum request enviado."); setLoading(false); return; }
     setLoading(true); setError(null)
     try {
       const res = await apiFetch(`/approvals?status=${filter}`)
-      if (!res.ok) throw new Error(mapHttpError(res.status) + " — " + (await res.text()).slice(0, 400))
+      if (!res.ok) throw new Error(mapHttpError(res.status) + " â€” " + (await res.text()).slice(0, 400))
       const data = await res.json().catch(() => ({}))
       const arr: Approval[] = data.items || data.approvals || data.results || (Array.isArray(data) ? data : [])
       setItems(arr)
@@ -37,21 +38,23 @@ export default function Approvals() {
   }
 
   async function decide(id: string, decision: "approved" | "rejected") {
+    if (!getToken()) { setError("Sem token — defina Bearer em Settings antes de decidir."); return; }
     setActing(id + decision); setError(null)
     try {
       const res = await apiFetch(`/approvals/${id}/decision`, {
         method: "POST",
         body: JSON.stringify({ decision }),
       })
-      if (!res.ok) throw new Error(mapHttpError(res.status) + " — " + (await res.text()).slice(0, 400))
+      if (!res.ok) throw new Error(mapHttpError(res.status) + " â€” " + (await res.text()).slice(0, 400))
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally { setActing(null) }
   }
 
-  useEffect(() => { load(); }, [filter])
+  useEffect(() => { if (getToken()) load(); else { setItems([]); setError("Sem token — cole seu Bearer em Settings para ver Approvals (Axiom #1 fail-closed). Nenhum request enviado."); } }, [filter])
   useEffect(() => {
+    if (!getToken()) return;
     const t = setInterval(load, 15000)
     return () => clearInterval(t)
   }, [filter])
@@ -64,7 +67,7 @@ export default function Approvals() {
             Approvals HITL <Badge variant="secondary">CIPHER-032</Badge>
             <Badge variant="outline">{filter}</Badge>
           </CardTitle>
-          <p className="text-sm text-muted-foreground">GET /approvals + POST /approvals/:id/decision — so admin aprova (RBAC 403 se guest). Polling 15s.</p>
+          <p className="text-sm text-muted-foreground">GET /approvals + POST /approvals/:id/decision â€” so admin aprova (RBAC 403 se guest). Polling 15s.</p>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex gap-2">
@@ -74,7 +77,7 @@ export default function Approvals() {
               <option value="rejected">rejected</option>
               <option value="all">all</option>
             </select>
-            <Button variant="outline" onClick={load} disabled={loading}>{loading ? "Carregando…" : "Atualizar"}</Button>
+            <Button variant="outline" onClick={load} disabled={loading}>{loading ? "Carregandoâ€¦" : "Atualizar"}</Button>
           </div>
           {error && <div className="rounded-md border bg-muted p-3 text-sm">{error}</div>}
           <div className="space-y-2">
@@ -92,10 +95,10 @@ export default function Approvals() {
                 {filter === "pending" && (
                   <div className="flex gap-2 mt-2">
                     <Button size="sm" onClick={() => decide(String(it.id), "approved")} disabled={!!acting}>
-                      {acting === String(it.id) + "approved" ? "Aprovando…" : "Approve"}
+                      {acting === String(it.id) + "approved" ? "Aprovandoâ€¦" : "Approve"}
                     </Button>
                     <Button size="sm" variant="destructive" onClick={() => decide(String(it.id), "rejected")} disabled={!!acting}>
-                      {acting === String(it.id) + "rejected" ? "Rejeitando…" : "Reject"}
+                      {acting === String(it.id) + "rejected" ? "Rejeitandoâ€¦" : "Reject"}
                     </Button>
                   </div>
                 )}
@@ -108,3 +111,5 @@ export default function Approvals() {
     </div>
   )
 }
+
+
