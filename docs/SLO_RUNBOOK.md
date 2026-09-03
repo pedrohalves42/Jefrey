@@ -55,3 +55,11 @@ Todos usam `by (le)` com espaco (Livro4 cap6) e `editable:false` (Axiom #4).
 - [x] grafana jefrey.json 8 panels by(le):2 editable:false orgId:1
 - [x] compose healthy 7/7 api/mcp/redis/postgres/prometheus/grafana/n8n
 - [x] verify 21/21 2x + deep 150/150 + pytest 40 passed
+
+
+## Appendix P5-04 — Drill e Validacao (promtool 2.53, Livro4 cap10)
+
+- **P5-04** alerts_test.yml 6 groups OK (JefreyConfigInvalid, JefreyApiHighErrorRate, JefreyRateLimitDenialsHigh, JefreyKidLegacyHigh, JefreyMemoryLatencyHigh, JefreyServiceDown)
+- promtool check rules + test rules OK (docker/prometheus/tests/alerts_test.yml)
+- drill_alerts.py FAIL-CLOSED JEFREY_ENV gate + py_compile OK + no user_id label
+- Grafana jefrey.json 8 panels + datasource orgId:1 OK (Livro4 cap11)

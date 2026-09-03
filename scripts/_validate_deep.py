@@ -216,13 +216,13 @@ for p in pathlib.Path("src/jefrey").rglob("*.py"):
 
 # THREAT_MODEL / SLO / P4-04/05/06
 print("\n== N. P4-04/05/06 pendentes ==")
-for p in ["THREAT_MODEL.md","SLO_RUNBOOK.md","docs/HNSW_TUNING.md","docker/prometheus/alerts.yml",".github/workflows/ci.yml"]:
+for p in ["docs/THREAT_MODEL.md","docs/SLO_RUNBOOK.md","docs/HNSW_TUNING.md","docker/prometheus/alerts.yml",".github/workflows/ci.yml"]:
     exists = pathlib.Path(p).exists()
     txt2 = read(p) if exists else ""
     status = "OK" if exists else "MISSING"
     extra=""
-    if p=="THREAT_MODEL.md" and "DRAFT" in txt2: extra=" DRAFT not FINAL -> pendente P4-05"
-    if p=="SLO_RUNBOOK.md" and "DRAFT" in txt2: extra=" DRAFT not FINAL -> pendente P4-04"
+    if p=="docs/THREAT_MODEL.md" and "DRAFT" in txt2: extra=" DRAFT not FINAL -> pendente P4-05"
+    if p=="docs/SLO_RUNBOOK.md" and "DRAFT" in txt2: extra=" DRAFT not FINAL -> pendente P4-04"
     print(f"  {p}: {status}{extra}")
 
 # git sync detailed
@@ -405,7 +405,7 @@ try:
         oks.append("P5-04 ci promtool test rules OK")
     else:
         warns.append("P5-04 ci missing promtool test rules")
-    _slo2 = _pl2.Path("SLO_RUNBOOK.md").read_text(encoding="utf-8")
+    _slo2 = _pl2.Path("docs/SLO_RUNBOOK.md").read_text(encoding="utf-8")
     if "P5-04" in _slo2:
         oks.append("P5-04 SLO_RUNBOOK appendix OK")
     else:
