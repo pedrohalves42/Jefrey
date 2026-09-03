@@ -1,25 +1,22 @@
-# Imagem pré-buildada do Jefrey MCP Server (Fase P3a/3b).
-# Dependências são instaladas no BUILD (cacheadas), então o container sobe rápido
-# e o healthcheck passa sem reinstalar a cada `docker compose up`.
-# O código é montado via volume (.:/app) em runtime, então mudanças no código
-# não exigem rebuild da imagem.
+# Imagem pre-buildada do Jefrey MCP Server (Fase P3a/3b).
+# Dependencias sao instaladas no BUILD (cacheadas), entao o container sobe rapido
+# e o healthcheck passa sem reinstalar a cada docker compose up.
+# O codigo e montado via volume (.:/app) em runtime, entao mudancas no codigo
+# nao exigem rebuild da imagem.
 # Base python:3.12-slim (algumas deps do requirements.txt, ex.: pythonjsonlogger<2,
-# ainda não têm wheel para 3.14; 3.12 tem ampla cobertura de wheels).
+# ainda nao tem wheel para 3.14; 3.12 tem ampla cobertura de wheels).
 FROM python:3.12-slim
 
 WORKDIR /app
 
-# Instala dependências primeiro (camada cacheável)
+# Instala dependencias primeiro (camada cacheavel)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# SECURITY (P0.5): usuário não-root — evita que exploit no container dê root no host
+# SECURITY (P0.5): usuario nao-root - evita que exploit no container de root no host
 RUN groupadd --gid 1002 jefrey-mcp \
     && useradd --uid 1002 --gid 1002 --no-create-home --shell /bin/false jefrey-mcp \
     && chown -R jefrey-mcp:jefrey-mcp /app
-
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
@@ -31,5 +28,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')" \
   || exit 1
 
-# O código é montado via volume em runtime; mantemos um CMD de fallback.
+# O codigo e montado via volume em runtime; mantemos um CMD de fallback.
 CMD ["python", "-m", "src.jefrey.mcp"]

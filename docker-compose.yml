@@ -29,6 +29,9 @@ services:
     image: redis:7.2-alpine
     container_name: jefrey-redis
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "${JEFREY_REDIS__PASSWORD:?required}"]
+    env_file: [.env]
+    environment:
+      JEFREY_REDIS__PASSWORD: ${JEFREY_REDIS__PASSWORD:?required}
     ports:
       - "6379:6379"
     volumes:
