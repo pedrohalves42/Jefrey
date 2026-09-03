@@ -279,7 +279,7 @@ if "promtool check rules" in read(".github/workflows/ci.yml"):
     oks.append("ci promtool check rules OK (P5-02)")
 else:
     warns.append("ci sem promtool check rules (P5-02) - WARN ate instalar promtool")
-# P5-03 HOTFIX — CRIT-1/2/3
+# P5-03 HOTFIX � CRIT-1/2/3
 if "import sys" in read("src/jefrey/mcp/server.py"):
     oks.append("mcp/server.py import sys OK (HOTFIX CRIT-1)")
 else:
@@ -297,7 +297,7 @@ if "DbBase" in read("src/jefrey/core/schema.py") and "ModelsBase" in read("src/j
     oks.append("schema.py dual Base create_all OK (CRIT-3)")
 else:
     bugs.append("schema.py not dual Base (CRIT-3 oauth2_clients missing)")
-# P5-03b/c — provisioning + 8 panels
+# P5-03b/c � provisioning + 8 panels
 try:
     import yaml as _yaml
     _ds = _yaml.safe_load(read("docker/grafana/provisioning/datasources/datasource.yml") or "")
@@ -577,6 +577,72 @@ try:
         bugs.append(f"P6-C verify checks exception {_eU2}")
 except Exception as _eU:
     bugs.append(f"P6-B U checks exception {_eU}")
+
+# --- W P7 PERF docs-only (HPP+Fluent+Building LLM Apps, Ordem B deferido v1.1.0) ---
+try:
+    import pathlib as _plW
+    if _plW.Path("docs/PERF_TUNING.md").exists():
+        oks.append("P7 W PERF_TUNING exists OK")
+        _perf = _plW.Path("docs/PERF_TUNING.md").read_text(encoding="utf-8", errors="ignore")
+        if "cProfile" in _perf: oks.append("P7 W cProfile doc OK (HPP cap1)")
+        else: bugs.append("P7 W cProfile missing")
+        if "p95" in _perf.lower() or "p95" in _perf: oks.append("P7 W p95 baseline doc OK")
+        else: bugs.append("P7 W p95 missing")
+        if "GO/NO-GO" in _perf or "go/no-go" in _perf.lower(): oks.append("P7 W GO/NO-GO <5% OK")
+        else: warns.append("P7 W GO/NO-GO maybe missing")
+        if "evals" in _perf.lower() or "memory types" in _perf.lower(): oks.append("P7 W evals 6 types doc OK")
+        else: warns.append("P7 W evals doc maybe missing")
+    else:
+        bugs.append("P7 W PERF_TUNING.md missing")
+    if _plW.Path("reports/p6-bench.log").exists(): oks.append("P7 W bench log exists OK (DDIA cap12)")
+    else: warns.append("P7 W bench log missing")
+    if _plW.Path("reports/p6-backup.log").exists(): oks.append("P7 W backup log exists OK")
+    else: bugs.append("P7 W backup log missing")
+    _metricsW = _plW.Path("src/jefrey/core/metrics.py").read_text(encoding="utf-8", errors="ignore") if _plW.Path("src/jefrey/core/metrics.py").exists() else ""
+    if "user_id" not in _metricsW or "labelnames" in _metricsW and "user_id" not in _metricsW: oks.append("P7 W cardinality no user_id OK (Livro4 cap5)")
+    else: bugs.append("P7 W cardinality user_id leak")
+except Exception as _eW:
+    bugs.append(f"P7 W checks exception {_eW}")
+
+# --- X P8 TAG (SLO/THREAT/CHANGELOG/HNSW §5) ---
+try:
+    import pathlib as _plX
+    if _plX.Path("docs/SLO_RUNBOOK.md").exists():
+        oks.append("P8 X SLO_RUNBOOK exists OK")
+        _slo = _plX.Path("docs/SLO_RUNBOOK.md").read_text(encoding="utf-8", errors="ignore")
+        if "JefreyConfigInvalid" in _slo and "JefreyServiceDown" in _slo and "6 alerts" in _slo: oks.append("P8 X SLO 6 alerts matrix OK (Livro4 cap10)")
+        else: bugs.append("P8 X SLO 6 alerts missing")
+    else:
+        bugs.append("P8 X SLO_RUNBOOK.md missing")
+    if _plX.Path("docs/THREAT_MODEL.md").exists():
+        oks.append("P8 X THREAT_MODEL exists OK")
+        _thr = _plX.Path("docs/THREAT_MODEL.md").read_text(encoding="utf-8", errors="ignore")
+        if "ADR-001" in _thr and "CIPHER-033" in _thr: oks.append("P8 X THREAT ADR-001 CIPHER-033 OK")
+        else: bugs.append("P8 X THREAT ADR-001 missing")
+    else:
+        bugs.append("P8 X THREAT_MODEL.md missing")
+    if _plX.Path("CHANGELOG.md").exists():
+        oks.append("P8 X CHANGELOG exists OK")
+        _chg = _plX.Path("CHANGELOG.md").read_text(encoding="utf-8", errors="ignore")
+        if "bdcae44" in _chg and "[1.0.0]" in _chg: oks.append("P8 X CHANGELOG bdcae44..HEAD OK")
+        else: bugs.append("P8 X CHANGELOG bdcae44 missing")
+    else:
+        bugs.append("P8 X CHANGELOG.md missing")
+    if _plX.Path("docs/HNSW_TUNING.md").exists():
+        _hnsw = _plX.Path("docs/HNSW_TUNING.md").read_text(encoding="utf-8", errors="ignore")
+        if "P8 TAG" in _hnsw or "P8 " in _hnsw and "162" in _hnsw: oks.append("P8 X HNSW_TUNING §5 P8 OK")
+        else: bugs.append("P8 X HNSW_TUNING §5 missing")
+        if "m='16'" in _hnsw or 'm=16' in _hnsw: oks.append("P8 X HNSW m16 ef64 OK")
+        else: warns.append("P8 X HNSW m16 check warn")
+    else:
+        bugs.append("P8 X HNSW_TUNING.md missing")
+    # compose prod 8 envs ?required
+    _comp = _plX.Path("docker-compose.yml").read_text(encoding="utf-8", errors="ignore") if _plX.Path("docker-compose.yml").exists() else ""
+    if "JEFREY_DATABASE__PASSWORD:?required" in _comp and "JEFREY_REDIS__PASSWORD:?required" in _comp: oks.append("P8 X compose ?required 8 envs OK (DDIA cap6)")
+    else: bugs.append("P8 X compose ?required missing")
+except Exception as _eX:
+    bugs.append(f"P8 X checks exception {_eX}")
+
 total_gates = len(oks)+len(bugs)+len(warns)
 pct = len(oks)/total_gates*100 if total_gates else 0
 print(f"\n===== FINAL =====\nOKS: {len(oks)} WARNS: {len(warns)} BUGS: {len(bugs)}")
@@ -587,3 +653,4 @@ elif warns:
     print("ESTADO: %d/%d WARNs pendentes" % (len(warns), total_gates))
 else:
     print("ESTADO: 98-99% codigo OK - P6-C 150/150 fechado, pronto para P7/P8")
+
