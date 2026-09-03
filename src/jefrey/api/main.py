@@ -12,6 +12,8 @@ import logging
 import os
 import uvicorn
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.jefrey.api.approvals import build_approvals_app
@@ -99,6 +101,17 @@ def create_app() -> FastAPI:
     approvals_app = build_approvals_app()
     app.mount("/approvals", approvals_app)
 
+    # UI-1 Shell — serve Vite build em / (Axiom #1: 1 programa, 7 pecas -> sem novo container)
+    # FastAPI StaticFiles serve src/jefrey/static com html=True; rotas /api/* tem precedencia sobre mount "/"
+    try:
+        _static_dir = Path(__file__).resolve().parent.parent / "static"  # src/jefrey/static (fix: api/ -> jefrey/)
+        if _static_dir.exists():
+            # mount em "/" depois das rotas — /health, /chat, /memory, /approvals continuam com prioridade
+            app.mount("/", StaticFiles(directory=str(_static_dir), html=True), name="ui-static")
+            logger.info("UI static mounted at / from %s", _static_dir)
+    except Exception as e:
+        logger.warning("UI static mount falhou: %s", e)
+
     return app
 
 app = create_app()
@@ -110,7 +123,7 @@ def main():
         "src.jefrey.api.main:app",
         host="0.0.0.0",
         port=8000,
-        reload=cfg.debug,
+        reload=False  # docker read_only fix: watchfiles /app/.cache Permission denied (Axiom 1),
     )
 
 if __name__ == "__main__":
