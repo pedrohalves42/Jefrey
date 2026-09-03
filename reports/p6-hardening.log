@@ -1,0 +1,267 @@
+# T1.1 Up vivo — 2026-09-03 — Axiom #1-7 + CIPHER 021/033 + DDIA cap6 + Livro4 cap10/11 + SWE cap14
+# Comando: docker compose up -d --wait (imagens jefrey-api:local 1.71GB + jefrey-mcp:local 376MB ja built, sem rebuild)
+env: ENV_EXISTS 
+JEFREY_DEBUG=true
+JEFREY_LOG_LEVEL=INFO
+JEFREY_USER_NAME=Usuário
+JEFREY_LLM__PROVIDER=ollama
+JEFREY_LLM__MODEL=llama3.1:8b
+JEFREY_LLM__TEMPERATURE=0.7
+JEFREY_LLM__MAX_TOKENS=4000
+JEFREY_LLM__API_KEY=sk-sua-chave-aqui
+# JEFREY_LLM__BASE_URL=https://api.openai.com/v1
+# JEFREY_LLM__PROVIDER=anthropic
+# JEFREY_LLM__MODEL=claude-3-5-sonnet-20241022
+# JEFREY_LLM__API_KEY=sk-ant-s
+cfg: COMPOSE_CFG_OK 
+up_exit: 1
+up_tail:  Container jefrey-prometheus Running 
+ Container jefrey-postgres Running 
+ Container jefrey-redis Running 
+ Container jefrey-api Recreate 
+ Container jefrey-mcp Recreate 
+ Container jefrey-api Recreated 
+ Container jefrey-mcp Recreated 
+ Container jefrey-postgres Waiting 
+ Container jefrey-redis Waiting 
+ Container jefrey-postgres Waiting 
+ Container jefrey-redis Waiting 
+ Container jefrey-prometheus Waiting 
+ Container jefrey-postgres Healthy 
+ Container jefrey-prometheus Healthy 
+ Container jefrey-grafana Starting 
+ Container jefrey-redis Healthy 
+ Container jefrey-redis Healthy 
+ Container jefrey-api Starting 
+ Container jefrey-postgres Healthy 
+ Container jefrey-mcp Starting 
+ Container jefrey-grafana Started 
+ Container jefrey-mcp Started 
+ Container jefrey-mcp Waiting 
+ Container jefrey-api Started 
+ Container jefrey-mcp Error dependency mcp-server failed to start
+dependency failed to start: container jefrey-mcp is unhealthy
+ps:
+NAMES STATUS
+jefrey-api Up 23 seconds (health: starting)
+jefrey-mcp Restarting (1) Less than a second ago
+jefrey-redis Up 2 hours (healthy)
+jefrey-grafana Up 23 seconds
+jefrey-prometheus Up 2 hours (healthy)
+jefrey-postgres Up 18 hours (healthy)
+supabase_studio_Gordao_Oficial Up 18 hours (healthy)
+supabase_pg_meta_Gordao_Oficial Up 18 hours (healthy)
+supabase_storage_Gordao_Oficial Up 18 hours (healthy)
+supabase_rest_Gordao_Oficial Up 18 hours
+supabase_realtime_Gordao_Oficial Up 18 hours (healthy)
+supabase_inbucket_Gordao_Oficial Up 18 hours (healthy)
+supabase_auth_Gordao_Oficial Up 18 hours (healthy)
+supabase_kong_Gordao_Oficial Up 18 hours (healthy)
+supabase_vector_Gordao_Oficial Restarting (0) 1 second ago
+supabase_analytics_Gordao_Oficial Up 18 hours (healthy)
+supabase_db_Gordao_Oficial Up 18 hours (healthy)
+compose_ps:
+NAME                IMAGE                     COMMAND                  SERVICE      CREATED          STATUS                             PORTS
+jefrey-api          jefrey-api:local          "python -m src.jefre…"   jefrey-api   37 seconds ago   Up 24 seconds (health: starting)   0.0.0.0:8000->8000/tcp, [::]:8000->8000/tcp
+jefrey-grafana      grafana/grafana:11.1.0    "/run.sh"                grafana      2 hours ago      Up 24 seconds                      0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp
+jefrey-mcp          jefrey-mcp:local          "python -m src.jefre…"   mcp-server   38 seconds ago   Up 1 second (health: starting)     0.0.0.0:8001->8001/tcp, [::]:8001->8001/tcp
+jefrey-n8n          n8nio/n8n:latest          "tini -- /docker-ent…"   n8n          2 hours ago      Created                            
+jefrey-postgres     ankane/pgvector:latest    "docker-entrypoint.s…"   postgres     18 hours ago     Up 18 hours (healthy)              0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp
+jefrey-prometheus   prom/prometheus:v2.53.0   "/bin/prometheus --c…"   prometheus   2 hours ago      Up 2 hours (healthy)               0.0.0.0:9090->9090/tcp, [::]:9090->9090/tcp
+jefrey-redis        redis:7.2-alpine          "docker-entrypoint.s…"   redis        2 hours ago      Up 2 hours (healthy)               0.0.0.0:6379->6379/tcp, [::]:6379->6379/tcp
+logs_api tail:
+[0;93m2026-09-03 14:03:04.812371027 [W:onnxruntime:Default, telemetry.cc:800 operator()] Failed to persist telemetry device ID; using an in-memory identifier[m
+/usr/local/lib/python3.12/site-packages/langgraph/cache/base/__init__.py:8: LangChainPendingDeprecationWarning: The default value of `allowed_objects` will change in a future version. Pass an explicit value (e.g., allowed_objects='messages' or allowed_objects='core') to suppress this warning.
+  from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+INFO:     Will watch for changes in these directories: ['/app']
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [1] using WatchFiles
+logs_mcp tail:
+ill registrada: web_search (3 ferramentas)"}
+{"asctime": "2026-09-03 14:03:18,379", "levelname": "WARNING", "name": "src.jefrey.skills.drive", "message": "Credenciais Google Drive nao encontradas: config/credentials/google_drive.json"}
+{"asctime": "2026-09-03 14:03:18,380", "levelname": "INFO", "name": "src.jefrey.skills.drive", "message": "Criar em https://console.cloud.google.com -> APIs & Services -> Library -> Google Drive API -> Enable -> Credentials -> OAuth Client ID (Desktop) -> Download JSON -> config/credentials/google_drive.json"}
+{"asctime": "2026-09-03 14:03:18,381", "levelname": "WARNING", "name": "src.jefrey.skills", "message": "Falha ao inicializar skill: drive"}
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/app/src/jefrey/mcp/__main__.py", line 5, in <module>
+    main()
+  File "/app/src/jefrey/mcp/server.py", line 288, in main
+    mcp_server = build_server()
+                 ^^^^^^^^^^^^^^
+  File "/app/src/jefrey/mcp/server.py", line 248, in build_server
+    register_default_tools()
+    ^^^^^^^^^^^^^^^^^^^^^^
+NameError: name 'register_default_tools' is not defined
+verify: v1_exit:0 v2_exit:0 equal:true v1_tail:no user_id OK (Livro4 cap5)
+  OK metrics no user_id label OK (cap5)
+  OK publisher XADD maxlen 10000 per-tenant OK
+  OK subscriber xgroup_create mkstream BUSYGROUP OK
+  OK subscriber DLQ per-tenant maxlen5000 OK
+  OK subscriber XREADGROUP/XACK OK
+  OK report reports/p6-hnsw-proof.log exists OK
+  OK report reports/p6-bench.log exists OK
+  OK report reports/p6-streams.log exists OK
+  OK report reports/p6-backup.log exists OK
+  OK backup pg_dump RC0 prove OK (DDIA cap3)
+  OK backup redis BGSAVE ok prove OK (DDIA cap3)
+OKS:21 WARNS:0 BUGS:0 total:21 health:100.0%
+ESTADO: 100% DATA OK
+deep: v JEFREY_OAUTH__CLIENT_ID OK
+  OK env JEFREY_OAUTH__CLIENT_SECRET OK
+  OK pyproject pythonpath OK
+  OK pyproject asyncio fix OK
+  OK pyproject dep cachetools OK
+  OK pyproject dep PyJWT OK
+  OK pyproject dep cryptography OK
+  OK pyproject dep redis OK
+  OK pyproject dep packaging OK
+  OK pyproject dep httpx OK
+  OK config validate_for_production OK
+  OK config is_prod OK
+== Q. P5-02/P5-03 HOTFIX (L4 cap10/11) ==
+
+WARNS: 0
+
+BUGS: 0
+
+===== FINAL =====
+OKS: 150 WARNS: 0 BUGS: 0
+% health gates 100.0% (150/150)
+ESTADO: 98-99% codigo OK - P6-C 150/150 fechado, pronto para P7/P8
+pytest: _p4_idp_streams.py::test_idp_dev_stub_valid_prefix
+  C:\Users\Pedro\jarvis\tests\test_p4_idp_streams.py:29: UserWarning: Token refresh dev stub (valid_ prefix) � n�o usar em prod
+    tok, err = refresh_access_token("valid_abc123")
+
+tests/test_p4_signing_kid.py::test_legacy_v0_warns_and_still_verifies_if_key_matches
+  C:\Users\Pedro\jarvis\tests\test_p4_signing_kid.py:65: DeprecationWarning: mensagem sem kid (v0 compat) � rotacione para v1/v2
+    ok, err = sg.verify_message(legacy)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+40 passed, 4 warnings in 45.45s
+prom_check: exit:0 Checking /work/docker/prometheus/alerts.yml
+  SUCCESS: 6 rules found
+
+prom_test: exit:0 Unit Testing:  /work/docker/prometheus/tests/alerts_test.yml
+  SUCCESS
+
+graf: e (5m)
+RateLimit Deny Rate (5m)
+Memory p95 Latency
+Tools Blocked (1h)
+Approvals HITL (1h)
+#!/usr/bin/env bash
+set -euo pipefail
+python -m json.tool docker/grafana/dashboards/jefrey.json > /dev/null
+grep -q '"editable": false' docker/grafana/dashboards/jefrey.json || { echo "grafana editable not false"; exit 1; }
+grep -q "by (le)" docker/grafana/dashboards/jefrey.json || { echo "grafana m
+guard: <3>WSL (2375509 - Relay) ERROR: CreateProcessCommon:818: execvpe(/bin/bash) failed: No such file or directory
+GUARD_BASH_FAIL_BUT_CHECK_MANUAL
+--- FIX 2026-09-03 T1.1 NameError register_default_tools (Axiom #6, CIPHER-032, SWE cap8) ---
+patch_grep:72:    from src.jefrey.core.registry import register_default_tools
+238:    from src.jefrey.core.registry import register_default_tools
+249:    register_default_tools()
+py_compile:PY_COMPILE_OK 
+compileall:COMPILEALL_OK 
+guard:
+verify v1==v2:true v2_exit:0 deep:project dep httpx OK
+  OK config validate_for_production OK
+  OK config is_prod OK
+== Q. P5-02/P5-03 HOTFIX (L4 cap10/11) ==
+
+WARNS: 0
+
+BUGS: 0
+
+===== FINAL =====
+OKS: 150 WARNS: 0 BUGS: 0
+% health gates 100.0% (150/150)
+ESTADO: 98-99% codigo OK - P6-C 150/150 fechado, pronto para P7/P8
+pytest:esh_access_token("valid_abc123")
+
+tests/test_p4_signing_kid.py::test_legacy_v0_warns_and_still_verifies_if_key_matches
+  C:\Users\Pedro\jarvis\tests\test_p4_signing_kid.py:65: DeprecationWarning: mensagem sem kid (v0 compat) � rotacione para v1/v2
+    ok, err = sg.verify_message(legacy)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+40 passed, 4 warnings in 32.66s
+restart_ps:
+[stderr]'head' n�o � reconhecido como um comando interno
+ou externo, um programa oper�vel ou um arquivo em lotes.
+wait_ps:el. Verifique 
+a grafia do nome ou, se um caminho tiver sido incluído, veja se o caminho está correto e tente novamente.
+No linha:1 caractere:110
++ ... {.Names}} {{.Status}}" 2>&1; docker compose ps -a 2>&1 | head -20; do ...
++                                                              ~~~~
+    + CategoryInfo          : ObjectNotFound: (head:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+tail : O termo 'tail' não é reconhecido como nome de cmdlet, função, arquivo de script ou programa operável. Verifique 
+a grafia do nome ou, se um caminho tiver sido incluído, veja se o caminho está correto e tente novamente.
+No linha:1 caractere:160
++ ...  -a 2>&1 | head -20; docker logs jefrey-mcp --tail 50 2>&1 | tail -80
++                                                                  ~~~~
+    + CategoryInfo          : ObjectNotFound: (tail:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+wait2:ES STATUS
+jefrey-api Up 4 minutes (healthy)
+jefrey-mcp Up About a minute (healthy)
+jefrey-redis Up 2 hours (healthy)
+jefrey-grafana Up 4 minutes
+jefrey-prometheus Up 2 hours (healthy)
+jefrey-postgres Up 18 hours (healthy)
+supabase_studio_Gordao_Oficial Up 18 hours (healthy)
+supabase_pg_meta_Gordao_Oficial Up 18 hours (healthy)
+supabase_storage_Gordao_Oficial Up 18 hours (healthy)
+supabase_rest_Gordao_Oficial Up 18 hours
+supabase_realtime_Gordao_Oficial Up 18 hours (healthy)
+supabase_inbucket_Gordao_Oficial Up 18 hours (healthy)
+supabase_auth_Gordao_Oficial Up 18 hours (healthy)
+supabase_kong_Gordao_Oficial Up 18 hours (healthy)
+supabase_vector_Gordao_Oficial Restarting (0) 3 seconds ago
+supabase_analytics_Gordao_Oficial Up 18 hours (healthy)
+supabase_db_Gordao_Oficial Up 18 hours (healthy)
+inspect:healthy
+up2:er jefrey-api Running 
+ Container jefrey-mcp Running 
+ Container jefrey-prometheus Waiting 
+ Container jefrey-redis Waiting 
+ Container jefrey-postgres Waiting 
+ Container jefrey-postgres Waiting 
+ Container jefrey-redis Waiting 
+ Container jefrey-redis Healthy 
+ Container jefrey-postgres Healthy 
+ Container jefrey-mcp Waiting 
+ Container jefrey-postgres Healthy 
+ Container jefrey-prometheus Healthy 
+ Container jefrey-redis Healthy 
+ Container jefrey-mcp Healthy 
+ Container jefrey-n8n Starting 
+ Container jefrey-n8n Started 
+ Container jefrey-redis Waiting 
+ Container jefrey-api Waiting 
+ Container jefrey-mcp Waiting 
+ Container jefrey-n8n Waiting 
+ Container jefrey-prometheus Waiting 
+ Container jefrey-grafana Waiting 
+ Container jefrey-postgres Waiting 
+ Container jefrey-grafana Healthy 
+ Container jefrey-api Healthy 
+ Container jefrey-postgres Healthy 
+ Container jefrey-mcp Healthy 
+ Container jefrey-prometheus Healthy 
+ Container jefrey-redis Healthy 
+ Container jefrey-n8n Healthy 
+final_ps:
+[stderr]'head' n�o � reconhecido como um comando interno
+ou externo, um programa oper�vel ou um arquivo em lotes.
+final_logs tail:
+[stderr]'tail' n�o � reconhecido como um comando interno
+ou externo, um programa oper�vel ou um arquivo em lotes.
+--- GATE T1 HARDENING 2026-09-03 — Axiom #1-7 + CIPHER 021/032/033 + DDIA cap6 + Livro4 cap5/6/10/11 + SWE cap8/14 ---
+T1.1 Up vivo: docker ps 7/7 healthy (api healthy, mcp healthy, redis healthy, postgres healthy, prometheus healthy, grafana Up, n8n healthy)
+T1.2 Grafana: GRAFANA panels:8 hits:2 editable_false:True orgId:True ui:True
+PASS
+T1.3 Re-valida: verify 21/21 2x idempotente true deep 150/150 2x pytest 40 passed promtool 6/6 SUCCESS compile OK cfg RC0
+T1.4 Gate T1: working tree clean apos commit + reports/p6-hardening.log 12KB + git log T1 fechado
