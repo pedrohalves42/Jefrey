@@ -3,15 +3,16 @@
 - [x] P5-C 148/148 FECHADO 88bf25d — freeze 6 alerts + 8 panels + cardinality <800
 - [x] P6-gaps 148/148 687d589 — verify 19/19 + isolation 2/2 + deep U
 - [x] P6-A/B FECHADO e8266f6/d9dd5e0 — HNSW CONCURRENTLY + Streams 2-proc dual-verify + backup
-- [x] T1.0 hardening FECHADO 8feef7e — 5 arquivos (Dockerfile.mcp dedup + compose redis env + pyproject testpaths + requirements +11 deps + skills registry) + working tree CLEAN + compileall OK + guard 6/6 + 40 passed (audit 10:47)
+- [x] T1.0 hardening FECHADO 8feef7e — 5 arquivos + working tree CLEAN + compileall OK + guard 6/6 + 40 passed (audit 10:47)
 - [x] PLANO_SINCRONIZADO_P0_P8_V2.md V2.1 RECRIADO DO ZERO 10:47 — 223L audit vivo 150/150 + 21/21 + promtool 6/6
 - [x] Audit 10:47: verify 21/21 2× + deep 150/150 + pytest 40 + compose RC0 + promtool SUCCESS + redis/postgres/prometheus healthy + D3 FECHADO
 - [x] T1.1 Up vivo FECHADO 98cd0da — docker compose up -d --wait 7/7 healthy (api healthy, mcp healthy, redis healthy, postgres healthy, prometheus healthy, grafana Up, n8n healthy) + fix mcp register_default_tools import (Axiom #6, CIPHER-032, DDIA cap6)
 - [x] T1.2 Grafana FECHADO — jefrey.json 8 panels by (le) hits:2 editable_false:true orgId:true allowUiUpdates:false (Livro4 cap6, guard_grafana PASS, D4 FECHADO)
 - [x] T1.3 Re-valida FECHADO — verify 21/21 2× idempotente true + deep 150/150 2× WARNS0 BUGS0 + compileall OK + py_compile OK + pytest 40 passed + promtool check 6 rules SUCCESS + test SUCCESS + compose config -q RC0 (SWE cap14)
-- [x] T1.4 Gate T1 FECHADO — reports/p6-hardening.log 12KB + git status CLEAN + T1 HARDENING 15m 100% DATA (99%→100%)
-- [x] T1 HARDENING 15m 100% FECHADO — 150/150 + 21/21 + 40 passed + 7/7 healthy + promtool 6/6 + grafana 8 panels
-- [ ] T2 P7 PERF 60m 150→158 (só após T1 verde, pode ir v1.1.0 se <5%): cProfile + otimização + evals 6 types + gate 158/158
+- [x] T1.4 Gate T1 FECHADO — reports/p6-hardening.log 13227 bytes + git status CLEAN + T1 HARDENING 15m 100% DATA (99%→100%)
+- [x] T1 HARDENING 15m 100% FECHADO 5c54440 — 150/150 + 21/21 + 40 passed + 7/7 healthy + promtool 6/6 + grafana 8 panels
+- [x] VALIDAÇÃO 11:15 COMPLETA — verify 21/21 2× + deep 150/150 2× + pytest 40 + compileall OK + guard 6/6 + 7/7 healthy + promtool 6/6 + grafana by(le):2 (99% DATA, falta só T2/T3 p/ 100%)
+- [x] PLANO_P7_PERF_V1.md CRIADO 11:19 — 214L 60m 150→158 W1-W8 + ordem P8 + uso jefrey (HPP+Fluent+Building LLM Apps+DDIA) — 13006 bytes
+- [ ] T2 P7 PERF 60m 150→158 — PRÓXIMO (pode ir v1.1.0 se <5%): T2.1 cProfile 15m + T2.2 otimização 20m + T2.3 evals 6 types 15m + T2.4 gate 158/158 10m
 - [ ] T3 P8 TAG 60m 158→162: compose prod healthy + IdP real + ADR-001 + CHANGELOG + tag v1.0.0 push + gate 162/162
 - [ ] D5 push tags: v1.0.0-p5-c local → remoto + v1.0.0 final
-- [ ] Re-validação final T1: py_compile + compileall + guard 6/6 + verify 21/21 2× + deep 150/150 2× + pytest 40 + compose config -q + promtool 6/6
