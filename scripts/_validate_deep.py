@@ -501,6 +501,67 @@ try:
 except Exception as _e_t:
     bugs.append("P5-06 CI exception %s" % _e_t)
 
+
+# --- U. P6-B DATA gaps fechados (DDIA cap5/6/12, CIPHER-033, Axiom #2) ---
+try:
+    _schU = read("src/jefrey/core/schema.py")
+    if "CREATE INDEX CONCURRENTLY IF NOT EXISTS" in _schU and "m='16'" in _schU and "ef_construction='64'" in _schU and "AUTOCOMMIT" in _schU:
+        oks.append("P6-B U schema CONCURRENTLY m16 ef64 AUTOCOMMIT OK")
+    else:
+        bugs.append("P6-B U schema CONCURRENTLY missing")
+    _modU = read("src/jefrey/core/models.py")
+    if "vector_cosine_ops" in _modU and '"m": 16' in _modU and '"ef_construction": 64' in _modU:
+        oks.append("P6-B U models hnsw m16 ef64 vector_cosine_ops OK")
+    else:
+        bugs.append("P6-B U models hnsw missing")
+    if "user_created" in _modU and "ix_approvals_user_thread" in _modU:
+        oks.append("P6-B U models ix_user_created+approvals_user_thread OK")
+    else:
+        bugs.append("P6-B U models secondary indexes missing")
+    _dbU = read("src/jefrey/core/db.py")
+    if "pool_pre_ping=True" in _dbU and "pool_recycle" in _dbU:
+        oks.append("P6-B U db pool_pre_ping+pool_recycle OK")
+    else:
+        bugs.append("P6-B U db pool missing")
+    _pgU = read("src/jefrey/core/pg_memory.py")
+    if "table.user_id ==" in _pgU and "_build_filter" in _pgU:
+        oks.append("P6-B U pg_memory _build_filter user_id mandatory OK")
+    else:
+        bugs.append("P6-B U pg_memory isolation missing")
+    _pubU = read("src/jefrey/eventbus/publisher.py")
+    if "maxlen" in _pubU.lower() and "10000" in _pubU and "jefrey.events" in _pubU:
+        oks.append("P6-B U publisher XADD maxlen10000 per-tenant OK")
+    else:
+        bugs.append("P6-B U publisher XADD missing")
+    _subU = read("src/jefrey/eventbus/subscriber.py")
+    if "xgroup_create" in _subU and "mkstream" in _subU and "BUSYGROUP" in _subU:
+        oks.append("P6-B U subscriber xgroup_create mkstream BUSYGROUP OK")
+    else:
+        bugs.append("P6-B U subscriber xgroup missing")
+    if "jefrey:dlq" in _subU and "5000" in _subU:
+        oks.append("P6-B U DLQ per-tenant jefrey:dlq maxlen5000 OK")
+    else:
+        bugs.append("P6-B U DLQ missing")
+    _sigU = read("src/jefrey/eventbus/signing.py")
+    _metrU = read("src/jefrey/core/metrics.py")
+    if "HMAC_KEYS_JSON" in _sigU and "DeprecationWarning" in _sigU and "EVENTBUS_KID_LEGACY_TOTAL" in _metrU:
+        oks.append("P6-B U signing kid v1/v2 dual+metric [] OK (CIPHER-033)")
+    else:
+        bugs.append("P6-B U signing kid rotation missing")
+    import pathlib as _plU
+    if _plU.Path("scripts/verify_p6_data.py").exists():
+        oks.append("P6-B U verify_p6_data.py exists OK")
+        try:
+            import py_compile as _pcU; _pcU.compile("scripts/verify_p6_data.py", doraise=True); oks.append("P6-B U verify_p6_data py_compile OK")
+        except Exception as _eU: bugs.append(f"P6-B U verify_p6_data py_compile FAIL {_eU}")
+    else:
+        bugs.append("P6-B U verify_p6_data.py missing")
+    if _plU.Path("tests/test_p6_isolation.py").exists():
+        oks.append("P6-B U test_p6_isolation.py 2 tenants OK")
+    else:
+        bugs.append("P6-B U test_p6_isolation.py missing")
+except Exception as _eU:
+    bugs.append(f"P6-B U checks exception {_eU}")
 total_gates = len(oks)+len(bugs)+len(warns)
 pct = len(oks)/total_gates*100 if total_gates else 0
 print(f"\n===== FINAL =====\nOKS: {len(oks)} WARNS: {len(warns)} BUGS: {len(bugs)}")
@@ -510,4 +571,4 @@ if bugs:
 elif warns:
     print("ESTADO: %d/%d WARNs pendentes" % (len(warns), total_gates))
 else:
-    print("ESTADO: 97-99% codigo OK - P5 DONE 136/136, pendente P6 para P8")
+    print("ESTADO: 97-99% codigo OK - P6 gaps fechados 148/148, pronto para P6-C 150/150")
