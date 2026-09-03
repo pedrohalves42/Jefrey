@@ -1,17 +1,16 @@
 # TODO P0→P8 V2.1 — pós-audit 2026-09-03 09:40 — P6-C 150/150 → 100% v1.0.0
-- [x] P6-C 150/150 FECHADO bdcae44 — verify 21/21 2× + deep 150/150 + CI gate + pre-commit + compose config -q + HNSW_TUNING §4
+- [x] P6-C 150/150 FECHADO bdcae44 — verify 21/21 2x + deep 150/150 + CI gate + pre-commit + compose config -q + HNSW_TUNING §4
 - [x] P5-C 148/148 FECHADO 88bf25d — freeze 6 alerts + 8 panels + cardinality <800
 - [x] P6-gaps 148/148 687d589 — verify 19/19 + isolation 2/2 + deep U
 - [x] P6-A/B FECHADO e8266f6/d9dd5e0 — HNSW CONCURRENTLY + Streams 2-proc dual-verify + backup
-- [x] PLANO_SINCRONIZADO_P0_P8_V2.md V2.1 reescrito pós-audit 09:40 (16696 bytes, 227L) — audit vivo: verify 21/21 2× + deep 150/150 + pytest 40 + compileall RC0 + compose config RC0 + promtool 6/6 + redis/postgres/prometheus healthy
+- [x] PLANO_SINCRONIZADO_P0_P8_V2.md V2.1 reescrito pós-audit 09:40 (16696 bytes, 227L) — audit vivo: verify 21/21 2x + deep 150/150 + pytest 40 + compileall RC0 + compose config RC0 + promtool 6/6 + redis/postgres/prometheus healthy
 - [x] Audit 09:40: promtool vivo D3 FECHADO (check 6 rules SUCCESS + test SUCCESS)
-- [ ] T1 P6-C HARDENING 15m — PRÓXIMO (bloqueante antes de P7/P8):
-  - [ ] T1.0 (2m) commit hardening 5 arquivos sujos → working tree clean
+- [x] T1.0 (2m) DONE 8feef7e + 9c204a2 — hardening 5 arquivos + docs sync — guard 6/6 PASS + 21/21 2x + 150/150 + 40 passed + working tree clean
+- [ ] T1 P6-C HARDENING restante 13m (bloqueante antes de P7/P8):
   - [ ] T1.1 (5m) docker compose build jefrey-api + mcp-server + up -d --wait → 5/5 healthy
   - [ ] T1.2 (2m) Grafana by(le) ≥2 + guard_grafana 8 panels
-  - [ ] T1.3 (3m) re-valida 150/150 2× + 21/21 2× + 40 passed + promtool 6/6 + compose RC0
+  - [ ] T1.3 (3m) re-valida 150/150 2x + 21/21 2x + 40 passed + promtool 6/6 + compose RC0
   - [ ] T1.4 (3m) gate T1 — reports/p6-hardening.log + git log T1
-- [ ] T2 P7 PERF 60m 150→158 (só após T1 verde, pode ir v1.1.0 se <5%): cProfile + otimização + evals 6 types + gate 158/158
-- [ ] T3 P8 TAG 60m 158→162 (só após T1 verde): compose prod healthy + IdP real + ADR-001 + CHANGELOG + tag v1.0.0 push + gate 162/162
-- [ ] D5 push tags: v1.0.0-p5-c local → remoto + v1.0.0 final
-- [ ] Re-validação final T1: py_compile + compileall + guard 6/6 + verify 21/21 2× + deep 150/150 2× + pytest 40 + compose config -q + promtool 6/6
+- [ ] T2 P7 PERF 60m 150->158 (só após T1 verde, pode ir v1.1.0 se <5%): cProfile + otimização + evals 6 types + gate 158/158
+- [ ] T3 P8 TAG 60m 158->162 (só após T1 verde): compose prod healthy + IdP real + ADR-001 + CHANGELOG + tag v1.0.0 push + gate 162/162
+- [ ] D5 push tags: v1.0.0-p5-c local -> remoto + v1.0.0 final
