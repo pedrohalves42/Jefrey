@@ -1,6 +1,16 @@
-# Changelog — Jefrey
+# Changelog - Jefrey
 
 Todas mudancas notaveis deste projeto. Formato baseado em Keep a Changelog.
+
+## [1.2.0-ui] - 2026-09-03 - UI-1 Shell + UI-2/UI-3 100% comercial - Vite+React+TS+Tailwind
+
+**Gate**: _validate_deep 175/175 2x + verify_p6_data 21/21 2x + verify_p6 27/27 2x + verify_p7 54/54 2x + pytest 40 passed + compileall OK + guard 6/6 + promtool 6/6 + compose config -q RC0 + 7/7 healthy (pre-Docker restart)
+**UI**: Vite 5.4.2 + React 18.3 + TS 5.5 + Tailwind 3.4 + shadcn + React Query + Recharts + react-router-dom 6.26 - 5 telas Chat/Memoria/Approvals/Observabilidade/Settings - build 891 modules 633.58kB (gzip 185.40kB) -> src/jefrey/static via FastAPI StaticFiles mount "/" html=True - sem novo container (Axiom #1: 1 programa 7 pecas)
+**Fixes**: src/jefrey/api/main.py StaticFiles mount "/" + reload=False (watchfiles Permission denied OS13 read_only) + tmpfs /app/.cache - src/jefrey/api/auth_middleware.py whitelist "/" "/vite.svg" "/favicon.ico" "/assets/*" (least privilege CIPHER-019) - docker-compose.yml DB postgres:5432/redis:6379 explicit sem fallback localhost - ui/src/pages/Memory.tsx POST 405->GET /memory/search?q=&limit= - ui/src/pages/Approvals.tsx silencia 401 polling sem token (Axiom #1 fail-closed)
+**Gates**: P06-19/P07-044 6->6+ panels (8 panels real) + P07-041 Field(default=False) + P07-023 encoding nao registrada + P07-049 mock rate_limit+ApprovalManager (CI sem Redis/Postgres) - commit 7f07274
+**Docs**: docs/PLANO_MESTRE_P0_COMPLETO.md 163L + docs/PLANO_P0_FECHAMENTO.md 181L + scripts/start_jefrey.bat leigo (Mark Auto-Start)
+**Commits**: 88f2685 merge feat/ui-2 + d970160 + 3deead7 + 7f07274 - tag v1.2.0-ui 6efebb2
+**Proximo**: P1 Voz (Whisper+ElevenLabs+wake) + P2 Mao/Plugins + P3 Theming/code-split - so apos docker 7/7 + tag
 
 ## [1.1.0] — 2026-09-03 — P7 PERF T2 (Ordem B 60m 167->175) — 175/175
 

@@ -1,6 +1,6 @@
 # =============================================================================
-# JEFREY — Stack de infraestrutura
-# Fase P1: PostgreSQL 16 + pgvector (memória vetorial + relacional) e Redis (working memory)
+# JEFREY � Stack de infraestrutura
+# Fase P1: PostgreSQL 16 + pgvector (mem�ria vetorial + relacional) e Redis (working memory)
 # Fase P3a: MCP Gateway (servidor dedicado streamable-http :8001, healthcheck /health)
 # Fase P3b: n8n (Event Router :5678, healthcheck /healthz, importa workflow versionado)
 # Fase P6: Observability (Prometheus :9090 + Grafana :3000)
@@ -44,8 +44,8 @@ services:
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
-  # Fase P5 — FastAPI Server (serviço paralelo ao MCP Gateway)
-  # API REST unificada: /chat (assíncrono com HITL), /memory, /approvals, /health.
+  # Fase P5 � FastAPI Server (servi�o paralelo ao MCP Gateway)
+  # API REST unificada: /chat (ass�ncrono com HITL), /memory, /approvals, /health.
   # Porta 8000 (MCP Server fica na 8001).
   # ---------------------------------------------------------------------------
   jefrey-api:
@@ -68,11 +68,12 @@ services:
       JEFREY_DATABASE__HOST: ${JEFREY_DATABASE__HOST:-postgres}
       JEFREY_REDIS__HOST: ${JEFREY_REDIS__HOST:-redis}
       JEFREY_REDIS__PASSWORD: ${JEFREY_REDIS__PASSWORD:?required}
+      JEFREY_LLM__BASE_URL: ${JEFREY_LLM__BASE_URL:-http://host.docker.internal:11434}
       JEFREY_EMBEDDINGS__BASE_URL: ${JEFREY_EMBEDDINGS__BASE_URL:-http://host.docker.internal:11434}
       JEFREY_API__SECRET_KEY: ${JEFREY_API__SECRET_KEY}
       JEFREY_API__AUDIT_FALLBACK_PATH: ${JEFREY_API__AUDIT_FALLBACK_PATH:-/app/data/audit_fallback.jsonl}
       JEFREY_ENV: ${JEFREY_ENV:-dev}
-      JEFREY_EVENTBUS__HMAC_KEY: ${JEFREY_EVENTBUS__HMAC_KEY:?required em prod — ver .env.example}
+      JEFREY_EVENTBUS__HMAC_KEY: ${JEFREY_EVENTBUS__HMAC_KEY:?required em prod � ver .env.example}
       JEFREY_EVENTBUS__HMAC_KEYS_JSON: ${JEFREY_EVENTBUS__HMAC_KEYS_JSON:-}
       JEFREY_EVENTBUS__HMAC_KID: ${JEFREY_EVENTBUS__HMAC_KID:-v1}
       JEFREY_OAUTH__CLIENT_ID: ${JEFREY_OAUTH__CLIENT_ID:-}
@@ -101,8 +102,8 @@ services:
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
-  # Fase P3a — MCP Gateway (processo separado do agente)
-  # Expõe as ferramentas do SkillRegistry via streamable-http na porta 8001.
+  # Fase P3a � MCP Gateway (processo separado do agente)
+  # Exp�e as ferramentas do SkillRegistry via streamable-http na porta 8001.
   # Cada ferramenta passa pelo PolicyEngine (thread_id vem do request MCP).
   # ---------------------------------------------------------------------------
   mcp-server:
@@ -125,11 +126,12 @@ services:
       JEFREY_DATABASE__HOST: ${JEFREY_DATABASE__HOST:-postgres}
       JEFREY_REDIS__HOST: ${JEFREY_REDIS__HOST:-redis}
       JEFREY_REDIS__PASSWORD: ${JEFREY_REDIS__PASSWORD:?required}
+      JEFREY_LLM__BASE_URL: ${JEFREY_LLM__BASE_URL:-http://host.docker.internal:11434}
       JEFREY_EMBEDDINGS__BASE_URL: ${JEFREY_EMBEDDINGS__BASE_URL:-http://host.docker.internal:11434}
       JEFREY_MCP__HOST: ${JEFREY_MCP__HOST:-0.0.0.0}
       JEFREY_MCP__PORT: ${JEFREY_MCP__PORT:-8001}
       JEFREY_ENV: ${JEFREY_ENV:-dev}
-      JEFREY_EVENTBUS__HMAC_KEY: ${JEFREY_EVENTBUS__HMAC_KEY:?required em prod — ver .env.example}
+      JEFREY_EVENTBUS__HMAC_KEY: ${JEFREY_EVENTBUS__HMAC_KEY:?required em prod � ver .env.example}
       JEFREY_EVENTBUS__HMAC_KEYS_JSON: ${JEFREY_EVENTBUS__HMAC_KEYS_JSON:-}
       JEFREY_EVENTBUS__HMAC_KID: ${JEFREY_EVENTBUS__HMAC_KID:-v1}
       JEFREY_OAUTH__CLIENT_ID: ${JEFREY_OAUTH__CLIENT_ID:-}
@@ -158,12 +160,12 @@ services:
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
-  # Fase P3b — n8n (Event Router)
+  # Fase P3b � n8n (Event Router)
   # Recebe eventos via Webhook /webhook/jefrey-events, roteia por event_type
   # (Switch) e chama o Jefrey MCP Server (http://mcp-server:8001) via HTTP
   # Request nodes falando o protocolo MCP streamable-http (JSON-RPC, Accept JSON).
   # O workflow versionado em n8n/workflows/ e importado no startup
-  # (N8N_WORKFLOWS_IMPORT_FOLDER) — se o volume morrer, não se perde o workflow.
+  # (N8N_WORKFLOWS_IMPORT_FOLDER) � se o volume morrer, n�o se perde o workflow.
   # ---------------------------------------------------------------------------
   n8n:
     image: n8nio/n8n:latest
@@ -196,9 +198,9 @@ services:
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
-  # Fase P6 — Observabilidade (Prometheus + Grafana)
-  # Prometheus: scrape jefrey-api:8000/metrics, retém 30 dias.
-  # Grafana: provisiona datasource Prometheus + dashboard Jefrey (6 painéis).
+  # Fase P6 � Observabilidade (Prometheus + Grafana)
+  # Prometheus: scrape jefrey-api:8000/metrics, ret�m 30 dias.
+  # Grafana: provisiona datasource Prometheus + dashboard Jefrey (6 pain�is).
   # ---------------------------------------------------------------------------
   prometheus:
     image: prom/prometheus:v2.53.0

@@ -16,6 +16,17 @@ export default defineConfig({
     },
     build: {
         outDir: "../src/jefrey/static",
-        emptyOutDir: true
+        emptyOutDir: true,
+        chunkSizeWarningLimit: 600,
+        rollupOptions: {
+            output: {
+                manualChunks: {
+                    vendor: ["react", "react-dom", "react-router-dom"],
+                    query: ["@tanstack/react-query"],
+                    charts: ["recharts"],
+                    ui: ["clsx", "tailwind-merge", "class-variance-authority", "lucide-react"]
+                }
+            }
+        }
     }
 });

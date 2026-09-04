@@ -123,3 +123,7 @@ ui/dist/
 # keep built static versionado para Docker sem npm
 !src/jefrey/static/
 !src/jefrey/static/**
+
+# UI build cache
+ui/*.tsbuildinfo
+ui/tsconfig*.tsbuildinfo
