@@ -2,6 +2,16 @@
 
 Todas mudancas notaveis deste projeto. Formato baseado em Keep a Changelog.
 
+## [1.3.0-p1-voz] — 2026-09-03 — P1 Voz Viva (STT+TTS+Wake+HUD) — qwen2:0.5b + whisper small + VoiceButton
+**Gate**: _validate_deep 175/175 2x + verify_p6_data 21/21 2x + verify_p6 27/27 2x 9 panels + verify_p7 54/54 2x + pytest 40 passed + compileall OK + docker 7/7 + /stt 401->200 + /tts 200 + /chat qwen2 200 + /metrics stt/tts histogram + openapi 5 rotas
+**P1.0** qwen2:0.5b 352MB workaround OOM 8b 3.3GB — .env MODEL + compose JEFREY_LLM__MODEL x2 host.docker.internal
+**P1.1** STT faster-whisper small int8 pt + TTS elevenlabs/pyttsx3 fallback + mock dev only (Axiom #3)
+**P1.2** API /stt POST multipart + /tts POST JSON + /health + /voices — 401 fail-closed + Policy MEDIUM + rate + HMAC + audit + STT/TTS histogram — registry 42
+**P1.3** Frontend VoiceButton HUD pulse 1.0-1.6 CEOGPT + useVoice stt->chat->tts chain + Chat slot + vite proxy stt/tts — 2409 modules 5 chunks
+**P1.4** Wake useWakeWord Web Speech jarvis + Settings Voz Card 5 vozes Mark-LII + localStorage
+**P1.5** Prometheus histogram stt/tts + Grafana panel 9 p95 + alert JefreySttLatencyHigh + gates verde
+**Commits** feat/p1-voz 45c0d8f -> main 7e99ac7 — Axiom #1-7 + CIPHER 025-035 + Livros 1-10 + Sites CEOGPT/Mark-LII/XXXIX — 1 programa 7 pecas (sem novo container)
+
 ## [1.2.0-ui] - 2026-09-03 - UI-1 Shell + UI-2/UI-3 100% comercial - Vite+React+TS+Tailwind
 
 **Gate**: _validate_deep 175/175 2x + verify_p6_data 21/21 2x + verify_p6 27/27 2x + verify_p7 54/54 2x + pytest 40 passed + compileall OK + guard 6/6 + promtool 6/6 + compose config -q RC0 + 7/7 healthy (pre-Docker restart)

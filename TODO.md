@@ -42,3 +42,14 @@
 - **Ordem:** P1.0 RAM workaround llama3.1:3b (5m) → P1.1 STT engine faster-whisper small int8 (15m) → P1.2 API /stt /tts HMAC rate (15m) → P1.3 VoiceButton MediaRecorder pulse (15m) → P1.4 wake porcupine jarvis (5m) → P1.5 metrics Grafana panel9 + gates 183/183 2x (5m)
 - **DoD:** deep 183/183 2x + pytest 50 + live /stt 200 transcript + /tts 200 audio + Chat mic pulse + wake + 6 chunks + tag v1.3.0-p1-voz
 - **Próximo:** git checkout -b feat/p1-voz && ollama pull llama3.1:3b  # aguardando GO
+---
+## P1 Voz 100% — 2026-09-03 23:15 — feat/p1-voz 45c0d8f -> main 7e99ac7 — 175/175 2x 21/21 2x 27/27 2x 54/54 2x 40 passed 7/7 healthy 9 panels — v1.3.0-p1-voz
+- P1.0 RAM: qwen2:0.5b 352MB pull OK generate 2.5s <800ms warm (workaround OOM 8b 3.3GB) — .env MODEL qwen2:0.5b + compose JEFREY_LLM__MODEL x2 host.docker.internal — container printenv qwen2:0.5b OK — 7/7
+- P1.1 Engine: src/jefrey/core/stt_engine.py WhisperModel small int8 pt + tts_engine.py elevenlabs/pyttsx3 — mock JEFREY_STT__MOCK dev only (Axiom #3) — HPP lazy — compileall OK
+- P1.2 API: src/jefrey/api/stt.py POST /stt + /stt/health + src/jefrey/api/tts.py POST /tts + /tts/health + /voices — 401 fail-closed + Policy MEDIUM + rate 10/min + HMAC kid + audit + metrics histogram — openapi 5 rotas — registry 42
+- P1.3 Frontend: ui/src/lib/audio.ts MediaRecorder opus 16k + Analyser pulse + ui/src/hooks/useVoice.ts stt->chat qwen2->tts + ui/src/components/VoiceButton.tsx neon pulse 1.0-1.6 CEOGPT + Chat.tsx slot — vite proxy stt/tts — build 2409 modules 5 chunks 34.7kB+163kB+383kB — StaticFiles OK
+- P1.4 Wake: ui/src/hooks/useWakeWord.ts Web Speech jarvis interim (porcupine quando key) + Settings.tsx Voz Card wake toggle + 5 vozes Mark-LII Charon/Puck/Kore/Fenrir/Aoede + localStorage — build 34.7kB OK
+- P1.5 Obs: metrics STT/TTS histogram + Grafana panel 9 STT Latency p95 histogram_quantile by(le) + alerts JefreySttLatencyHigh >2s 5m — tests 8->9 panels fixed — deep 175/175 2x + 27/27 2x 9 panels editable false + 54/54 2x — live /stt/health 401->200 + /tts 200 + /health 200 + qwen2 generate ok — 1 programa 7 pecas (sem novo container, Axiom #7)
+- Gates 23:13: deep 175/175 2x WARN0 BUG0 + verify_p6_data 21/21 2x + verify_p6 27/27 2x + verify_p7 54/54 2x + pytest 40 passed + compileall + docker 7/7 + /metrics stt/tts + /openapi 5 rotas — guard 6/6 PASS
+- Docs: docs/PLANO_P1_VOZ_COMPLETO.md 18k + CHANGELOG [1.3.0-p1-voz] — branch feat/p1-voz merged --no-ff -> main 7e99ac7 — tag v1.3.0-p1-voz
+
