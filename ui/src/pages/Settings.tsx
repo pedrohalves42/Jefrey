@@ -139,7 +139,7 @@ export default function Settings() {
               />
               <Button variant="outline" onClick={() => setShowToken((v) => !v)}>{showToken ? "Ocultar" : "Mostrar"}</Button>
             </div>
-            <p className="text-xs text-muted-foreground">Salvo em localStorage jefrey_token — nunca enviado em query.</p>
+            <p className="text-xs text-muted-foreground">Salvo em localStorage jefrey_token â€” nunca enviado em query. Ja esta pronto apos abrir o app (Onboarding auto) â€” este e so avancado.</p>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -152,7 +152,7 @@ export default function Settings() {
                 onChange={(e) => setUserIdState(e.target.value)}
                 aria-label="user_id"
               />
-              <p className="text-xs text-muted-foreground">Todo POST leva este user_id — sem default system.</p>
+              <p className="text-xs text-muted-foreground">Todo POST leva este user_id â€” sem default system.</p>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">thread_id</label>
@@ -182,8 +182,8 @@ export default function Settings() {
             <div className="font-medium mb-1">Como usar como 1 programa (Guia leigo):</div>
             <ol className="list-decimal ml-4 space-y-1">
               <li>Clique Obter token dev (em dev) ou cole seu Bearer acima e clique Salvar.</li>
-              <li>Va em Chat e envie mensagem — agora POST /chat 200 (antes 401).</li>
-              <li>Va em Memoria e busque — POST /memory/search com mesmo user_id.</li>
+              <li>Va em Chat e envie mensagem â€” agora POST /chat 200 (antes 401).</li>
+              <li>Va em Memoria e busque â€” POST /memory/search com mesmo user_id.</li>
               <li>Approvals/Observability leem /approvals e /metrics vivos (15s).</li>
             </ol>
           </div>
@@ -192,14 +192,14 @@ export default function Settings() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">Voz — STT/TTS + Wake &quot;jarvis&quot; <Badge variant="secondary">P1</Badge></CardTitle>
+          <CardTitle className="flex items-center gap-2">Voz â€” STT/TTS + Wake &quot;jarvis&quot; <Badge variant="secondary">P1</Badge></CardTitle>
           <p className="text-sm text-muted-foreground">Microfone MediaRecorder 16k - POST /stt (whisper small) - /chat qwen2:0.5b - POST /tts. Wake usa Web Speech jarvis (porcupine quando key configurada).</p>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={vozWake} onChange={(e) => setVozWake(e.target.checked)} />
-              Wake &quot;jarvis&quot; {wake.listening ? "(ouvindo...)" : "(off)"} {!wake.supported && <span className="text-xs text-muted-foreground"> — navegador sem SpeechRecognition</span>}
+              Wake &quot;jarvis&quot; {wake.listening ? "(ouvindo...)" : "(off)"} {!wake.supported && <span className="text-xs text-muted-foreground"> â€” navegador sem SpeechRecognition</span>}
             </label>
             <Badge variant={wake.listening ? "default" : "outline"}>{wake.listening ? "wake ativo" : "wake off"}</Badge>
           </div>
@@ -207,16 +207,16 @@ export default function Settings() {
             <label className="text-sm font-medium">Voz TTS (Mark-LII 5 vozes + Piper)</label>
             <select value={vozVoice} onChange={(e) => setVozVoice(e.target.value)} className="rounded-md border px-3 py-2 text-sm">
               <option value="pt_BR-faber-medium">Faber PT-BR (piper local, sem custo)</option>
-              <option value="Charon">Charon — masc grave (ElevenLabs)</option>
-              <option value="Puck">Puck — masc jovem (ElevenLabs)</option>
-              <option value="Kore">Kore — fem suave (ElevenLabs)</option>
-              <option value="Fenrir">Fenrir — masc forte (ElevenLabs)</option>
-              <option value="Aoede">Aoede — fem clara (ElevenLabs)</option>
+              <option value="Charon">Charon â€” masc grave (ElevenLabs)</option>
+              <option value="Puck">Puck â€” masc jovem (ElevenLabs)</option>
+              <option value="Kore">Kore â€” fem suave (ElevenLabs)</option>
+              <option value="Fenrir">Fenrir â€” masc forte (ElevenLabs)</option>
+              <option value="Aoede">Aoede â€” fem clara (ElevenLabs)</option>
             </select>
             <p className="text-xs text-muted-foreground">Requer JEFREY_TTS__API_KEY para ElevenLabs; sem key usa piper/pyttsx3 fallback (Building LLM Apps).</p>
           </div>
           <div className="rounded-md border p-3 text-xs bg-muted/20">
-            <div>STT: <span className="font-mono">small pt int8</span> — mock dev via JEFREY_STT__MOCK=1</div>
+            <div>STT: <span className="font-mono">small pt int8</span> â€” mock dev via JEFREY_STT__MOCK=1</div>
             <div>LLM: <span className="font-mono">qwen2:0.5b 352MB</span> (workaround OOM 8b 3.3GB)</div>
             <div>HUD pulse: Analyser reativa (CEOGPT) no botao mic</div>
           </div>

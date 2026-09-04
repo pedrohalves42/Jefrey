@@ -45,3 +45,27 @@ export type MemoryHit = { content: string; score?: number; metadata?: Record<str
 
 // F3 LLM probe helper (Axiom #1 visible, never crash)
 export async function probeHealth(): Promise<{ok:boolean}> { try { const r=await fetch('/health'); return {ok:r.ok}; } catch { return {ok:false}; } }
+
+// F6-1 Onboarding zero-clique — auto POST /auth/dev-token em dev (fail-closed 403 em prod)
+// Nunca mostra token em URL (Security Eng). Silencioso, idempotente.
+export function isOnboarded(): boolean {
+  try { return localStorage.getItem("jefrey_onboarded") === "1"; } catch { return false; }
+}
+export function setOnboarded(v: boolean): void {
+  try { if (v) localStorage.setItem("jefrey_onboarded", "1"); else localStorage.removeItem("jefrey_onboarded"); } catch {}
+}
+export async function ensureDevToken(): Promise<string | null> {
+  const existing = getToken();
+  if (existing) return existing;
+  try {
+    const r = await fetch("/auth/dev-token", { method: "POST", headers: { "X-User-Id": getUserId(), "Content-Type": "application/json" }, body: JSON.stringify({}) });
+    if (!r.ok) return null;
+    const j = await r.json().catch(() => ({} as Record<string, unknown>));
+    const tok = String((j as Record<string, unknown>).token || "");
+    const uid = String((j as Record<string, unknown>).user_id || getUserId());
+    if (!tok) return null;
+    setToken(tok);
+    if (uid) setUserId(uid);
+    return tok;
+  } catch { return null; }
+}

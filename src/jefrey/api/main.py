@@ -23,6 +23,7 @@ from src.jefrey.api.chat import router as chat_router
 from src.jefrey.api.memory import router as memory_router
 from src.jefrey.api.metrics_endpoint import router as metrics_router
 from src.jefrey.api.stt import router as stt_router
+from src.jefrey.api.connections import router as connections_router
 from src.jefrey.api.tts import router as tts_router
 from src.jefrey.core.config import get_settings
 from src.jefrey.core.metrics import SERVICE_HEALTH
@@ -128,6 +129,7 @@ def create_app() -> FastAPI:
     app.include_router(memory_router)
     app.include_router(stt_router)
     app.include_router(tts_router)
+    app.include_router(connections_router)
 
     # Monta a sub-aplicacao de aprovacoes Starlette (mantem CIPHER-019, 020, 024 intactos)
     # FIX: mount em /approvals (nao /) para evitar conflito com outros routers.
@@ -136,12 +138,12 @@ def create_app() -> FastAPI:
     approvals_app = build_approvals_app()
     app.mount("/approvals", approvals_app)
 
-    # UI-1 Shell — serve Vite build em / (Axiom #1: 1 programa, 7 pecas -> sem novo container)
+    # UI-1 Shell â€” serve Vite build em / (Axiom #1: 1 programa, 7 pecas -> sem novo container)
     # FastAPI StaticFiles serve src/jefrey/static com html=True; rotas /api/* tem precedencia sobre mount "/"
     try:
         _static_dir = Path(__file__).resolve().parent.parent / "static"  # src/jefrey/static (fix: api/ -> jefrey/)
         if _static_dir.exists():
-            # mount em "/" depois das rotas — /health, /chat, /memory, /approvals continuam com prioridade
+            # mount em "/" depois das rotas â€” /health, /chat, /memory, /approvals continuam com prioridade
             app.mount("/", StaticFiles(directory=str(_static_dir), html=True), name="ui-static")
             logger.info("UI static mounted at / from %s", _static_dir)
     except Exception as e:
