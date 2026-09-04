@@ -40,7 +40,7 @@ def test_dashboard_json_8_panels():
     assert data["schemaVersion"] == 39
     assert data["refresh"] == "10s"
     panels = data["panels"]
-    assert len(panels) == 8, f"expected 8 panels SLO, got {len(panels)}: {[x['title'] for x in panels]}"
+    assert len(panels) == 9, f"expected 9 panels P1 (8 SLO + STT), got {len(panels)}: {[x['title'] for x in panels]}"
     titles = [x["title"] for x in panels]
     for must in ["Config Valid", "Service Up", "Kid Legacy", "API Error Rate", "RateLimit", "Memory p95"]:
         assert any(must in t for t in titles), f"missing panel {must}"

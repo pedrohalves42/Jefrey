@@ -12,7 +12,9 @@ export default defineConfig({
       '/chat': 'http://localhost:8000',
       '/memory': 'http://localhost:8000',
       '/approvals': 'http://localhost:8000',
-      '/metrics': 'http://localhost:8000'
+      '/metrics': 'http://localhost:8000',
+      '/stt': 'http://localhost:8000',
+      '/tts': 'http://localhost:8000'
     }
   },
   build: {
@@ -31,3 +33,4 @@ export default defineConfig({
     }
   }
 })
+

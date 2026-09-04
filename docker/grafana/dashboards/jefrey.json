@@ -325,6 +325,42 @@
           "instant": true
         }
       ]
+    },
+    {
+      "title": "STT Latency p95",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 20
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(jefrey_stt_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "STT p95",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(jefrey_tts_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "TTS p95",
+          "refId": "B"
+        }
+      ]
     }
   ],
   "refresh": "10s",

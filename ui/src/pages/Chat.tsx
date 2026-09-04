@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { apiFetch, getUserId, getThreadId, setThreadId, getToken, mapHttpError } from "@/lib/api"
+import { VoiceButton } from "@/components/VoiceButton"
 
 type Msg = { role: "user" | "assistant"; content: string }
 
@@ -100,10 +101,11 @@ export default function Chat() {
               )}
             </div>
           )}
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            <VoiceButton onTranscript={(txt)=> setInput(txt)} onReply={(reply)=> setMsgs((m)=> [...m, { role: "assistant", content: reply }])} />
             <input
               className="flex-1 rounded-md border px-3 py-2 text-sm"
-              placeholder="Digite sua mensagem e pressione Enter"
+              placeholder="Digite sua mensagem e pressione Enter (ou use o microfone)"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") send(); }}
