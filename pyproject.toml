@@ -55,6 +55,9 @@ dependencies = [
     "duckduckgo-search>=6.0",
     "ddgs>=9.0",  # N1 rename fallback
     "tavily-python>=0.3",
+    "faster-whisper>=1.0.0",
+    "onnxruntime>=1.17.0",
+    "av>=10.0.0",
 ]
 
 [project.optional-dependencies]

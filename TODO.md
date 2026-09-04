@@ -1,4 +1,4 @@
-# TODO Pre-codar — 2026-09-04 20:05 — base 175/175 2x + P6 27/27 2x + P7 54/54 2x + 40 tests 2x + F6 LIVE 24/24 — v1.5.0-leigo-100 SYNCED 8b304bc (+ vite 2b2fd2a 100B)
+# TODO Pre-codar — 2026-09-04 20:50 — base 175/175 2x + P6 27/27 2x + P7 54/54 2x + 40 tests 2x + F6 LIVE 24/24 — v1.6.0-jarvis-100 SYNCED Stark-mode Jefrey 175/175 2x + 54/54 2x + 40 2x
 
 ## Base ja fechada (nao mexer sem branch)
 - [x] T1 HARDENING 100% + T3 P8 TAG v1.0.0 167/167 + T2 P7 PERF v1.1.0 175/175 + D5 push origin/main 11c864c + 3 tags (v1.0.0, v1.0.0-p5-c, v1.1.0)
@@ -75,3 +75,14 @@
 - **Stack**: Python 3.12 FastAPI Postgres+pgvector HNSW m16 ef64 Redis Streams XADD 10000 DLQ 5000 JWT RS256 kid 1 programa 7 pecas
 - **Refs**: Axiom #1-7 + CIPHER 025-035 + 10 Livros (MCP Spec 2026-07-28, Security Eng, Prometheus cap5/6/10/11, DDIA cap3/5/6/12, SWE cap8/14, Fluent 19-21, HPP cap1-4, Building LLM Apps, Pragmatic 20th) + Mark-LII vTIq4pUR7o0 / Mark-XXXIX iq0DlY0Sg-k / CEOGPT moritz.ceogpt.de/jarvis-aufbau glassmorphism HUD pulse hue wheel chime 2.4s / HUD DcjTYTiCt6P
 - **Prova**: build 6 chunks 52kB + vite.svg 100B 2b2fd2a + manifest/sw 200 whitelist + Chat Pronto + HUD pulse + ConnectionHub 4 botoes + Tour ?tour=1 + start_jefrey.bat v2 + 24/24 live
+
+---
+
+## F6-JARVIS 100% — 2026-09-04 20:50 — Jefrey Stark-mode (Jefrey permanece Jefrey) — v1.6.0-jarvis-100 — APROVADO
+- **Branding**: Jefrey permanece Jefrey — Stark-mode capacidades J.A.R.V.I.S. sem renomeação — system_prompt Jefrey Stark Lab + HudReactor JEFREY + Chat JEFREY + wake jefrey/jarvis alias — 0 ocorrências J.A.R.V.I.S. em UI
+- **Build**: HudReactor aspas fix -> Vite 5.4.21 1617 modules 59.34kB gzip18.23 + vendor 163kB + 6 chunks — src/jefrey/static copy OK — docker rebuild jefrey-api:local 7/7 healthy
+- **5 repos**: microsoft/JARVIS EasyTool + isair/jarvis HUD 5 states wake fuzzy 0.78 + LiiLk sentence TTS 4 frases + rafaballerini comandos {cidade} SafeDict + OpenJarvis presets — Stark Lab pronto para uso
+- **Gates 2x idempotente (SWE cap14, Axiom #1-7, CIPHER 025-035, Livros 1-10)**: deep 175/175 WARN0 BUG0 2x + verify_p6_data 21/21 2x + verify_p6 27/27 2x 9 panels by(le) 4 editable false + verify_p7 54/54 2x + pytest 40 passed 2x + compileall OK + compose config -q RC0 + promtool 7 rules SUCCESS + test rules SUCCESS + grafana 9 panels
+- **Live**: /health 200 + /metrics 53 jefrey_ + / 200 HTML 5 chunks + /openapi 200 + anon 401 auth 200 + ollama qwen2.5:0.5b + STT small pt + TTS piper 6 vozes + chat poll running->complete
+- **Tag**: v1.6.0-jarvis-100 — PLANO_SINCRONIZADO P0-P8 V2.1 fechado 100% — pronto para uso leigo 100% comercial
+

@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 
 const STEPS = [
   { title: "1/4 Chat", text: "Digite 'oi' e clique Enviar. Ja esta com token automatico (Pronto no header). Sem 401.", target: "/" },
-  { title: "2/4 Voz", text: "Clique no microfone. Fale 'oi Jefrey'. STT small pt → qwen2:0.5b → TTS piper 6 vozes. Wake 'jarvis' em Settings.", target: "/" },
+  { title: "2/4 Voz", text: "Clique no microfone. Fale 'oi Jefrey' (ou 'Jarvis'). STT small pt → qwen2:0.5b → TTS piper 6 vozes. Wake 'Jefrey/Jarvis' em Settings.", target: "/" },
   { title: "3/4 Conexoes", text: "Use os 4 botoes abaixo do Chat: Navegar, Arquivo (500MB → HNSW), Buscar web (Tavily), Enviar WhatsApp/Telegram via n8n.", target: "/" },
   { title: "4/4 Observar", text: "Observabilidade mostra 3 luzes gigantes: p95 <300ms, 7/7 healthy, 42 tools. Grafana :3000 so para dev.", target: "/observability" },
 ]

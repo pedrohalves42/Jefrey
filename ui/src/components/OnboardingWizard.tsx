@@ -51,7 +51,7 @@ export function OnboardingWizard({ onDone }: { onDone?: () => void }) {
                 <li>"oi, o que voce faz?"</li>
                 <li>"salve uma memoria: meu projeto e Jarvis"</li>
               </ul>
-              <p className="text-xs text-muted-foreground">Voz: STT small pt + TTS piper 6 vozes. Wake "jarvis" em Settings.</p>
+              <p className="text-xs text-muted-foreground">Voz: STT small pt + TTS piper 6 vozes. Wake "Jefrey/Jarvis" em Settings.</p>
             </div>
           )}
           {step === 3 && (

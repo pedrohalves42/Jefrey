@@ -15,6 +15,7 @@ from __future__ import annotations
 import datetime
 import functools
 import json
+import pathlib
 import logging
 import os
 import re
@@ -111,6 +112,10 @@ class AuditLogger:
             from src.jefrey.core.config import get_settings
 
             path = get_settings().api.audit_fallback_path
+            try:
+                pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
+            except Exception:
+                pass
             os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
             record = {
                 "ts": datetime.datetime.now(datetime.timezone.utc).isoformat(),

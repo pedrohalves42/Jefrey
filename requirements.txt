@@ -72,3 +72,9 @@ packaging>=24.0
 cachetools>=5.3.0
 PyJWT>=2.9.0
 cryptography>=42.0.0
+
+# Voice STT — faster-whisper (J.A.R.V.I.S. fix v1.6)
+# HPP cap1-4 int8 cpu, lazy load in stt_engine.py
+faster-whisper>=1.0.0
+onnxruntime>=1.17.0
+av>=10.0.0

@@ -109,13 +109,16 @@ class JefreyAgent:
                 streaming=True,
             )
         elif cfg.provider == "ollama":
+            # EasyTool compact + isair smart tool cap (refs microsoft/JARVIS + isair/jarvis)
+            # qwen2.5:0.5b 352MB needs short context; llama3.1:8b 4.9GB benefits from larger ctx
+            is_small = "0.5b" in cfg.model or "1b" in cfg.model or "3b" in cfg.model
             return ChatOllama(
                 model=cfg.model,
-                temperature=cfg.temperature,
+                temperature=min(cfg.temperature, 0.7),
                 base_url=base_url or "http://localhost:11434",
-                timeout=300,  # 5 min para carregar modelo
-                num_ctx=4096,
-                num_predict=2048,
+                timeout=90,
+                num_ctx=8192 if not is_small else 4096,
+                num_predict=512 if is_small else 1024,
             )
         else:
             raise ValueError(f"Provider desconhecido: {cfg.provider}")
@@ -208,16 +211,33 @@ class JefreyAgent:
         cfg = get_settings()
         
         # Prepara mensagens com system prompt
-        system_prompt = self._system_prompt_template.format(
-            tools=", ".join([t.name for t in self.tools]) if self.tools else "nenhuma",
+        # EasyTool: compact tool instruction (microsoft/JARVIS) — reduces prompt ~70% for 0.5b + isair/jarvis tool_selection cap
+        def _compact_tools(tools):
+            if not tools:
+                return "nenhuma"
+            lines = []
+            for tool in tools[:12]:  # cap 12 to avoid context rot (isair/jarvis Smart tool selection)
+                desc = (getattr(tool, "description", "") or "").strip().split("\n")[0][:120]
+                lines.append(f"- {tool.name}: {desc}")
+            if len(tools) > 12:
+                lines.append(f"... +{len(tools)-12} tools via tool_search")
+            return "\n".join(lines)
+
+        # Safe format: preserva {cidade}/{texto}/{app} literais (isair wake fuzzy + rafaballerini comandos) — evita KeyError
+        class _SafeDict(dict):
+            def __missing__(self, key): return "{" + key + "}"
+        system_prompt = self._system_prompt_template.format_map(_SafeDict(
+            tools=_compact_tools(self.tools),
             version=cfg.version,
             user_name=cfg.user_name,
             chat_history="",
             relevant_memories="",
             current_datetime=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        )
+        ))
         skill_prompts = self._load_skill_prompts()
-        
+        # Stark Lab: limit skill prompts to 1200 chars for 0.5b stability (DDIA cap5)
+        if len(skill_prompts) > 1200:
+            skill_prompts = skill_prompts[:1200] + "\n...[truncado para performance Stark]"
         full_system = f"{system_prompt}\n\n{skill_prompts}".strip()
         
         messages = [SystemMessage(content=full_system)] + state.messages

@@ -35,7 +35,7 @@ class STTEngine:
         try:
             from faster_whisper import WhisperModel
             # HPP cap2: int8 cpu, lazy load
-            self._model = WhisperModel(self.model_name, device="cpu", compute_type="int8")
+            self._model = WhisperModel(self.model_name, device="cpu", compute_type="int8", download_root="/tmp/hf-cache")
             logger.info("STT model loaded %s", self.model_name)
         except Exception as e:
             self._load_error = str(e)

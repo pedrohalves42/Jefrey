@@ -96,7 +96,7 @@ export default function Settings() {
       return "pt_BR-faber-medium"
     }
   })
-  const wake = useWakeWord({ enabled: vozWake, keyword: "jarvis", onWake: () => {
+  const wake = useWakeWord({ enabled: vozWake, keyword: "jefrey", onWake: () => {
     try {
       document.querySelector<HTMLButtonElement>('[aria-label="Falar com Jefrey"]')?.click()
     } catch {}

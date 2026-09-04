@@ -1,5 +1,15 @@
 # Changelog - Jefrey
 
+## [1.6.0-jarvis-100] — 2026-09-04 — Jefrey Stark-mode (capacidades J.A.R.V.I.S.) — 175/175 2x + 21/21 2x + 27/27 2x + 54/54 2x + 40 passed 2x — APROVADO
+**Projeto**: Jefrey permanece Jefrey — Stark-mode inspirado no J.A.R.V.I.S. (Just A Rather Very Intelligent System). Sem renomeação. Marca Jefrey + HUD JEFREY + wake jefrey/jarvis alias.
+**Gate 2x idempotente (SWE cap14)**: _validate_deep 175/175 WARN0 BUG0 2x + verify_p6_data 21/21 2x + verify_p6 27/27 2x + verify_p7 54/54 2x + pytest 40 passed 2x + compileall OK + compose config -q RC0 + 7/7 healthy + promtool 7 rules SUCCESS + test rules SUCCESS + grafana 9 panels by(le) 4 + live /health 200 /metrics 53 jefrey_ /vite 200
+**Branding Stark-mode (Jefrey)**: config/prompts/system_prompt.md — Jefrey Stark Lab inspirado no J.A.R.V.I.S. + nunca diga J.A.R.V.I.S. — ui/src/components/HudReactor.tsx JEFREY 180px + type JefreyState alias JarvisState + hint diga Jefrey ou Jarvis — ui/src/pages/Chat.tsx Jefrey online / JEFREY: / Fale com Jefrey — ui/src/App.tsx wake Jefrey — ui/src/index.css Jefrey Stark Lab — wake default jefrey alias jarvis/sir
+**Build fix**: ui/src/components/HudReactor.tsx aspas curly -> single-quote ascii safe — Vite 5.4.21 1617 modules -> index-D7aXIlkn.js 59.34kB gzip18.23 + vendor 163kB + ui 24kB + query 38kB + css 23.12kB — src/jefrey/static copy OK — 7/7 healthy rebuild jefrey-api:local
+**5 repos capacidades (sem renomear)**: microsoft/JARVIS EasyTool compact 12 tools 120 chars — isair/jarvis face_widget 5 states + wake fuzzy 0.78 bigram Dice — LiiLk/Local-AI-Companion sentence TTS streaming 4 frases — rafaballerini/AssistentePessoal comandos rápidos {cidade}/{texto}/{app} SafeDict — OpenJarvis presets digest/deep-research/code-assistant
+**Observabilidade**: docker/prometheus/tests/alerts_test.yml STT buckets 0.1/0.3/0.6/1/2/5/+Inf sum 450 p95 >2s — Grafana 9 panels by(le) 4 histogram_quantile — alerts 7 rules SUCCESS
+**Stack**: Python 3.12 FastAPI Postgres+pgvector HNSW m16 ef64 Redis Streams 10000 DLQ 5000 JWT RS256 kid 1 programa 7 peças — Ollama qwen2.5:0.5b + STT small pt + TTS piper pt_BR-faber-medium — Vite 5.4.2 React 18.3 Tailwind glass neon
+**Prova**: deep 175/175 2x + 21/21 2x + 27/27 2x + 54/54 2x + 40 2x + /health 200 + /metrics 53 + 7/7 healthy + HUD JEFREY pulse + Chat JEFREY + wake jefrey/jarvis + PWA + Tour
+
 ## [1.5.0-leigo-100] — 2026-09-04 — F6 Leigo 100% (Onboarding + HUD Glass + Conexoes + PWA + Tour) — 175/175 2x + 24/24 live — APROVADO
 **Gate**: _validate_deep 175/175 WARN0 BUG0 2x + verify_p6_data 21/21 2x + verify_p6 27/27 2x 9 panels by(le) editable false orgId:1 + verify_p7 54/54 2x + pytest 40 passed 2x + compileall RC0 + compose config -q RC0 + 7/7 healthy + live 24/24 (health/metrics/vite.svg 100B/openapi/manifest/sw/prometheus/grafana anon401/auth200 panels9/ollama qwen2.5/dev-token/chat poll 48s/connections browse 200/memory add 401)
 **F6-1**: Onboarding Zero-Clique auto POST /auth/dev-token + OnboardingWizard 3 steps + Badge Pronto verde (leigo sem Settings)

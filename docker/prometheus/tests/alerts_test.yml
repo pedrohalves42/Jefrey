@@ -106,18 +106,24 @@ tests:
               description: "Up==0 ha 1m - checar docker logs jefrey-api, health /health, postgres/redis health."
   - interval: 1m
     input_series:
+      - series: 'jefrey_stt_duration_seconds_bucket{le="0.1",provider="whisper",model="small"}'
+        values: '0+1x10'
       - series: 'jefrey_stt_duration_seconds_bucket{le="0.3",provider="whisper",model="small"}'
         values: '0+1x10'
       - series: 'jefrey_stt_duration_seconds_bucket{le="0.6",provider="whisper",model="small"}'
         values: '0+1x10'
       - series: 'jefrey_stt_duration_seconds_bucket{le="1",provider="whisper",model="small"}'
         values: '0+1x10'
+      - series: 'jefrey_stt_duration_seconds_bucket{le="2",provider="whisper",model="small"}'
+        values: '0+5x10'
+      - series: 'jefrey_stt_duration_seconds_bucket{le="5",provider="whisper",model="small"}'
+        values: '0+95x10'
       - series: 'jefrey_stt_duration_seconds_bucket{le="+Inf",provider="whisper",model="small"}'
         values: '0+100x10'
       - series: 'jefrey_stt_duration_seconds_count{provider="whisper",model="small"}'
         values: '0+100x10'
       - series: 'jefrey_stt_duration_seconds_sum{provider="whisper",model="small"}'
-        values: '0+90x10'
+        values: '0+450x10'
     alert_rule_test:
       - eval_time: 8m
         alertname: JefreySttLatencyHigh
