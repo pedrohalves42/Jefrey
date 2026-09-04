@@ -1,0 +1,14 @@
+{
+  "name": "Jefrey — 1 programa, 7 pecas",
+  "short_name": "Jefrey",
+  "description": "Jefrey 175/175 + voz + conexoes — 1 programa 7 pecas",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#06b6d4",
+  "icons": [
+    { "src": "/vite.svg", "sizes": "32x32", "type": "image/svg+xml", "purpose": "any maskable" },
+    { "src": "/vite.svg", "sizes": "192x192", "type": "image/svg+xml" },
+    { "src": "/vite.svg", "sizes": "512x512", "type": "image/svg+xml" }
+  ]
+}

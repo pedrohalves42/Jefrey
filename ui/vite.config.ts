@@ -9,12 +9,14 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/health': 'http://localhost:8000',
+      '/auth': 'http://localhost:8000',
       '/chat': 'http://localhost:8000',
       '/memory': 'http://localhost:8000',
       '/approvals': 'http://localhost:8000',
       '/metrics': 'http://localhost:8000',
       '/stt': 'http://localhost:8000',
-      '/tts': 'http://localhost:8000'
+      '/tts': 'http://localhost:8000',
+      '/connections': 'http://localhost:8000'
     }
   },
   build: {

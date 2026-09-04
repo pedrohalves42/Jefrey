@@ -23,7 +23,7 @@ from src.jefrey.oauth2.introspect import introspect_token, IntrospectionResult
 
 logger = logging.getLogger(__name__)
 
-_PUBLIC_PATHS = {"/health", "/docs", "/openapi.json", "/redoc", "/metrics", "/", "/vite.svg", "/favicon.ico", "/auth/dev-token"}
+_PUBLIC_PATHS = {"/health", "/docs", "/openapi.json", "/redoc", "/metrics", "/", "/vite.svg", "/favicon.ico", "/auth/dev-token", "/manifest.json", "/sw.js"}
 # UI-1 Shell public — Axiom 5 least privilege (Livro 3 Security Eng cap8, CIPHER-019)
 # /chat|/memory|/approvals continuam protegidos; /assets/* sao build Vite hashados sem user data
 # /auth/dev-token e publico mas fail-closed em prod (CIPHER-021, auth.py is_prod 403)
