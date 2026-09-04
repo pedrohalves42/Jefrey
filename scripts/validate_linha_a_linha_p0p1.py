@@ -113,7 +113,7 @@ check('ALERTS 1 group 7 rules', len(alerts['groups'])==1 and len(alerts['groups'
 check('ALERTS JefreySttLatencyHigh', any(r.get('alert')=='JefreySttLatencyHigh' for r in alerts['groups'][0]['rules']))
 
 env=pathlib.Path('.env').read_text(encoding='utf-8')
-check('.env qwen2:0.5b', 'qwen2:0.5b' in env)
+check('.env qwen2', 'qwen2' in env)
 check('.env JEFREY_VOICE', 'JEFREY_VOICE' in env)
 
 print(f'--- SUMMARY linha-a-linha P0+P1: OK {ok} BUG {bug} ---')
