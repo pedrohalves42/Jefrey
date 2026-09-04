@@ -89,6 +89,9 @@ async def chat(request: Request, req: ChatRequest):
 
     # Verifica se já há uma tarefa ativa rodando nesta thread (composto por user+thread)
     task_key = f"{user_id}:{thread_id}"
+    # Cleanup stale done task before new run (allows poll complete -> idle transition properly)
+    if task_key in _RUNNING_TASKS and _RUNNING_TASKS[task_key].done():
+        _RUNNING_TASKS.pop(task_key, None)
     if task_key in _RUNNING_TASKS and not _RUNNING_TASKS[task_key].done():
         # Retorna status running para evitar execuções concorrentes na mesma thread
         return {
@@ -105,8 +108,8 @@ async def chat(request: Request, req: ChatRequest):
         except Exception as e:
             logger.error(f"chat: falha na execução do agente (thread_id={thread_id} user={user_id}): {e}", exc_info=True)
             raise e
-        finally:
-            _RUNNING_TASKS.pop(task_key, None)
+        # NOTE: don't pop here — keep task in _RUNNING_TASKS so GET /status can return complete
+        # Cleanup is handled by _cleanup_stale_tasks after _CLEANUP_INTERVAL (60s) or explicit pop on next POST
 
     task = asyncio.create_task(_run_agent_task())
     _RUNNING_TASKS[task_key] = task
