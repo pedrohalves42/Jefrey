@@ -65,11 +65,11 @@ groups:
         annotations:
           summary: "jefrey-api down"
           description: "Up==0 ha 1m - checar docker logs jefrey-api, health /health, postgres/redis health."
-  - alert: JefreySttLatencyHigh
-    expr: histogram_quantile(0.95, sum(rate(jefrey_stt_duration_seconds_bucket[5m])) by (le)) > 2
-    for: 5m
-    labels:
-      severity: warning
-    annotations:
-      summary: "STT p95 latencia alta (>2s) — Whisper small int8 pode estar sobrecarregado"
+      - alert: JefreySttLatencyHigh
+        expr: histogram_quantile(0.95, sum(rate(jefrey_stt_duration_seconds_bucket[5m])) by (le)) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "STT p95 latencia alta (>2s) — Whisper small int8 pode estar sobrecarregado"
 

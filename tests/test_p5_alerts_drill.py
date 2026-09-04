@@ -11,7 +11,7 @@ def test_alerts_test_yaml_valid():
     assert any("alerts.yml" in r for r in data["rule_files"])
     assert data["evaluation_interval"] == "1m"
     tests = data["tests"]
-    assert len(tests) == 6, f"expected 6 alert groups, got {len(tests)}"
+    assert len(tests) == 7, f"expected 7 alert groups, got {len(tests)}"
     # check alert_rule_test structure (promtool 2.53)
     for t in tests:
         assert "alert_rule_test" in t, f"missing alert_rule_test in {t}"
@@ -29,6 +29,7 @@ def test_alerts_test_yaml_valid():
     assert "JefreyKidLegacyHigh" in names
     assert "JefreyMemoryLatencyHigh" in names
     assert "JefreyServiceDown" in names
+    assert "JefreySttLatencyHigh" in names
 
 def test_drill_script_py_compile_and_no_user_id():
     p = pathlib.Path("scripts/drill_alerts.py")
@@ -54,7 +55,7 @@ def test_drill_help_lists_6():
 def test_alerts_yaml_has_6_with_for_and_severity():
     data = yaml.safe_load(pathlib.Path("docker/prometheus/alerts.yml").read_text(encoding="utf-8"))
     rules = data["groups"][0]["rules"]
-    assert len(rules) == 6
+    assert len(rules) == 7
     for rule in rules:
         assert "alert" in rule and "expr" in rule
         assert "for" in rule, f"{rule['alert']} missing for"

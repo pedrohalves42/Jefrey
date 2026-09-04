@@ -104,3 +104,25 @@ tests:
             exp_annotations:
               summary: "jefrey-api down"
               description: "Up==0 ha 1m - checar docker logs jefrey-api, health /health, postgres/redis health."
+  - interval: 1m
+    input_series:
+      - series: 'jefrey_stt_duration_seconds_bucket{le="0.3",provider="whisper",model="small"}'
+        values: '0+1x10'
+      - series: 'jefrey_stt_duration_seconds_bucket{le="0.6",provider="whisper",model="small"}'
+        values: '0+1x10'
+      - series: 'jefrey_stt_duration_seconds_bucket{le="1",provider="whisper",model="small"}'
+        values: '0+1x10'
+      - series: 'jefrey_stt_duration_seconds_bucket{le="+Inf",provider="whisper",model="small"}'
+        values: '0+100x10'
+      - series: 'jefrey_stt_duration_seconds_count{provider="whisper",model="small"}'
+        values: '0+100x10'
+      - series: 'jefrey_stt_duration_seconds_sum{provider="whisper",model="small"}'
+        values: '0+90x10'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: JefreySttLatencyHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "STT p95 latencia alta (>2s) — Whisper small int8 pode estar sobrecarregado"

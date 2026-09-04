@@ -361,16 +361,16 @@ for b in bugs: print(f"  BUG {b}")
 
 
 
-# --- R. P5-04 alerts firing drill 6/6 (Livro4 cap10) ---
+# --- R. P5-04 alerts firing drill 7/7 (Livro4 cap10) ---
 try:
     import yaml as _yaml2, pathlib as _pl2, json as _js2
     _at2 = _pl2.Path("docker/prometheus/tests/alerts_test.yml")
     if _at2.exists():
         _ad2 = _yaml2.safe_load(_at2.read_text(encoding="utf-8"))
-        if len(_ad2.get("tests",[]))==6:
-            oks.append("P5-04 alerts_test.yml 6 groups OK")
+        if len(_ad2.get("tests",[]))==7:
+            oks.append("P5-04 alerts_test.yml 7 groups OK")
         else:
-            bugs.append("P5-04 alerts_test 6 groups expected got %s" % len(_ad2.get("tests",[])))
+            bugs.append("P5-04 alerts_test 7 groups expected got %s" % len(_ad2.get("tests",[])))
         if all("alert_rule_test" in tt for tt in _ad2["tests"]):
             oks.append("P5-04 alert_rule_test format OK (promtool 2.53)")
         else:
@@ -685,7 +685,7 @@ try:
     if _plX.Path("docs/SLO_RUNBOOK.md").exists():
         oks.append("P8 X SLO_RUNBOOK exists OK")
         _slo = _plX.Path("docs/SLO_RUNBOOK.md").read_text(encoding="utf-8", errors="ignore")
-        if "JefreyConfigInvalid" in _slo and "JefreyServiceDown" in _slo and "6 alerts" in _slo: oks.append("P8 X SLO 6 alerts matrix OK (Livro4 cap10)")
+        if "JefreyConfigInvalid" in _slo and "JefreyServiceDown" in _slo and "7 alerts" in _slo: oks.append("P8 X SLO 7 alerts matrix OK (Livro4 cap10)")
         else: bugs.append("P8 X SLO 6 alerts missing")
     else:
         bugs.append("P8 X SLO_RUNBOOK.md missing")

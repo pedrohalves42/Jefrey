@@ -84,6 +84,16 @@ def drill_service_down(force: bool = False) -> None:
     print("[drill] ServiceDown: nao injetavel via metrica - validar via promtool test rules (up==0 for 1m)")
     print("[drill] ServiceDown: SKIP live, PASS via alerts_test.yml group 6")
 
+
+def drill_stt_latency(count: int = 100, force: bool = False) -> None:
+    """7 SttLatencyHigh: p95>2s via STT_DURATION histogram observe 3.0s - labelnames [provider,model]"""
+    _require_not_prod(force)
+    from jefrey.core.metrics import STT_DURATION
+    print(f"[drill] SttLatencyHigh: observe 3.0s x{count} (p95>2, provider=whisper model=small)")
+    for _ in range(count):
+        STT_DURATION.labels(provider="whisper", model="small").observe(3.0)
+    print("[drill] SttLatencyHigh: done")
+
 DRILLS = {
     "ConfigInvalid": drill_config_invalid,
     "RateLimitDenialsHigh": drill_rate_limit_denies,
@@ -91,6 +101,7 @@ DRILLS = {
     "MemoryLatencyHigh": drill_memory_latency,
     "ApiHighErrorRate": drill_error_rate,
     "ServiceDown": drill_service_down,
+    "SttLatencyHigh": drill_stt_latency,
 }
 
 def main() -> None:
@@ -119,6 +130,8 @@ def main() -> None:
             drill_error_rate(force=args.force)
         elif t == "ServiceDown":
             drill_service_down(force=args.force)
+        elif t == "SttLatencyHigh":
+            drill_stt_latency(count=max(args.count, 50), force=args.force)
     print(f"[drill] DONE {targets}")
 
 if __name__ == "__main__":

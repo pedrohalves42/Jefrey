@@ -2,7 +2,7 @@
 
 **Status**: FINAL — P8 TAG v1.0.0 2026-09-03
 **Refs**: Livro4 Prometheus Up & Running 2nd cap10 Alerting + cap11 Grafana + DDIA cap6/12 + SWE cap14
-**Relacionado**: docker/prometheus/alerts.yml (6 alerts), docker/prometheus/prometheus.yml, docker/grafana/dashboards/jefrey.json (8 panels), docs/P5_CONSOLIDATION.md, docs/HNSW_TUNING.md
+**Relacionado**: docker/prometheus/alerts.yml (7 alerts), docker/prometheus/prometheus.yml, docker/grafana/dashboards/jefrey.json (8 panels), docs/P5_CONSOLIDATION.md, docs/HNSW_TUNING.md
 
 ## 1) SLOs (SLO_RUNBOOK 1.3)
 
@@ -15,7 +15,7 @@
 | EventBus Legacy | increase(kid_legacy[10m]) | <10/10m | 10m | JefreyKidLegacyHigh for 5m warning slo:eventbus |
 | Latency p95 | histogram_quantile 0.95 by(le) | <300ms | 5m | JefreyMemoryLatencyHigh for 5m warning slo:latency |
 
-## 2) Matriz 6 alerts — PromQL × for × slo × runbook
+## 2) Matriz 7 alerts — PromQL × for × slo × runbook
 
 | Alert | PromQL | for | severity | slo | Runbook |
 |-------|--------|-----|----------|-----|---------|
@@ -51,7 +51,7 @@ Todos usam `by (le)` com espaco (Livro4 cap6) e `editable:false` (Axiom #4).
 
 ## 5) Checklist P8
 
-- [x] alerts.yml 6 alerts for/severity/slo + promtool check/test SUCCESS
+- [x] alerts.yml 7 alerts for/severity/slo + promtool check/test SUCCESS
 - [x] grafana jefrey.json 8 panels by(le):2 editable:false orgId:1
 - [x] compose healthy 7/7 api/mcp/redis/postgres/prometheus/grafana/n8n
 - [x] verify 21/21 2x + deep 150/150 + pytest 40 passed
