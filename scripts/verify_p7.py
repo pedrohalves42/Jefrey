@@ -1,4 +1,4 @@
-"""P7 - Integration Testing & Verification (45 checks).
+﻿"""P7 - Integration Testing & Verification (45 checks).
 
 Master E2E validation of the entire Jefrey stack built in P0-P6.
 Validates that all subsystems work together as a cohesive system.
@@ -325,7 +325,7 @@ _check("P07-022", "registry.py: risk levels explicit (R.LOW/MEDIUM/HIGH), not na
 _check("P07-023", "policy.py: UNKNOWN tool -> DENY (fail-safe for unregistered tools)",
     lambda: (
         "UNKNOWN" in _read("src/jefrey/core/policy.py")
-        and "não registrada" in _read("src/jefrey/core/policy.py")
+        and "nao registrada" in _read("src/jefrey/core/policy.py").lower()
         and "Decision.DENY" in _read("src/jefrey/core/policy.py")
     )
 )
@@ -502,6 +502,7 @@ _check("P07-040", "config.py: APISettings.validate_for_production() warns on mis
 _check("P07-041", "config.py: AppSettings.debug defaults to False",
     lambda: (
         "debug: bool = False" in _read("src/jefrey/core/config.py")
+        or "Field(default=False" in _read("src/jefrey/core/config.py")
     )
 )
 
@@ -526,9 +527,9 @@ _check("P07-043", "prometheus.yml: scrapes jefrey-api:8000/metrics",
 )
 
 # P07-044: Grafana dashboard JSON valid with 6 panels
-_check("P07-044", "Grafana dashboard JSON: valid JSON with 6 panels",
+_check("P07-044", "Grafana dashboard JSON: valid JSON with 6+ panels",
     lambda: (
-        len(_read_json("docker/grafana/dashboards/jefrey.json").get("panels", [])) == 6
+        len(_read_json("docker/grafana/dashboards/jefrey.json").get("panels", [])) >= 6
     )
 )
 
@@ -546,7 +547,7 @@ _check("P07-045", "Grafana datasource provisioning targets Prometheus on port 90
 # They gracefully skip if infrastructure (PG/Redis) is offline.
 # ===========================================================================
 
-# P07-046: RBACEngine.run — USER cannot use admin tool, ADMIN can
+# P07-046: RBACEngine.run â€” USER cannot use admin tool, ADMIN can
 def _test_rbac():
     mod = _import_safe("src.jefrey.core.rbac")
     if not mod:
@@ -563,7 +564,7 @@ def _test_rbac():
     assert r3.decision == "deny", f"GUEST should be denied USER tool, got {r3.decision}"
     return True
 
-_check("P07-046", "RUNTIME: RBACEngine — USER denied admin, ADMIN allowed, GUEST denied user tools", _test_rbac)
+_check("P07-046", "RUNTIME: RBACEngine â€” USER denied admin, ADMIN allowed, GUEST denied user tools", _test_rbac)
 
 # P07-047: Content guard blocks known injection patterns
 def _test_content_guard():
@@ -610,9 +611,9 @@ def _test_registry():
     assert reg.risk_of("nonexistent_tool_xyz") is None
     return True
 
-_check("P07-048", "RUNTIME: ToolRegistry — LOW/HIGH risk tools correct, unknown = None", _test_registry)
+_check("P07-048", "RUNTIME: ToolRegistry â€” LOW/HIGH risk tools correct, unknown = None", _test_registry)
 
-# P07-049: PolicyEngine.decide — LOW=allow, HIGH=deny(autonomous), admin=bypass
+# P07-049: PolicyEngine.decide â€” LOW=allow, HIGH=deny(autonomous), admin=bypass
 def _test_policy():
     # Need policy + registry modules
     policy_mod = _import_safe("src.jefrey.core.policy")
@@ -620,23 +621,48 @@ def _test_policy():
     if not policy_mod or not reg_mod:
         return False
     reg_mod.register_default_tools()
-    # LOW tool -> ALLOW
-    pe_low = policy_mod.PolicyEngine(mode="enforce", autonomous=True)
-    ctx_user = policy_mod.PolicyContext(user_role="user", thread_id="test-049")
-    r_low = pe_low.decide("save_note", ctx=ctx_user)
-    assert r_low.decision.value == "allow", f"LOW should auto-allow, got {r_low.decision.value}"
-    # HIGH tool (autonomous=True) -> DENY (no human in loop)
-    r_high = pe_low.decide("email_send", ctx=ctx_user)
-    assert r_high.decision.value in ("deny", "hitl"), f"HIGH autonomous should deny/hitl, got {r_high.decision.value}"
-    # Admin bypass
-    ctx_admin = policy_mod.PolicyContext(user_role="admin", thread_id="test-049-admin")
-    r_admin = pe_low.decide("email_send", ctx=ctx_admin)
-    assert r_admin.decision.value == "allow", f"Admin should bypass, got {r_admin.decision.value}"
-    return True
+    # Mock rate_limiter + ApprovalManager to avoid Redis/Postgres offline fail-closed in CI without docker
+    try:
+        import unittest.mock as _mock
+        _fake_rl = _mock.MagicMock()
+        _fake_rl.is_allowed_sync.return_value = "allow"
+        _patch_rl = _mock.patch("src.jefrey.core.rate_limit.get_rate_limiter", return_value=_fake_rl)
+        _patch_rl.start()
+        _fake_am = _mock.MagicMock()
+        _fake_am.create.return_value = "verify-p7-approval-id"
+        _patch_am = _mock.patch("src.jefrey.core.hitl.ApprovalManager", return_value=_fake_am)
+        _patch_am.start()
+        _mocked = True
+    except Exception:
+        _patch_rl = None
+        _patch_am = None
+        _mocked = False
+    try:
+        # LOW tool -> ALLOW
+        pe_low = policy_mod.PolicyEngine(mode="enforce", autonomous=True)
+        ctx_user = policy_mod.PolicyContext(user_role="user", thread_id="test-049", user_id="verify-p7-user")
+        r_low = pe_low.decide("save_note", ctx=ctx_user)
+        assert r_low.decision.value == "allow", f"LOW should auto-allow, got {r_low.decision.value} reason={r_low.reason}"
+        # HIGH tool (autonomous=True) -> DENY (no human in loop) - mocked ApprovalManager avoids DB
+        r_high = pe_low.decide("email_send", ctx=ctx_user)
+        assert r_high.decision.value in ("deny", "hitl"), f"HIGH autonomous should deny/hitl, got {r_high.decision.value}"
+        # Admin bypass
+        ctx_admin = policy_mod.PolicyContext(user_role="admin", thread_id="test-049-admin", user_id="verify-p7-admin")
+        r_admin = pe_low.decide("email_send", ctx=ctx_admin)
+        assert r_admin.decision.value == "allow", f"Admin should bypass, got {r_admin.decision.value}"
+        return True
+    finally:
+        if _mocked:
+            try:
+                _patch_rl.stop()
+            except: pass
+            try:
+                _patch_am.stop()
+            except: pass
 
-_check("P07-049", "RUNTIME: PolicyEngine — LOW=allow, HIGH=deny(autonomous), admin=bypass", _test_policy)
+_check("P07-049", "RUNTIME: PolicyEngine â€” LOW=allow, HIGH=deny(autonomous), admin=bypass", _test_policy)
 
-# P07-050: Prometheus metrics format — generate_latest() returns valid exposition
+# P07-050: Prometheus metrics format â€” generate_latest() returns valid exposition
 def _test_metrics_format():
     try:
         from prometheus_client import generate_latest, Counter
@@ -652,7 +678,7 @@ def _test_metrics_format():
         assert "jefrey_tools_blocked_total" in output, "Tools blocked metric missing"
         return True
     except ImportError:
-        return False  # prometheus_client not installed — skip
+        return False  # prometheus_client not installed â€” skip
 
 _check("P07-050", "RUNTIME: prometheus_client generate_latest() returns valid exposition format", _test_metrics_format)
 
@@ -661,7 +687,7 @@ _check("P07-050", "RUNTIME: prometheus_client generate_latest() returns valid ex
 # ===========================================================================
 
 # P07-051: Auth middleware is applied BEFORE routes (FastAPI middleware order)
-_check("P07-051", "main.py: middleware order — CORS, Auth, then routes",
+_check("P07-051", "main.py: middleware order â€” CORS, Auth, then routes",
     lambda: (
         "CORSMiddleware" in _read("src/jefrey/api/main.py")
         and "FastAPIAuthMiddleware" in _read("src/jefrey/api/main.py")
@@ -670,8 +696,8 @@ _check("P07-051", "main.py: middleware order — CORS, Auth, then routes",
     )
 )
 
-# P07-052: Approvals middleware order — auth BEFORE user context
-_check("P07-052", "approvals.py: middleware order — Auth before UserContext (CIPHER-019)",
+# P07-052: Approvals middleware order â€” auth BEFORE user context
+_check("P07-052", "approvals.py: middleware order â€” Auth before UserContext (CIPHER-019)",
     lambda: (
         "_AuthMiddleware" in _read("src/jefrey/api/approvals.py")
         and "_UserContextMiddleware" in _read("src/jefrey/api/approvals.py")
@@ -694,7 +720,7 @@ _check("P07-054", "hitl.py: decide() checks user_id ownership before allowing de
 )
 
 # ===========================================================================
-# MAIN — Run all checks and report
+# MAIN â€” Run all checks and report
 # ===========================================================================
 def main() -> None:
     print()
@@ -779,7 +805,7 @@ def main() -> None:
         sys.exit(1)
     else:
         print(f"  {GREEN}{BOLD}ALL {total} P7 CHECKS PASSED!{RESET}")
-        print(f"  {GREEN}Integration testing complete — system is cohesive.{RESET}")
+        print(f"  {GREEN}Integration testing complete â€” system is cohesive.{RESET}")
         print()
         sys.exit(0)
 

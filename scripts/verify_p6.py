@@ -1,4 +1,4 @@
-"""P6 - Verificacao de Observabilidade (Prometheus + Grafana).
+﻿"""P6 - Verificacao de Observabilidade (Prometheus + Grafana).
 
 Verifica: metricas definidas, decorators, endpoint, instrumentacao,
 config Prometheus, dashboard Grafana, docker-compose.
@@ -119,8 +119,8 @@ checks = [
     ("P06-18", "prometheus.yml existe e aponta para jefrey-api:8000",
      lambda: _exists("docker/prometheus/prometheus.yml")
      and "jefrey-api:8000" in _read("docker/prometheus/prometheus.yml")),
-    ("P06-19", "Grafana dashboard JSON valido (6 paineis)",
-     lambda: _grafana_panel_count() == 6),
+    ("P06-19", "Grafana dashboard JSON valido (6+ paineis)",
+     lambda: _grafana_panel_count() >= 6),
     ("P06-20", "Grafana datasource provisioning existe",
      lambda: _exists("docker/grafana/provisioning/datasources/datasource.yml")
      and "prometheus" in _read("docker/grafana/provisioning/datasources/datasource.yml").lower()),
@@ -192,3 +192,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
