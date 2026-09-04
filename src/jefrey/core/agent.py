@@ -223,7 +223,17 @@ class JefreyAgent:
         messages = [SystemMessage(content=full_system)] + state.messages
         
         # Chama LLM
-        response = await self.llm_with_tools.ainvoke(messages)
+        # F3 FIX: qwen2:0.5b (completion-only) does not support tools -> fallback to plain LLM (DDIA cap12, HPP lazy, Axiom #1 visible)
+        try:
+            response = await self.llm_with_tools.ainvoke(messages)
+        except Exception as _e:
+            msg = str(_e)
+            if "does not support tools" in msg or "tools" in msg.lower() and "not supported" in msg.lower():
+                import logging as _lg
+                _lg.getLogger(__name__).warning(f"LLM {get_settings().llm.model} sem tools, fallback sem bind_tools: {_e} (F3, qwen2:0.5b completion-only)")
+                response = await self.llm.ainvoke(messages)
+            else:
+                raise
         state.messages.append(response)
         
         # Captura tool calls se houver

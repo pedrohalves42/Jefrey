@@ -20,7 +20,8 @@ export function setUserId(u: string): void {
 }
 export function authHeaders(): Record<string, string> {
   const t = getToken();
-  return t ? { Authorization: `Bearer ${t}` } : {};
+  if (!t) return {};
+  return { Authorization: `Bearer ${t}`, "X-User-Id": getUserId() };
 }
 export function mapHttpError(status: number): string {
   if (status === 401) return "Nao autenticado — va em Settings e informe seu Bearer token (Axiom #1 fail-closed).";
@@ -41,3 +42,6 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
 }
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 export type MemoryHit = { content: string; score?: number; metadata?: Record<string, unknown>; type?: string; created_at?: string };
+
+// F3 LLM probe helper (Axiom #1 visible, never crash)
+export async function probeHealth(): Promise<{ok:boolean}> { try { const r=await fetch('/health'); return {ok:r.ok}; } catch { return {ok:false}; } }

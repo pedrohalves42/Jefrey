@@ -1,4 +1,4 @@
-# TODO Pre-codar — 2026-09-03 22:15 — base 175/175 + P6 27/27 + P7 54/54 + 40 tests — v1.2.0-ui SYNCED f6381e2
+# TODO Pre-codar — 2026-09-04 19:05 — base 175/175 2x + P6 27/27 2x + P7 54/54 2x + 40 tests 2x + F5 LIVE 16/16 — v1.4.0-final-100 SYNCED 396c73d (+ vite 2b2fd2a 100B)
 
 ## Base ja fechada (nao mexer sem branch)
 - [x] T1 HARDENING 100% + T3 P8 TAG v1.0.0 167/167 + T2 P7 PERF v1.1.0 175/175 + D5 push origin/main 11c864c + 3 tags (v1.0.0, v1.0.0-p5-c, v1.1.0)
@@ -53,3 +53,13 @@
 - Gates 23:13: deep 175/175 2x WARN0 BUG0 + verify_p6_data 21/21 2x + verify_p6 27/27 2x + verify_p7 54/54 2x + pytest 40 passed + compileall + docker 7/7 + /metrics stt/tts + /openapi 5 rotas — guard 6/6 PASS
 - Docs: docs/PLANO_P1_VOZ_COMPLETO.md 18k + CHANGELOG [1.3.0-p1-voz] — branch feat/p1-voz merged --no-ff -> main 7e99ac7 — tag v1.3.0-p1-voz
 
+
+---
+## F5 Revalidacao Final — 2026-09-04 19:05 — feat/final-100 396c73d + vite fix 2b2fd2a 100B — APROVADO
+- **Gates 2x**: deep 175/175 WARN0 BUG0 2x + verify_p6_data 21/21 2x + verify_p6 27/27 2x + verify_p7 54/54 2x + pytest 40 passed 2x + compileall OK + compose config -q RC0 + 7/7 healthy (jefrey-api/postgres/redis/mcp/n8n/prometheus/grafana) — SWE cap14 idempotente
+- **Live 16/16 PASS**: /health 200 + /metrics jefrey_ + /vite.svg 200 len100 BOM EF BB BF + /openapi 7738 + prometheus /-/healthy 200 + grafana /api/health 200 + anon 401 + auth 200 editable false panels 9 + ollama qwen2.5:0.5b + POST /auth/dev-token 200 len64 + POST /chat anon 401 + POST /chat Bearer running + poll complete 48s texto real qwen2.5 + /stt/health small pt + /tts/health piper pt_BR-faber + /tts/voices 6 voices
+- **Bug Hunt 6/6**: GREP-1 except:pass 0 + GREP-2 dev-auto 0 + GREP-3 return allow 0 + GREP-4 str(dict) 0 + GREP-5 b64 urlsafe 0 (jwks urlsafe_b64encode) + GREP-6 overwrite 0 + TODO 0 + secrets 0 + incomplete ONLY pass 3 (SkillBase abstract @abstractmethod get_tools/initialize/shutdown - esperado Fluent cap19) + signing compare_digest + rate_limit pipeline
+- **F4 fixes validados**: vite.svg restore S-01 100B 2b2fd2a + chat.py running->complete keep 60s + _cleanup_stale_tasks + grafana cred sync BGl***ALZ + guard_anti_patterns.sh 6/6
+- **Docs sync**: TODO header 2026-09-04 19:05 + CHANGELOG [1.4.0-final-100] + vite 2b2fd2a (main blob)
+- **Tag**: v1.4.0-final-100 (F0-F5 fechado) — pronto para merge --no-ff feat/final-100 -> main
+- **Axioms**: #1 FAIL-CLOSED #2 ISOLAMENTO #3 SEM STUB #4 PERSISTENCIA #5 LEAST PRIVILEGE #6 OBSERVABILIDADE #7 1 PROGRAMA 7 PECAS + CIPHER 025-035 + Livros 1-10 + Mark-LII/CEOGPT/HUD

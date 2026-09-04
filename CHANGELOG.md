@@ -1,5 +1,18 @@
 # Changelog - Jefrey
 
+## [1.4.0-final-100] — 2026-09-04 — F0-F5 Final 100 Comercial — 175/175 2x + 16/16 live — APROVADO
+**Gate**: _validate_deep 175/175 WARN0 BUG0 2x + verify_p6_data 21/21 2x + verify_p6 27/27 2x (9 panels by(le) editable false) + verify_p7 54/54 2x + pytest 40 passed 2x + compileall OK + compose config -q RC0 + 7/7 healthy + live 16/16 (health/metrics/vite/openapi/prometheus/grafana anon401/auth200/ollama qwen2.5/dev-token/chat poll 48s/stt/tts voices)
+**F4**: vite.svg restore S-01 2b2fd2a 100B BOM + chat poll running->complete keep task 60s + _cleanup_stale_tasks (Axiom #1 FAIL-CLOSED, SWE cap14, DDIA cap6) + grafana cred sync BGl***ALZ volume recreate + guard 6/6 + voz poll qwen2.5:0.5b STT small TTS piper 6 voices
+**F3**: agent fallback qwen2 completion-only + validator qwen2 broad + compose default qwen2.5:0.5b tools — E2E /chat 200 running + LLM probe host.docker.internal:11434
+**F2**: auth wiring api.ts X-User-Id + auth dev-token POST fail-closed CIPHER-021 + useVoice DRY + Settings Obter token dev + GUIA_LEIGO
+**F0**: name jefrey + volumes explicit name jefrey_* + branch feat/final-100 travado P0+P1 175/175
+**Stack**: Python 3.12 FastAPI Postgres+pgvector HNSW m16 ef64 pgvector Redis Streams XADD 10000 DLQ 5000 JWT RS256 kid TTLCache 1024/60 + 7 servicos (Compose Spec 2.24)
+**Refs**: Axiom #1-7 + CIPHER 025-035 + 10 Livros (MCP Spec 2026-07-28, Security Eng, Prometheus cap5/6/10/11, DDIA cap3/5/6/12, SWE cap8/14, Fluent 19-21, HPP cap1-4, Building LLM Apps, Pragmatic 20th) + Mark-LII/XXXIX + CEOGPT/HUD
+**Commits**: 49eb801 chore F0 + 3d84d58 fix docker + e73006f feat F2 + 6922b19 feat F3 + 584e04a fix F3 + ce5b1a9 feat F4 + 396c73d fix F4 + F5 175/175 16/16 docs sync — tag v1.4.0-final-100
+**Prova**: docker 7/7 healthy + vite 100B + poll 48s texto real + grafana auth 200 panels 9 + anon 401 + guard 6/6 0 hits
+
+
+
 Todas mudancas notaveis deste projeto. Formato baseado em Keep a Changelog.
 
 ## [1.3.0-p1-voz] — 2026-09-03 — P1 Voz Viva (STT+TTS+Wake+HUD) — qwen2:0.5b + whisper small + VoiceButton

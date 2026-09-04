@@ -23,9 +23,10 @@ from src.jefrey.oauth2.introspect import introspect_token, IntrospectionResult
 
 logger = logging.getLogger(__name__)
 
-_PUBLIC_PATHS = {"/health", "/docs", "/openapi.json", "/redoc", "/metrics", "/", "/vite.svg", "/favicon.ico"}
+_PUBLIC_PATHS = {"/health", "/docs", "/openapi.json", "/redoc", "/metrics", "/", "/vite.svg", "/favicon.ico", "/auth/dev-token"}
 # UI-1 Shell public — Axiom 5 least privilege (Livro 3 Security Eng cap8, CIPHER-019)
 # /chat|/memory|/approvals continuam protegidos; /assets/* sao build Vite hashados sem user data
+# /auth/dev-token e publico mas fail-closed em prod (CIPHER-021, auth.py is_prod 403)
 _PUBLIC_PREFIXES = ("/assets/",)
 
 # A5: cache com TTL 60s, max 1024, chave = hash(token) nunca token raw
@@ -36,7 +37,7 @@ try:
     _introspection_cache = _TTLCache(maxsize=_CACHE_MAXSIZE, ttl=_CACHE_TTL)
     _USE_TTLCACHE = True
 except ImportError:
-    _introspection_cache: dict[str, tuple[IntrospectionResult, float]] = {}
+    _introspection_cache: dict[str, tuple[IntrospectionResult, float]] = {}  # type: ignore
     _USE_TTLCACHE = False
 
 def _cache_key(token: str) -> str:
@@ -47,12 +48,12 @@ def _cache_get(token: str) -> IntrospectionResult | None:
     if _USE_TTLCACHE:
         return _introspection_cache.get(k)  # type: ignore
     else:
-        item = _introspection_cache.get(k)
+        item = _introspection_cache.get(k)  # type: ignore
         if item is None:
             return None
         result, exp = item
         if time.time() > exp:
-            _introspection_cache.pop(k, None)
+            _introspection_cache.pop(k, None)  # type: ignore
             return None
         return result
 
@@ -62,10 +63,10 @@ def _cache_set(token: str, result: IntrospectionResult) -> None:
         _introspection_cache[k] = result  # type: ignore
     else:
         # evict oldest if over maxsize (simple FIFO)
-        if len(_introspection_cache) >= _CACHE_MAXSIZE:
-            oldest = next(iter(_introspection_cache))
-            _introspection_cache.pop(oldest, None)
-        _introspection_cache[k] = (result, time.time() + _CACHE_TTL)
+        if len(_introspection_cache) >= _CACHE_MAXSIZE:  # type: ignore
+            oldest = next(iter(_introspection_cache))  # type: ignore
+            _introspection_cache.pop(oldest, None)  # type: ignore
+        _introspection_cache[k] = (result, time.time() + _CACHE_TTL)  # type: ignore
 
 class FastAPIAuthMiddleware(BaseHTTPMiddleware):
     """CIPHER-019 extensao: valida Bearer token em endpoints FastAPI."""

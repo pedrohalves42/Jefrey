@@ -1,3 +1,4 @@
+name: jefrey
 # =============================================================================
 # JEFREY � Stack de infraestrutura
 # Fase P1: PostgreSQL 16 + pgvector (mem�ria vetorial + relacional) e Redis (working memory)
@@ -68,7 +69,7 @@ services:
       JEFREY_DATABASE__HOST: ${JEFREY_DATABASE__HOST:-postgres}
       JEFREY_REDIS__HOST: ${JEFREY_REDIS__HOST:-redis}
       JEFREY_REDIS__PASSWORD: ${JEFREY_REDIS__PASSWORD:?required}
-      JEFREY_LLM__MODEL: ${JEFREY_LLM__MODEL:-qwen2:0.5b}
+      JEFREY_LLM__MODEL: ${JEFREY_LLM__MODEL:-qwen2.5:0.5b}
       JEFREY_LLM__BASE_URL: ${JEFREY_LLM__BASE_URL:-http://host.docker.internal:11434}
       JEFREY_EMBEDDINGS__BASE_URL: ${JEFREY_EMBEDDINGS__BASE_URL:-http://host.docker.internal:11434}
       JEFREY_API__SECRET_KEY: ${JEFREY_API__SECRET_KEY}
@@ -127,7 +128,7 @@ services:
       JEFREY_DATABASE__HOST: ${JEFREY_DATABASE__HOST:-postgres}
       JEFREY_REDIS__HOST: ${JEFREY_REDIS__HOST:-redis}
       JEFREY_REDIS__PASSWORD: ${JEFREY_REDIS__PASSWORD:?required}
-      JEFREY_LLM__MODEL: ${JEFREY_LLM__MODEL:-qwen2:0.5b}
+      JEFREY_LLM__MODEL: ${JEFREY_LLM__MODEL:-qwen2.5:0.5b}
       JEFREY_LLM__BASE_URL: ${JEFREY_LLM__BASE_URL:-http://host.docker.internal:11434}
       JEFREY_EMBEDDINGS__BASE_URL: ${JEFREY_EMBEDDINGS__BASE_URL:-http://host.docker.internal:11434}
       JEFREY_MCP__HOST: ${JEFREY_MCP__HOST:-0.0.0.0}
@@ -250,7 +251,12 @@ services:
 
 volumes:
   jefrey_pgdata:
+    name: jefrey_pgdata
   jefrey_redisdata:
+    name: jefrey_redisdata
   jefrey_n8n_data:
+    name: jefrey_n8n_data
   jefrey_prometheus_data:
+    name: jefrey_prometheus_data
   jefrey_grafana_data:
+    name: jefrey_grafana_data

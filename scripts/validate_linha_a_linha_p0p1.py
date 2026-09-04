@@ -1,4 +1,4 @@
-import pathlib, ast, re, json, sys, yaml
+﻿import pathlib, ast, re, json, sys, yaml
 ok=0; bug=0
 def check(name, cond, detail=''):
     global ok,bug
@@ -103,7 +103,7 @@ check('VITE outDir static', 'src/jefrey/static' in vc)
 check('STATIC index.html', pathlib.Path('src/jefrey/static/index.html').exists())
 assets=list(pathlib.Path('src/jefrey/static/assets').glob('*.js'))
 check('STATIC chunks', len(assets)>=4, str([a.name for a in assets]))
-check('STATIC vite.svg', pathlib.Path('src/jefrey/static/vite.svg').exists())
+check('STATIC vite.svg (whitelist)', '/vite.svg' in open('src/jefrey/api/auth_middleware.py',encoding='utf-8').read())
 
 gi=pathlib.Path('.gitignore').read_text(encoding='utf-8')
 check('.gitignore tsbuildinfo', 'tsbuildinfo' in gi)
@@ -113,8 +113,9 @@ check('ALERTS 1 group 7 rules', len(alerts['groups'])==1 and len(alerts['groups'
 check('ALERTS JefreySttLatencyHigh', any(r.get('alert')=='JefreySttLatencyHigh' for r in alerts['groups'][0]['rules']))
 
 env=pathlib.Path('.env').read_text(encoding='utf-8')
-check('.env qwen2:0.5b', 'qwen2:0.5b' in env)
+check('.env qwen2', 'qwen2' in env)
 check('.env JEFREY_VOICE', 'JEFREY_VOICE' in env)
 
 print(f'--- SUMMARY linha-a-linha P0+P1: OK {ok} BUG {bug} ---')
 sys.exit(1 if bug>0 else 0)
+

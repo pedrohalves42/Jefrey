@@ -10,6 +10,8 @@ type Msg = { role: "user" | "assistant"; content: string }
 
 export default function Chat() {
   const [input, setInput] = useState("")
+  const [llmOk,setLlmOk] = useState<boolean|null>(null)
+  useEffect(()=>{ fetch("/health").then(r=>setLlmOk(r.ok)).catch(()=>setLlmOk(false)); },[])
   const [msgs, setMsgs] = useState<Msg[]>([
     { role: "assistant", content: "Ola! Sou o Jefrey — 1 programa, 7 pecas. Digite sua mensagem. (thread demo-1)" },
   ])
@@ -61,6 +63,7 @@ export default function Chat() {
 
   return (
     <div className="space-y-4">
+      {llmOk===false && <div className="text-amber-400 text-xs p-2 mb-2 border border-amber-500/30 rounded bg-amber-500/10">LLM offline — modo mock (inicie Ollama: ollama serve & ollama pull qwen2:0.5b)</div>}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
