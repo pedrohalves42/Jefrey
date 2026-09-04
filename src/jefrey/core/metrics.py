@@ -157,3 +157,29 @@ EVENTBUS_KID_LEGACY_TOTAL = Counter(
     documentation="Total de mensagens EventBus sem kid (v0 compat, DeprecationWarning)",
     labelnames=[],
 )
+# =============================================================================
+# 9. STT/TTS — P1 Voz (Livro 4 cap5 cardinality <800, cap6 histogram)
+# =============================================================================
+STT_DURATION = Histogram(
+    name="jefrey_stt_duration_seconds",
+    documentation="Latencia STT (transcricao) em segundos",
+    labelnames=["provider", "model"],
+    buckets=(0.1, 0.3, 0.6, 1.0, 2.0, 5.0),
+)
+TTS_DURATION = Histogram(
+    name="jefrey_tts_duration_seconds",
+    documentation="Latencia TTS (sintese) em segundos",
+    labelnames=["provider", "voice"],
+    buckets=(0.1, 0.3, 0.6, 1.0, 2.5, 5.0),
+)
+STT_REQUESTS = Counter(
+    name="jefrey_stt_requests_total",
+    documentation="Total de requisicoes STT por status",
+    labelnames=["status"],
+)
+TTS_REQUESTS = Counter(
+    name="jefrey_tts_requests_total",
+    documentation="Total de requisicoes TTS por status",
+    labelnames=["status"],
+)
+

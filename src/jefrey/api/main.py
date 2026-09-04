@@ -21,6 +21,8 @@ from src.jefrey.api.auth_middleware import FastAPIAuthMiddleware
 from src.jefrey.api.chat import router as chat_router
 from src.jefrey.api.memory import router as memory_router
 from src.jefrey.api.metrics_endpoint import router as metrics_router
+from src.jefrey.api.stt import router as stt_router
+from src.jefrey.api.tts import router as tts_router
 from src.jefrey.core.config import get_settings
 from src.jefrey.core.metrics import SERVICE_HEALTH
 
@@ -93,6 +95,8 @@ def create_app() -> FastAPI:
     # Registra routers do FastAPI
     app.include_router(chat_router)
     app.include_router(memory_router)
+    app.include_router(stt_router)
+    app.include_router(tts_router)
 
     # Monta a sub-aplicacao de aprovacoes Starlette (mantem CIPHER-019, 020, 024 intactos)
     # FIX: mount em /approvals (nao /) para evitar conflito com outros routers.

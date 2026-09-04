@@ -155,6 +155,9 @@ def register_default_tools() -> None:
     reg.register(name="n8n_cancel_workflow", risk=R.HIGH, required_role=Role.USER, source="integration")
 
     reg.register(name="health_check", risk=R.LOW, required_role=Role.GUEST, source="skill")
+    # P1 Voz
+    reg.register(name="stt_transcribe", risk=R.MEDIUM, required_role=Role.USER, source="skill")
+    reg.register(name="tts_synthesize", risk=R.MEDIUM, required_role=Role.USER, source="skill")
     reg.register(name="ping", risk=R.LOW, required_role=Role.GUEST, source="skill")
     _registered = True
     logger.info("ToolRegistry: %d ferramentas registradas", len(reg.registered_names()))

@@ -297,7 +297,7 @@ if "DbBase" in read("src/jefrey/core/schema.py") and "ModelsBase" in read("src/j
     oks.append("schema.py dual Base create_all OK (CRIT-3)")
 else:
     bugs.append("schema.py not dual Base (CRIT-3 oauth2_clients missing)")
-# P5-03b/c � provisioning + 8 panels
+# P5-03b/c � provisioning + 9 panels
 try:
     import yaml as _yaml
     _ds = _yaml.safe_load(read("docker/grafana/provisioning/datasources/datasource.yml") or "")
@@ -316,10 +316,10 @@ import json as _json
 try:
     _dj = _json.loads(read("docker/grafana/dashboards/jefrey.json") or "{}")
     _panels = _dj.get("panels", [])
-    if len(_panels) == 8:
-        oks.append("grafana 8 panels OK (P5-03c)")
+    if len(_panels) == 9:
+        oks.append("grafana 9 panels OK (P5-03c)")
     else:
-        bugs.append(f"grafana panels {len(_panels)} !=8 (P5-03c)")
+        bugs.append(f"grafana panels {len(_panels)} !=9 (P5-03c)")
     if _dj.get("editable") is False:
         oks.append("grafana editable false OK (P5-03c)")
     else:
@@ -412,10 +412,10 @@ try:
         warns.append("P5-04 SLO missing appendix")
     try:
         _dash2 = _js2.loads(_pl2.Path("docker/grafana/dashboards/jefrey.json").read_text(encoding="utf-8"))
-        if len(_dash2.get("panels",[]))==8:
-            oks.append("P5-04 grafana 8 panels OK")
+        if len(_dash2.get("panels",[]))==9:
+            oks.append("P5-04 grafana 9 panels OK")
         else:
-            warns.append("P5-04 grafana panels %s !=8" % len(_dash2.get("panels",[])))
+            warns.append("P5-04 grafana panels %s !=9" % len(_dash2.get("panels",[])))
     except Exception as _je2:
         warns.append("P5-04 grafana json fail %s" % _je2)
 except Exception as _e2:

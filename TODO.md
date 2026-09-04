@@ -33,3 +33,12 @@
 - git: main f6381e2 SYNCED origin/main + tags v1.0.0 v1.0.0-p5-c v1.1.0 v1.2.0-ui SYNCED — working tree clean — pre-commit guard 6/6 PASS
 - obsoletos: .env.bak.* (3) + chat_err.log removidos 22:15; __pycache__/*.pyc gitignored (cache regeneravel); docs/archive historico versionado (NAO obsoleto); ui/tsconfig.node.tsbuildinfo removido do tracking + .gitignore ui/*.tsbuildinfo
 - npm audit: 4 vulns (esbuild<=0.24.2 vite<=6.4.2 + react-router 6-7.17) — fix --force quebra (vite 8, react-router 7.18) adiado P3 (nao bloqueia P0)
+
+---
+
+## PLANO P1 — VOZ VIVA (60m) — GERADO 2026-09-03 22:47 — main 72b0107 (175/175 2x 21/21 2x 27/27 2x 54/54 2x 7/7)
+- **Doc completo:** docs/PLANO_P1_VOZ_COMPLETO.md (Axiom #1-7 + CIPHER 025-035 + Livros 1-10 + Sites CEOGPT/Mark-LII/XXXIX)
+- **Padrão:** Mark-LII voz viva + CEOGPT glassmorphism + HUD pulse real — sem quebrar 175/175
+- **Ordem:** P1.0 RAM workaround llama3.1:3b (5m) → P1.1 STT engine faster-whisper small int8 (15m) → P1.2 API /stt /tts HMAC rate (15m) → P1.3 VoiceButton MediaRecorder pulse (15m) → P1.4 wake porcupine jarvis (5m) → P1.5 metrics Grafana panel9 + gates 183/183 2x (5m)
+- **DoD:** deep 183/183 2x + pytest 50 + live /stt 200 transcript + /tts 200 audio + Chat mic pulse + wake + 6 chunks + tag v1.3.0-p1-voz
+- **Próximo:** git checkout -b feat/p1-voz && ollama pull llama3.1:3b  # aguardando GO
