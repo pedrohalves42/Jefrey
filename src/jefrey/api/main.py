@@ -18,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.jefrey.api.approvals import build_approvals_app
 from src.jefrey.api.auth_middleware import FastAPIAuthMiddleware
+from src.jefrey.api.auth import router as auth_router
 from src.jefrey.api.chat import router as chat_router
 from src.jefrey.api.memory import router as memory_router
 from src.jefrey.api.metrics_endpoint import router as metrics_router
@@ -93,6 +94,7 @@ def create_app() -> FastAPI:
         return {"status": "ok", "version": get_settings().version}
 
     # Registra routers do FastAPI
+    app.include_router(auth_router)
     app.include_router(chat_router)
     app.include_router(memory_router)
     app.include_router(stt_router)

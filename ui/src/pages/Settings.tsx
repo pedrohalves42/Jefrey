@@ -6,7 +6,6 @@ import { getToken, getUserId, getThreadId, setToken, setUserId, setThreadId } fr
 import { useWakeWord } from "@/hooks/useWakeWord"
 
 export default function Settings() {
-  // P1.4 Voz Wake + TTS picker (Axiom #1/5, Mark-LII 5 vozes) {
   const [token, setTokenState] = useState("")
   const [userId, setUserIdState] = useState("")
   const [threadId, setThreadIdLocal] = useState("")
@@ -21,7 +20,6 @@ export default function Settings() {
   }, [])
 
   function save() {
-    // nunca loga token (CIPHER-010 redact_pii)
     setToken(token.trim())
     setUserId(userId.trim() || "demo")
     setThreadId(threadId.trim() || "demo-1")
@@ -29,36 +27,90 @@ export default function Settings() {
   }
 
   async function testAuth() {
-    setTesting(true); setTestResult(null)
+    setTesting(true)
+    setTestResult(null)
     try {
       const headers: Record<string, string> = {}
       if (token.trim()) headers["Authorization"] = `Bearer ${token.trim()}`
       const res = await fetch("/health", { headers })
       const body = await res.text()
       setTestResult(`GET /health ${res.status}: ${body.slice(0, 500)}`)
-      // tamb�m testa /chat sem enviar mensagem para ver 401 vs 200
       const res2 = await fetch("/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(token.trim() ? { Authorization: `Bearer ${token.trim()}` } : {}) },
         body: JSON.stringify({ message: "teste settings", thread_id: threadId || "demo-1", user_id: userId || "demo" }),
       })
-      const chatText = await res2.text(); setTestResult((prev) => (prev || "") + ` | POST /chat ${res2.status} ${chatText.slice(0, 300)}`)
+      const chatText = await res2.text()
+      setTestResult((prev) => (prev || "") + ` | POST /chat ${res2.status} ${chatText.slice(0, 300)}`)
     } catch (e) {
       setTestResult(e instanceof Error ? e.message : String(e))
-    } finally { setTesting(false) }
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  async function fetchDevToken() {
+    setTesting(true)
+    setTestResult(null)
+    try {
+      const res = await fetch("/auth/dev-token", { method: "POST" })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j.detail || "dev-token falhou " + res.status)
+      const devTok = String(j.token || "")
+      if (!devTok) throw new Error("token vazio")
+      setTokenState(devTok)
+      setUserIdState(String(j.user_id || "demo"))
+      setToken(devTok)
+      setUserId(String(j.user_id || "demo"))
+      setTestResult("Token dev obtido e salvo (" + j.env + "). Agora Chat -> 200.")
+    } catch (e) {
+      setTestResult(e instanceof Error ? e.message : String(e))
+    } finally {
+      setTesting(false)
+    }
   }
 
   function clear() {
-    try { localStorage.removeItem("jefrey_token"); localStorage.removeItem("jefrey_user_id"); localStorage.removeItem("jefrey_thread_id"); } catch {}
-    setTokenState(""); setUserIdState("demo"); setThreadIdLocal("demo-1")
+    try {
+      localStorage.removeItem("jefrey_token")
+      localStorage.removeItem("jefrey_user_id")
+      localStorage.removeItem("jefrey_thread_id")
+    } catch {}
+    setTokenState("")
+    setUserIdState("demo")
+    setThreadIdLocal("demo-1")
     setTestResult("Limpo. Agora /chat voltara a 401 (fail-closed).")
   }
 
-    const [vozWake, setVozWake] = useState(()=> { try { return localStorage.getItem("jefrey_wake_enabled")==="1"; } catch { return false; } });
-  const [vozVoice, setVozVoice] = useState(()=> { try { return localStorage.getItem("jefrey_voice_id") || "pt_BR-faber-medium"; } catch { return "pt_BR-faber-medium"; } });
-  const wake = useWakeWord({ enabled: vozWake, keyword: "jarvis", onWake: ()=> { try { document.querySelector<HTMLButtonElement>('[aria-label="Falar com Jefrey"]')?.click(); } catch {} } });
-  useEffect(()=>{ try { localStorage.setItem("jefrey_wake_enabled", vozWake?"1":"0"); } catch {} }, [vozWake]);
-  useEffect(()=>{ try { localStorage.setItem("jefrey_voice_id", vozVoice); } catch {} }, [vozVoice]);
+  const [vozWake, setVozWake] = useState(() => {
+    try {
+      return localStorage.getItem("jefrey_wake_enabled") === "1"
+    } catch {
+      return false
+    }
+  })
+  const [vozVoice, setVozVoice] = useState(() => {
+    try {
+      return localStorage.getItem("jefrey_voice_id") || "pt_BR-faber-medium"
+    } catch {
+      return "pt_BR-faber-medium"
+    }
+  })
+  const wake = useWakeWord({ enabled: vozWake, keyword: "jarvis", onWake: () => {
+    try {
+      document.querySelector<HTMLButtonElement>('[aria-label="Falar com Jefrey"]')?.click()
+    } catch {}
+  }})
+  useEffect(() => {
+    try {
+      localStorage.setItem("jefrey_wake_enabled", vozWake ? "1" : "0")
+    } catch {}
+  }, [vozWake])
+  useEffect(() => {
+    try {
+      localStorage.setItem("jefrey_voice_id", vozVoice)
+    } catch {}
+  }, [vozVoice])
 
   return (
     <div className="space-y-4">
@@ -87,7 +139,7 @@ export default function Settings() {
               />
               <Button variant="outline" onClick={() => setShowToken((v) => !v)}>{showToken ? "Ocultar" : "Mostrar"}</Button>
             </div>
-            <p className="text-xs text-muted-foreground">Salvo em localStorage jeyfry_token � nunca enviado em query.</p>
+            <p className="text-xs text-muted-foreground">Salvo em localStorage jefrey_token — nunca enviado em query.</p>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -100,7 +152,7 @@ export default function Settings() {
                 onChange={(e) => setUserIdState(e.target.value)}
                 aria-label="user_id"
               />
-              <p className="text-xs text-muted-foreground">Todo POST leva este user_id � sem default system.</p>
+              <p className="text-xs text-muted-foreground">Todo POST leva este user_id — sem default system.</p>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">thread_id</label>
@@ -117,7 +169,8 @@ export default function Settings() {
 
           <div className="flex flex-wrap gap-2">
             <Button onClick={save}>Salvar</Button>
-            <Button variant="outline" onClick={testAuth} disabled={testing}>{testing ? "Testando�" : "Testar /health + /chat"}</Button>
+            <Button variant="outline" onClick={fetchDevToken} disabled={testing}>{testing ? "Obtendo..." : "Obter token dev"}</Button>
+            <Button variant="outline" onClick={testAuth} disabled={testing}>{testing ? "Testando..." : "Testar /health + /chat"}</Button>
             <Button variant="destructive" onClick={clear}>Limpar</Button>
             <Badge variant="secondary">ENV dev</Badge>
             <a href="/docs" target="_blank" rel="noreferrer" className="text-sm underline">Abrir /docs</a>
@@ -128,31 +181,31 @@ export default function Settings() {
           <div className="rounded-md border p-3 text-xs bg-muted/30">
             <div className="font-medium mb-1">Como usar como 1 programa (Guia leigo):</div>
             <ol className="list-decimal ml-4 space-y-1">
-              <li>Cole seu Bearer token acima e clique Salvar.</li>
-              <li>V� em Chat e envie mensagem � agora POST /chat 200 (antes 401).</li>
-              <li>V� em Memoria e busque � POST /memory/search com mesmo user_id.</li>
+              <li>Clique Obter token dev (em dev) ou cole seu Bearer acima e clique Salvar.</li>
+              <li>Va em Chat e envie mensagem — agora POST /chat 200 (antes 401).</li>
+              <li>Va em Memoria e busque — POST /memory/search com mesmo user_id.</li>
               <li>Approvals/Observability leem /approvals e /metrics vivos (15s).</li>
             </ol>
           </div>
         </CardContent>
       </Card>
-    
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">Voz — STT/TTS + Wake &quot;jarvis&quot; <Badge variant="secondary">P1</Badge></CardTitle>
-          <p className="text-sm text-muted-foreground">Microfone MediaRecorder 16k → POST /stt (whisper small) → /chat qwen2:0.5b → POST /tts. Wake usa Web Speech &quot;jarvis&quot; (porcupine quando key configurada).</p>
+          <p className="text-sm text-muted-foreground">Microfone MediaRecorder 16k - POST /stt (whisper small) - /chat qwen2:0.5b - POST /tts. Wake usa Web Speech jarvis (porcupine quando key configurada).</p>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={vozWake} onChange={(e)=> setVozWake(e.target.checked)} />
-              Wake &quot;jarvis&quot; {wake.listening ? "(ouvindo...)" : "(off)"} {!wake.supported && <span className="text-xs text-muted-foreground">— navegador sem SpeechRecognition</span>}
+              <input type="checkbox" checked={vozWake} onChange={(e) => setVozWake(e.target.checked)} />
+              Wake &quot;jarvis&quot; {wake.listening ? "(ouvindo...)" : "(off)"} {!wake.supported && <span className="text-xs text-muted-foreground"> — navegador sem SpeechRecognition</span>}
             </label>
-            <Badge variant={wake.listening ? "success" : "outline"}>{wake.listening ? "wake ativo" : "wake off"}</Badge>
+            <Badge variant={wake.listening ? "default" : "outline"}>{wake.listening ? "wake ativo" : "wake off"}</Badge>
           </div>
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium">Voz TTS (Mark-LII 5 vozes + Piper)</label>
-            <select value={vozVoice} onChange={(e)=> setVozVoice(e.target.value)} className="rounded-md border px-3 py-2 text-sm">
+            <select value={vozVoice} onChange={(e) => setVozVoice(e.target.value)} className="rounded-md border px-3 py-2 text-sm">
               <option value="pt_BR-faber-medium">Faber PT-BR (piper local, sem custo)</option>
               <option value="Charon">Charon — masc grave (ElevenLabs)</option>
               <option value="Puck">Puck — masc jovem (ElevenLabs)</option>
@@ -169,8 +222,6 @@ export default function Settings() {
           </div>
         </CardContent>
       </Card>
-
-</div>
+    </div>
   )
 }
-
