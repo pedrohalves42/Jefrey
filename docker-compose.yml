@@ -1,3 +1,4 @@
+name: jefrey
 # =============================================================================
 # JEFREY � Stack de infraestrutura
 # Fase P1: PostgreSQL 16 + pgvector (mem�ria vetorial + relacional) e Redis (working memory)
@@ -250,7 +251,12 @@ services:
 
 volumes:
   jefrey_pgdata:
+    name: jefrey_pgdata
   jefrey_redisdata:
+    name: jefrey_redisdata
   jefrey_n8n_data:
+    name: jefrey_n8n_data
   jefrey_prometheus_data:
+    name: jefrey_prometheus_data
   jefrey_grafana_data:
+    name: jefrey_grafana_data
