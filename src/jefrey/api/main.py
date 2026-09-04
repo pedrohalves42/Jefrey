@@ -29,6 +29,29 @@ from src.jefrey.core.metrics import SERVICE_HEALTH
 
 logger = logging.getLogger(__name__)
 
+# F3 LLM probe fail-closed visible (Axiom #1, DDIA cap12) - never crash, lazy (HPP)
+import httpx as _f3_httpx
+_f3_log2 = __import__("logging").getLogger(__name__)
+async def _f3_llm_probe():
+    try:
+        from src.jefrey.core.config import get_settings
+        cfg = get_settings()
+        base = (getattr(cfg.llm, 'base_url', None) or 'http://host.docker.internal:11434').rstrip('/')
+        url = base + '/api/tags'
+        async with _f3_httpx.AsyncClient(timeout=2) as c:
+            r = await c.get(url)
+            ok = r.status_code == 200
+            has_qwen = 'qwen2' in r.text if ok else False
+            _f3_log2.info(f'LLM probe base_url={base} model={getattr(cfg.llm,"model","?")} reachable={ok} has_qwen2={has_qwen} status={r.status_code}')
+            if not ok:
+                _f3_log2.warning('LLM offline - modo mock visivel na UI (Axiom #1 fail-closed)')
+    except Exception as e:
+        try:
+            _f3_log2.warning(f'LLM probe falhou: {e} - modo mock')
+        except:
+            pass
+
+
 def create_app() -> FastAPI:
     # SECURITY (P6-pre): validacao de producao no startup
     cfg = get_settings()
@@ -62,6 +85,12 @@ def create_app() -> FastAPI:
         version=cfg.version,
         description="API REST unificada do assistente Jefrey (FastAPI + Starlette)",
     )
+
+    # F3 startup probe (Axiom #1 visible, never crash)
+    @app.on_event("startup")
+    async def _f3_startup_llm_probe():
+        await _f3_llm_probe()
+
 
     # CIPHER-031: CORS origins must be explicitly configured via env var
     # In production, JEFREY_API__CORS_ORIGINS must be set to specific allowed domains

@@ -42,3 +42,6 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
 }
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 export type MemoryHit = { content: string; score?: number; metadata?: Record<string, unknown>; type?: string; created_at?: string };
+
+// F3 LLM probe helper (Axiom #1 visible, never crash)
+export async function probeHealth(): Promise<{ok:boolean}> { try { const r=await fetch('/health'); return {ok:r.ok}; } catch { return {ok:false}; } }
