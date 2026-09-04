@@ -1,4 +1,4 @@
-# TODO Pre-codar — 2026-09-04 20:05 — base 175/175 2x + P6 27/27 2x + P7 54/54 2x + 40 tests 2x + F6 LIVE 24/24 — v1.5.0-leigo-100 SYNCED c390584 (+ vite 2b2fd2a 100B)
+# TODO Pre-codar — 2026-09-04 20:05 — base 175/175 2x + P6 27/27 2x + P7 54/54 2x + 40 tests 2x + F6 LIVE 24/24 — v1.5.0-leigo-100 SYNCED 8b304bc (+ vite 2b2fd2a 100B)
 
 ## Base ja fechada (nao mexer sem branch)
 - [x] T1 HARDENING 100% + T3 P8 TAG v1.0.0 167/167 + T2 P7 PERF v1.1.0 175/175 + D5 push origin/main 11c864c + 3 tags (v1.0.0, v1.0.0-p5-c, v1.1.0)
