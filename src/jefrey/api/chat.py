@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from src.jefrey.core.agent import JefreyAgent
 from src.jefrey.core.content_guard import sanitize_tool_output
+from src.jefrey.core.audit import redact_pii
 from src.jefrey.core.hitl import ApprovalManager
 
 logger = logging.getLogger(__name__)
@@ -80,7 +81,7 @@ async def chat(request: Request, req: ChatRequest):
     if "[CONTEÚDO BLOQUEADO" in sanitized:
         logger.warning(
             "chat: input bloqueado pelo content_guard para thread=%s user=%s. Original=%s",
-            thread_id, user_id, message[:100],
+            thread_id, user_id, redact_pii(message[:100]),
         )
         raise HTTPException(
             status_code=400,
@@ -159,6 +160,15 @@ async def resume_chat(request: Request, thread_id: str):
     """
     # SECURITY: extrai user_id do middleware
     user_id = getattr(request.state, "user_id", "anonymous")
+    # CIPHER-113: rate-limit leve para status polling (evita oracle de thread_id enumeravel) - P2
+    try:
+        from src.jefrey.core.rate_limit import get_rate_limiter
+        if get_rate_limiter().is_allowed_sync(user_id or "anon", "chat_status", rate=60) == "deny":
+            raise HTTPException(status_code=429, detail="rate limited: tente novamente em alguns segundos")
+    except HTTPException:
+        raise
+    except Exception:
+        pass  # fail-open se Redis down -> nao quebra GET
     task_key = f"{user_id}:{thread_id}"
     task = _RUNNING_TASKS.get(task_key)
 

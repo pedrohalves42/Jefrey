@@ -94,6 +94,7 @@ class RedisWorkingMemory:
             max_tokens=self.max_tokens,
             redis_client=self._redis,
             prefix=self.prefix,
+            user_id=self.user_id,
         )
 
     # ---- armazenamento ----
@@ -110,7 +111,7 @@ class RedisWorkingMemory:
 
     def _save(self, items: list[dict]) -> None:
         if self._redis is not None:
-            self._redis.set(self._key(), json.dumps(items))
+            self._redis.set(self._key(), json.dumps(items), ex=86400)
         else:
             self._local[self.session_id] = items
 
@@ -181,12 +182,17 @@ class RedisWorkingMemory:
 
     def list_sessions(self) -> list[str]:
         if self._redis is not None:
-            # High Performance Python: SCAN O(1) por iteracao vs KEYS O(N) bloqueante
+            # CIPHER-110: SCAN filtrado por user_id quando presente -> isolamento tenant
+            pattern = f"{self.prefix}{self.user_id}:*" if self.user_id else f"{self.prefix}*"
             out: list[str] = []
             cursor = 0
             while True:
-                cursor, keys = self._redis.scan(cursor=cursor, match=f"{self.prefix}*", count=100)
-                out.extend(k.replace(self.prefix, "") for k in keys)
+                cursor, keys = self._redis.scan(cursor=cursor, match=pattern, count=100)
+                for k in keys:
+                    kstr = k.decode() if isinstance(k, bytes) else k
+                    if self.user_id and not kstr.startswith(f"{self.prefix}{self.user_id}:"):
+                        continue
+                    out.append(kstr.replace(self.prefix, ""))
                 if cursor == 0:
                     break
             return out

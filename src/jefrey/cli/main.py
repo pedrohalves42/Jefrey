@@ -81,6 +81,32 @@ def chat_cmd(
             title="⚠️ HITL Pendente",
             border_style="yellow",
         ))
+    elif status == "running":
+        console.print("[dim]Execucao longa iniciada, aguardando conclusao...[/dim]")
+        # Poll /chat/status/{thread_id} com backoff 1.5->5s, 60s
+        deadline = time.time() + 60
+        delay = 1.5
+        while time.time() < deadline:
+            try:
+                with httpx.Client(base_url=base_url, timeout=10.0) as poll_c:
+                    r2 = poll_c.get(f"/chat/status/{thread_id}", headers=headers)
+                    j2 = r2.json()
+                    s2 = j2.get("status")
+                    if s2 == "complete":
+                        console.print(Panel(j2.get("response", ""), title="Jefrey", border_style="cyan"))
+                        return
+                    if s2 == "error":
+                        console.print(f"[bold red]Erro:[/bold red] {j2.get('message') or j2}")
+                        return
+                    if s2 == "pending_approval":
+                        aid = j2.get("approval_id")
+                        console.print(Panel(f"[bold yellow]Aprovacao pendente![/bold yellow] ID: {aid}", title="HITL", border_style="yellow"))
+                        return
+            except Exception as e:
+                console.print(f"[dim]poll erro (retry): {e}[/dim]")
+            time.sleep(delay)
+            delay = min(delay * 1.2, 5.0)
+        console.print("[bold red]Polling timeout (60s) — tente: GET /chat/status/{thread_id}[/bold red]")
     else:
         console.print(f"Status: {status} - {data.get('message', '')}")
 
@@ -160,9 +186,10 @@ def search_memory_cmd(
 ):
     """Busca termos na memória vetorial de longo prazo."""
     base_url = url or get_base_url()
+    headers = get_auth_headers()
     try:
         with httpx.Client(base_url=base_url, timeout=10.0) as client:
-            res = client.get("/memory/search", params={"q": query, "limit": limit})
+            res = client.get("/memory/search", params={"q": query, "limit": limit}, headers=headers)
     except Exception as e:
         console.print(f"[bold red]Erro ao buscar na memória: {e}[/bold red]")
         sys.exit(1)

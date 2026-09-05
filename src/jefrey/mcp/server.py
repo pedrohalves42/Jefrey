@@ -180,6 +180,12 @@ def _make_wrapper(tool: StructuredTool) -> callable:
     src = (
         f"async def _wrap({', '.join(params)}) -> str:\n"
         f"    _args = {{k: v for k, v in locals().items() if k not in ('thread_id',)}}\n"
+        f"    # CIPHER-120: input size guard (DoS/context bloat) — valida antes do PolicyEngine\n"
+        f"    for _k, _v in _args.items():\n"
+        f"        if isinstance(_v, str) and len(_v) > 8000:\n"
+        f"            return '[INPUT TOO LARGE] campo ' + _k + ' excede 8000 chars'\n"
+        f"        if isinstance(_v, list) and len(_v) > 100:\n"
+        f"            return '[INPUT TOO LARGE] lista ' + _k + ' excede 100 itens'\n"
         f"    return await _run_guarded(_TOOL, _args, thread_id)\n"
     )
     exec(src, ns)

@@ -92,6 +92,15 @@ def create_app() -> FastAPI:
     async def _f3_startup_llm_probe():
         await _f3_llm_probe()
 
+    # CIPHER-104: fecha pool do checkpointer em shutdown (evita leak de conexoes AsyncPG)
+    @app.on_event("shutdown")
+    async def _close_checkpointer():
+        try:
+            from src.jefrey.core.checkpointer import close_postgres_checkpointer
+            await close_postgres_checkpointer()
+        except Exception:
+            pass
+
 
     # CIPHER-031: CORS origins must be explicitly configured via env var
     # In production, JEFREY_API__CORS_ORIGINS must be set to specific allowed domains

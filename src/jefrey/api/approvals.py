@@ -98,6 +98,15 @@ async def decide(request):
         )
     # SECURITY: ownership check -- passa user_id para validacao
     user_id = getattr(request.state, "user_id", _DEFAULT_USER)
+    # CIPHER-111: trilha de auto-approval HIGH/CRITICAL (single-tenant OK; multi-tenant exigiria RBAC ADMIN)
+    try:
+        _row = ApprovalManager().get(approval_id)  # type: ignore[attr-defined]
+        if _row is not None:
+            _risk = getattr(_row, "risk_level", None) or (isinstance(_row, dict) and _row.get("risk_level"))
+            if _risk in ("high", "critical"):
+                logger.warning("CIPHER-111: auto-approval %s risk=%s by user_id=%s (review RBAC)", approval_id, _risk, user_id)
+    except Exception:
+        pass
     ok = ApprovalManager().decide(approval_id, decision, decided_by, user_id=user_id)
     if not ok:
         return JSONResponse(

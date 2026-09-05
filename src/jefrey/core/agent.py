@@ -184,7 +184,7 @@ class JefreyAgent:
         """
         # SHORT-TERM ISOLATION: sessão por thread_id para não vazar conversas entre usuários
         thread_st = self.memory.short_term.session(state.thread_id)
-        context = self.memory.get_context(state.user_input)
+        context = self.memory.get_context(state.user_input, user_id=state.user_id)
         state.memory_context = context
         
         # Adiciona memórias relevantes como mensagens de sistema
@@ -342,7 +342,9 @@ class JefreyAgent:
             if "error" in result:
                 content = f"Erro: {result['error']}"
             else:
-                content = json.dumps(result["result"], ensure_ascii=False)
+                raw = json.dumps(result["result"], ensure_ascii=False)
+                from src.jefrey.core.content_guard import sanitize_tool_output
+                content = sanitize_tool_output(raw, tool_name=result.get("name", ""))
 
             state.messages.append(ToolMessage(
                 content=content,
@@ -400,7 +402,8 @@ class JefreyAgent:
             "thread_id": thread_id,
         })
 
-        config = {"configurable": {"thread_id": thread_id, "user_id": user_id}}
+        from src.jefrey.core.checkpointer import make_checkpoint_config as _make_cp_cfg
+        config = _make_cp_cfg(thread_id, user_id)
         compiled = await self._compile()
         final_state = await compiled.ainvoke(initial_state, config=config)
 
@@ -429,7 +432,8 @@ class JefreyAgent:
             user_id=user_id,
         )
 
-        config = {"configurable": {"thread_id": thread_id, "user_id": user_id}}
+        from src.jefrey.core.checkpointer import make_checkpoint_config as _make_cp_cfg
+        config = _make_cp_cfg(thread_id, user_id)
 
         await event_bus.emit_sync(SystemEvents.USER_MESSAGE, {
             "input": user_input,

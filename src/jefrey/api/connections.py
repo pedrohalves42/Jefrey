@@ -1,6 +1,7 @@
 """Connections 1-clique — F6-3 (Axiom #1 FAIL-CLOSED, #2 ISOLAMENTO, #4 PERSISTENCIA, CIPHER-032)"""
 from __future__ import annotations
 import os
+from urllib.parse import urlparse
 import re
 import logging
 import httpx
@@ -8,6 +9,18 @@ from fastapi import APIRouter, Request, HTTPException
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/connections", tags=["connections"])
+
+_BLOCKED_HOSTS = ("127.", "10.", "172.", "192.168.", "169.254.", "::1", "localhost", "postgres", "jefrey-", "host.docker.internal")
+
+def _is_blocked_url(url: str) -> bool:
+    try:
+        # CIPHER-118b: http://::1/ sem [] tem hostname None, mas eh SSRF local -> bloqueia pelo raw
+        if "::1" in url.lower():
+            return True
+        host = (urlparse(url).hostname or "").lower()
+        return any(host == b.rstrip(".") or host.startswith(b) or b in host for b in _BLOCKED_HOSTS)
+    except Exception:
+        return True
 
 _URL_RE = re.compile(r"^https?://[^\s]+$", re.IGNORECASE)
 
@@ -21,8 +34,8 @@ async def browse(request: Request):
     except Exception:
         raise HTTPException(status_code=400, detail="JSON invalido")
     url = str(body.get("url") or "").strip()
-    if not url or not _URL_RE.match(url):
-        raise HTTPException(status_code=400, detail="url invalida, use https://...")
+    if not url or not _URL_RE.match(url) or _is_blocked_url(url):
+        raise HTTPException(status_code=400, detail="URL bloqueada (SSRF)" if _is_blocked_url(url) else "url invalida, use https://...")
     if len(url) > 2048:
         raise HTTPException(status_code=400, detail="url muito longa")
     # Try MCP browser_control (stdio) — fail-closed gracefully (Axiom #7 sem novo container)
@@ -39,7 +52,7 @@ async def browse(request: Request):
     # Fallback: instruct frontend to open URL + log audit
     try:
         from src.jefrey.core.audit import get_audit_logger
-        get_audit_logger().log(user_id=user_id, action="connections.browse", resource=url, status="ok")
+        get_audit_logger().log(thread_id="connections", tool_name="browse", actor_role="user", risk="low", decision="allow", user_id=user_id, detail={"url": url, "via": "direct"})
     except Exception:
         pass
     return {"ok": True, "url": url, "message": f"Navegar: {url} — abra em nova aba (MCP browser_control pronto quando workflow n8n configurado)", "via": "direct"}

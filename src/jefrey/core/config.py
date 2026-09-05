@@ -47,7 +47,7 @@ class MemoryLongTermSettings(BaseSettings):
     persist_directory: str = "data/chroma_db"
     collection_name: str = "jefrey_memory"
     embedding_model: str = "nomic-embed-text"
-    embedding_dim: int = 1536
+    embedding_dim: int = 768  # nomic-embed-text via Ollama = 768 dims (1536 quebra pgvector)
     top_k: int = 5
     similarity_threshold: float = 0.7
 

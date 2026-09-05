@@ -43,14 +43,16 @@ async def search_memory(
         raise HTTPException(status_code=500, detail="Erro interno na busca de memÃ³ria.")
 
 @router.get("/health")
-async def memory_health():
+async def memory_health(request: Request):
     """Retorna o estado operacional e mÃ©tricas bÃ¡sicas dos subsistemas de memÃ³ria.
 
     SECURITY: health check protegido pelo middleware auth (requiere Bearer token + X-User-Id).
     """
     try:
         mm = get_memory_manager()
-        total_long_term = mm.long_term.count()
+        # CIPHER-109: isola contagem por tenant (evita leak de cardinalidade global)
+        user_id = getattr(request.state, "user_id", None)
+        total_long_term = mm.long_term.count(user_id=user_id) if user_id else mm.long_term.count()
         short_term_count = len(mm.short_term.get_messages())
         return {
             "status": "healthy",

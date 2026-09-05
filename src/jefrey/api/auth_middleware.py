@@ -98,11 +98,23 @@ class FastAPIAuthMiddleware(BaseHTTPMiddleware):
                 request.state.oauth2_client = "configured-secret"
                 return await call_next(request)
 
-        # A5: check cache por hash (nunca token raw)
+        # A5: check cache por hash (nunca token raw) — CIPHER-121 revocation check antes do cache
         try:
             cached = _cache_get(token)
             if cached is not None:
-                result = cached
+                # CIPHER-121: invalida cache se token foi revogado apos cacheamento (janela 60s)
+                try:
+                    from src.jefrey.oauth2.introspect import _is_revoked_hash
+                    if _is_revoked_hash(_cache_key(token)):
+                        _introspection_cache.pop(_cache_key(token), None)  # type: ignore
+                        cached = None
+                except Exception:
+                    pass
+                if cached is not None:
+                    result = cached
+                else:
+                    result = introspect_token(token=token)
+                    _cache_set(token, result)
             else:
                 result = introspect_token(token=token)
                 # cache only successful active tokens or definitive inactive (not exceptions)

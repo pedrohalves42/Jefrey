@@ -462,9 +462,9 @@ class MemoryManager:
         self.short_term.add_user(user_msg)
         self.short_term.add_assistant(assistant_msg)
     
-    def get_context(self, current_query: str) -> dict:
+    def get_context(self, current_query: str, user_id: str | None = None) -> dict:
         """Retorna contexto combinado para o LLM."""
-        relevant_memories = self.long_term.search(current_query)
+        relevant_memories = self.long_term.search(current_query, user_id=user_id)
         recent_history = self.short_term.get_messages()
         
         return {
@@ -476,7 +476,7 @@ class MemoryManager:
                 "tokens": self.short_term.token_count,
             },
             "long_term_stats": {
-                "total_memories": self.long_term.count(),
+                "total_memories": self.long_term.count(user_id=user_id),
             },
         }
     

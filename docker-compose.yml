@@ -72,7 +72,7 @@ services:
       JEFREY_LLM__MODEL: ${JEFREY_LLM__MODEL:-qwen2.5:0.5b}
       JEFREY_LLM__BASE_URL: ${JEFREY_LLM__BASE_URL:-http://host.docker.internal:11434}
       JEFREY_EMBEDDINGS__BASE_URL: ${JEFREY_EMBEDDINGS__BASE_URL:-http://host.docker.internal:11434}
-      JEFREY_API__SECRET_KEY: ${JEFREY_API__SECRET_KEY}
+      JEFREY_API__SECRET_KEY: ${JEFREY_API__SECRET_KEY:?required - defina JEFREY_API__SECRET_KEY no .env}
       JEFREY_API__AUDIT_FALLBACK_PATH: ${JEFREY_API__AUDIT_FALLBACK_PATH:-/tmp/audit_fallback.jsonl}
       JEFREY_ENV: ${JEFREY_ENV:-dev}
       JEFREY_EVENTBUS__HMAC_KEY: ${JEFREY_EVENTBUS__HMAC_KEY:?required em prod � ver .env.example}
@@ -182,7 +182,7 @@ services:
     environment:
       N8N_BASIC_AUTH_ACTIVE: "false"
       N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER}
-      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:?required - defina N8N_BASIC_AUTH_PASSWORD no .env}
       N8N_HOST: "0.0.0.0"
       N8N_PORT: "5678"
       N8N_PROTOCOL: "http"
