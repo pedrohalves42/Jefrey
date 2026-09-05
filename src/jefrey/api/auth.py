@@ -35,4 +35,5 @@ async def dev_token(request: Request):
 
     # nunca loga token raw (CIPHER-010)
     logger.info("dev-token emitido env=%s", cfg.env)
-    return {"token": secret, "user_id": "demo", "expires_in": 86400, "env": cfg.env}
+    # D1a fix R-05: canon access_token + alias token (compat) — evita 401 quando doc usa .access_token (DDIA cap12, PragProg #12)
+    return {"token": secret, "access_token": secret, "user_id": "demo", "expires_in": 86400, "env": cfg.env}

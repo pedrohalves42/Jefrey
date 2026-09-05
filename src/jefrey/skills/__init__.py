@@ -139,8 +139,8 @@ def skill(name: str, description: str, **metadata_kwargs):
 
 
 def tool(name: str | None = None, description: str | None = None):
-    """Decorator para criar ferramenta a partir de funcao async."""
-    def decorator(func: Callable[..., Awaitable[Any]]) -> BaseTool:
+    """Decorator para criar ferramenta a partir de funcao async. Suporta metodos (self binding)."""
+    def decorator(func: Callable[..., Awaitable[Any]]):
         tool_name = name or func.__name__
         tool_desc = description or func.__doc__ or ""
         sig = inspect.signature(func)
@@ -155,14 +155,40 @@ def tool(name: str | None = None, description: str | None = None):
             "__annotations__": {k: v[0] for k, v in params.items()},
             **{k: v[1] for k, v in params.items()},
         })
-        async def wrapper(**kwargs):
-            return await func(**kwargs)
-        return StructuredTool.from_function(
-            coroutine=wrapper,
-            name=tool_name,
-            description=tool_desc,
-            args_schema=schema,
-        )
+        # B1 fix: Pydantic 2.13 Any forward-ref (Fluent 19-21) — model_rebuild com Any no namespace
+        try:
+            schema.model_rebuild()
+        except Exception:
+            try:
+                import sys as _sys
+                _mod = _sys.modules.get(schema.__module__)
+                if _mod is not None and not hasattr(_mod, "Any"):
+                    setattr(_mod, "Any", Any)
+                schema.model_rebuild()
+            except Exception:
+                pass
+
+        # B1c fix: descriptor para bind correto de self (Fluent 19, SWE cap8)
+        # Sem isto, @tool em metodo gera `missing 1 required positional argument: 'self'`
+        class _ToolDescriptor:
+            def __get__(self, instance, owner):
+                if instance is None:
+                    return self
+                cache = f"_jefrey_tool_{tool_name}"
+                cached = getattr(instance, cache, None)
+                if cached is not None:
+                    return cached
+                async def bound_wrapper(**kwargs):
+                    return await func(instance, **kwargs)
+                bound_tool = StructuredTool.from_function(
+                    coroutine=bound_wrapper,
+                    name=tool_name,
+                    description=tool_desc,
+                    args_schema=schema,
+                )
+                setattr(instance, cache, bound_tool)
+                return bound_tool
+        return _ToolDescriptor()
     return decorator
 
 

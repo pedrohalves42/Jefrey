@@ -18,6 +18,10 @@ def init_db() -> None:
     # P4: adiciona coluna expires_at na tabela approvals (ja existente desde P3). Idempotente.
     with engine.begin() as conn:
         conn.execute(text("ALTER TABLE approvals ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ"))
+    # P4-CRITICO R-01: audit_logs.user_id drift fix — DDIA cap6 migracao idempotente, Axiom #2 isolamento
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS user_id VARCHAR(128) NOT NULL DEFAULT 'system'"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_audit_logs_user_id ON audit_logs(user_id)"))
     with engine.begin() as conn:
         # Garante que metadata_json seja JSONB (idempotente; no-op se ja for jsonb).
         # Necessario porque filtros usam os operadores @> / ->> da JSONB.

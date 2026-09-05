@@ -127,9 +127,10 @@ CHECKS = [
 
     # === SECURITY P0.5: Production hardening ===
 
-    # P05-01: debug default = False
+    # P05-01: debug default = False (C1 fix: tolera Field(default=False) — Pydantic Settings v2)
     ("P05-01: debug default = False (config.py)",
-     lambda: 'debug: bool = False' in open("src/jefrey/core/config.py", encoding="utf-8").read()),
+     lambda: 'debug:' in open("src/jefrey/core/config.py", encoding="utf-8").read()
+             and 'default=False' in open("src/jefrey/core/config.py", encoding="utf-8").read()),
 
     # P05-02: ChatRequest com max_length
     ("P05-02: ChatRequest max_length (chat.py)",

@@ -27,6 +27,7 @@ TABLES = [
     "procedural_memory",
     "operational_memory",
     "approvals",
+    "audit_logs",
 ]
 
 def run_migration() -> bool:
@@ -90,7 +91,7 @@ def run_migration() -> bool:
 
     print()
     if ok:
-        print("  🎉 Migration concluída com sucesso! Todas as 6 tabelas protegidas.")
+        print("  🎉 Migration concluída com sucesso! Todas as 7 tabelas protegidas.")
     else:
         print("  ⚠️  Migration com erros — revise os logs acima.")
     print()

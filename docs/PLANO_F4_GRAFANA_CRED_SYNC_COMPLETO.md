@@ -98,7 +98,7 @@ promtool check rules docker/prometheus/alerts.yml # SUCCESS 7 rules
 curl -s -H "Authorization: Bearer $DEV" http://localhost:8000/stt/health # 200 small
 curl -s http://localhost:8000/tts/voices # 6 voices
 # Poll longo até complete com qwen2.5 tools (fallback já no api 584e04a)
-DEV=$(curl -s -X POST http://localhost:8000/auth/dev-token | jq -r .access_token)
+DEV=$(curl -s -X POST http://localhost:8000/auth/dev-token | jq -r '.access_token // .token')
 curl -s -X POST http://localhost:8000/chat -H "Authorization: Bearer $DEV" -H "X-User-Id: test-f4" -d '{"message":"oi, diga oi em 1 frase","thread_id":"f4-final","user_id":"test-f4"}' # 200 running
 for i in 1..15; do sleep 2; curl -s -H "Authorization: Bearer $DEV" http://localhost:8000/chat/status/f4-final; done # deve virar complete com texto
 docker logs jefrey-api --tail 40 | grep -i "fallback|qwen2|does not support|LLM probe"

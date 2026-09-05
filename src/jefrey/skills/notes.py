@@ -50,6 +50,7 @@ class NotesSkill(SkillBase):
         related_people: list[str] | None = None,
         related_projects: list[str] | None = None,
         metadata: dict[str, Any] | None = None,
+        user_id: str | None = None,
     ) -> dict:
         """Salva nota com metadados ricos para busca posterior."""
         tags = tags or []
@@ -62,7 +63,8 @@ class NotesSkill(SkillBase):
             "related_projects": related_projects or [],
             **metadata,
         }
-        note_id = self.memory.long_term.add(content, metadata=meta)
+        _uid = user_id or "system"
+        note_id = self.memory.long_term.add(content, metadata=meta, user_id=_uid)
         logger.info(f"Nota salva: {title} ({note_id[:8]}...)")
         return {
             "id": note_id,
@@ -77,24 +79,25 @@ class NotesSkill(SkillBase):
         query: str,
         top_k: int = 5,
         tags: list[str] | None = None,
+        user_id: str | None = None,
     ) -> list[dict]:
         """Busca semântica nas notas. Use linguagem natural."""
         filter_meta = {"tags": {"$in": tags}} if tags else None
-        results = self.memory.long_term.search(query, top_k=top_k, filter_metadata=filter_meta)
+        results = self.memory.long_term.search(query, top_k=top_k, filter_metadata=filter_meta, user_id=user_id or "system")
         logger.info(f"Busca notas: '{query}' → {len(results)} resultados")
         return results
     
     @tool(description="Lista notas recentes, opcionalmente filtradas por tags")
-    async def list_notes(self, limit: int = 20, tags: list[str] | None = None) -> list[dict]:
+    async def list_notes(self, limit: int = 20, tags: list[str] | None = None, user_id: str | None = None) -> list[dict]:
         """Lista notas recentes ordenadas por data."""
         filter_meta = {"tags": {"$in": tags}} if tags else None
-        results = self.memory.long_term.list_recent(limit=limit, filter_metadata=filter_meta)
+        results = self.memory.long_term.list_recent(limit=limit, filter_metadata=filter_meta, user_id=user_id or "system")
         return results
     
     @tool(description="Recupera nota completa por ID")
-    async def get_note(self, note_id: str) -> dict | None:
+    async def get_note(self, note_id: str, user_id: str | None = None) -> dict | None:
         """Recupera nota específica."""
-        return self.memory.long_term.get(note_id)
+        return self.memory.long_term.get(note_id, user_id=user_id or "system")
     
     @tool(description="Atualiza nota existente")
     async def update_note(
@@ -104,6 +107,7 @@ class NotesSkill(SkillBase):
         tags: list[str] | None = None,
         title: str | None = None,
         metadata: dict[str, Any] | None = None,
+        user_id: str | None = None,
     ) -> dict:
         """Atualiza nota."""
         meta = {}
@@ -114,13 +118,13 @@ class NotesSkill(SkillBase):
         if metadata is not None:
             meta.update(metadata)
         
-        success = self.memory.long_term.update(note_id, content=content, metadata=meta)
+        success = self.memory.long_term.update(note_id, content=content, metadata=meta, user_id=user_id or "system")
         return {"success": success, "id": note_id}
     
     @tool(description="Remove nota permanentemente")
-    async def delete_note(self, note_id: str) -> dict:
+    async def delete_note(self, note_id: str, user_id: str | None = None) -> dict:
         """Remove nota."""
-        success = self.memory.long_term.delete(note_id)
+        success = self.memory.long_term.delete(note_id, user_id=user_id or "system")
         return {"success": success, "id": note_id}
 
 
