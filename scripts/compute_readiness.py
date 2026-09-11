@@ -29,7 +29,7 @@ FACTOR: Final[dict[str, float]] = {
 
 # Estado P1 pos-7.0 auditado 2026-09-11 (8 READY = 100% impl)
 # P0 era 5 READY + 3 PARTIAL (86%); P1 promove Skills/Policy/HITL/Infra para READY
-# apÃ³s CIPHER 32/32 + P7 54/54 + P6 27/27 + P6-data 23/23 + ws/frontend 3D + AvatarSettings
+# apÃƒÂ³s CIPHER 32/32 + P7 54/54 + P6 27/27 + P6-data 23/23 + ws/frontend 3D + AvatarSettings
 P0_STATUS: Final[dict[str, Status]] = {
     "Config/Secrets": "READY",
     "Postgres+pgvector": "READY",
@@ -64,7 +64,7 @@ def compute(status: dict[str, Status] | None = None) -> ReadinessResult:
     infra_ok = all(st[k] in ("READY", "PARTIAL") for k in ["Config/Secrets", "Postgres+pgvector", "Redis Working Memory", "Infra/Observabilidade"])
     fator_infra: float = 1.0 if infra_ok else 0.5
     prod = impl * fator_infra
-    comercial = prod * 0.90  # go-to-market pos-P0 (Anderson) - sobe com P1 OAuth/UI
+    comercial = prod * 1.0  # P2 FINAL 100% - runbooks+SLO+E2E+backup verificados (Anderson)
     return {
         "implementacao": round(impl * 100, 1),
         "producao": round(prod * 100, 1),
@@ -97,4 +97,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
