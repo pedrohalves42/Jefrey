@@ -60,19 +60,20 @@ const controls = new OrbitControls(camera, renderer.domElement);
 const hem = new THREE.HemisphereLight(0xffffff,0x444444,1); scene.add(hem);
 const dir = new THREE.DirectionalLight(0xffffff,0.8); dir.position.set(5,5,5); scene.add(dir);
 
-let avatarMesh = null;
+// Avatar imediato visivel (fix tela preta) - box fallback instantaneo, glTF tenta por cima
+let avatarMesh = new THREE.Mesh(new THREE.BoxGeometry(0.6,1.2,0.3), new THREE.MeshStandardMaterial({color:0x0a84ff}));
+avatarMesh.name='avatar';
+scene.add(avatarMesh);
+// tenta carregar glTF por cima; se 404 mantem box
 const loader = new GLTFLoader();
 loader.load('/data/avatars/iron_man.glTF', (gltf)=>{
+  scene.remove(avatarMesh);
   avatarMesh = gltf.scene;
   avatarMesh.name='avatar';
   scene.add(avatarMesh);
+  console.log('iron_man.glTF carregado');
 }, undefined, (err)=>{
-  console.warn('GLTF load falhou, usando fallback box', err);
-  const geo=new THREE.BoxGeometry(0.6,1.2,0.3);
-  const mat=new THREE.MeshStandardMaterial({color:0x0a84ff});
-  avatarMesh=new THREE.Mesh(geo,mat);
-  avatarMesh.name='avatar';
-  scene.add(avatarMesh);
+  console.warn('GLTF 404, mantendo box fallback', err);
 });
 
 // --- WebSocket 4 handlers (diretriz) ---
