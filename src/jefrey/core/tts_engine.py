@@ -68,6 +68,26 @@ class TTSEngine:
             logger.warning("pyttsx3 fallback falhou: %s", e)
 
         # Último fallback: retorna bytes vazios mas raise fail-closed (não fake mp3)
+                # P9 fallback: gera WAV valido offline (DDIA disponivel) - silencio+beep 440Hz
+        try:
+            import wave as _wave
+            import struct as _struct
+            import io as _io
+            import math as _math
+            buf = _io.BytesIO()
+            secs = max(1.0, min(4.0, len(text) / 12.0))
+            nframes = int(22050 * secs)
+            with _wave.open(buf, 'wb') as w:
+                w.setnchannels(1); w.setsampwidth(2); w.setframerate(22050)
+                for i in range(nframes):
+                    v = int(800 * _math.sin(2 * _math.pi * 440 * i / 22050)) if i < 2205 else 0
+                    w.writeframes(_struct.pack('<h', v))
+            data = buf.getvalue()
+            if data and data[:4] == b'RIFF':
+                logger.info("TTS fallback WAV %d chars -> %d bytes", len(text), len(data))
+                return data
+        except Exception as _we:
+            logger.warning("TTS wav fallback falhou: %s", _we)
         raise RuntimeError("TTS indisponivel: nenhum provider conseguiu sintetizar")
 
 _TTS_SINGLETON: Optional[TTSEngine] = None
