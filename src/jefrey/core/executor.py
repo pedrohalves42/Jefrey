@@ -31,7 +31,6 @@ logger = logging.getLogger(__name__)
 
 ToolResolver = Callable[[str], Any]  # name -> BaseTool | callable | None
 
-
 @dataclass
 class ToolExecutionResult:
     executed: bool = False
@@ -40,7 +39,6 @@ class ToolExecutionResult:
     reason: str = ""
     approval_id: str | None = None
     result: Any = None
-
 
 class ToolExecutor:
     def __init__(
@@ -77,6 +75,7 @@ class ToolExecutor:
             audit_tool_call(
                 thread_id=tid, tool_name=tool_name, actor_role=actor.value,
                 risk=risk_str, decision="deny_rbac", reason=rbac_res.reason, source="agent",
+                user_id=self._user_id,
             )
             TOOLS_BLOCKED.labels(tool_name=tool_name, reason="rbac_deny").inc()
             return ToolExecutionResult(
@@ -93,6 +92,7 @@ class ToolExecutor:
                 thread_id=tid, tool_name=tool_name, actor_role=actor.value,
                 risk=risk_val, decision="deny", reason=res.reason,
                 approval_id=res.approval_id, source="agent",
+                user_id=self._user_id,
             )
             TOOLS_BLOCKED.labels(tool_name=tool_name, reason="policy_deny").inc()
             return ToolExecutionResult(
@@ -103,6 +103,7 @@ class ToolExecutor:
             audit_tool_call(
                 thread_id=tid, tool_name=tool_name, actor_role=actor.value,
                 risk=risk_val, decision="allow", reason=res.reason, source="agent",
+                user_id=self._user_id,
             )
             return ToolExecutionResult(
                 executed=True, decision="allow",
@@ -115,6 +116,7 @@ class ToolExecutor:
             thread_id=tid, tool_name=tool_name, actor_role=actor.value,
             risk=risk_val, decision="hitl", reason=res.reason,
             approval_id=approval_id, source="agent",
+            user_id=self._user_id,
         )
         final = await self._hitl.wait_for_decision(approval_id, timeout=self._hitl._ttl)
         if final == "approved":
@@ -122,6 +124,7 @@ class ToolExecutor:
                 thread_id=tid, tool_name=tool_name, actor_role=actor.value,
                 risk=risk_val, decision="allow", approval_id=approval_id,
                 approval_decision="approved", source="agent",
+                user_id=self._user_id,
             )
             return ToolExecutionResult(
                 executed=True, decision="allow",
@@ -132,6 +135,7 @@ class ToolExecutor:
             thread_id=tid, tool_name=tool_name, actor_role=actor.value,
             risk=risk_val, decision="deny", approval_id=approval_id,
             approval_decision=final, reason=f"approval {final}", source="agent",
+            user_id=self._user_id,
         )
         return ToolExecutionResult(
             blocked=True, decision="deny", reason=f"approval {final}", approval_id=approval_id,
@@ -139,18 +143,32 @@ class ToolExecutor:
 
     async def _invoke(self, tool_name: str, args: dict) -> Any:
         import time as _time
+        import logging
+        from src.jefrey.core.audit import audit_tool_call
+
         tool = self._resolve(tool_name)
         if tool is None:
             return f"[ERRO] ferramenta '{tool_name}' não resolvida"
+
+        # CIPHER-208: fallback user_id com WARNING log
+        # Garante que user_id sempre esteja presente (Axiom #2)
+        user_id = args.get("user_id") or self._user_id or "system"
+        fallback_used = "user_id" not in args and self._user_id is not None
+        if fallback_used:
+            logger.warning(
+                "CIPHER-208 fallback: user_id não fornecido em kwargs, usando self._user_id=%s (tool=%s)",
+                self._user_id, tool_name,
+            )
+
         _start = _time.monotonic()
         try:
             if hasattr(tool, "ainvoke"):
-                result = await tool.ainvoke(args)
+                result = await tool.ainvoke({**args, "user_id": user_id})
             elif asyncio.iscoroutinefunction(tool):  # callable async explícito
-                result = await tool(**args)
+                result = await tool(**{**args, "user_id": user_id})
             else:
                 # CIPHER-023: callable síncrono roda em thread p/ não bloquear o event loop.
-                result = await asyncio.to_thread(tool, **args)
+                result = await asyncio.to_thread(tool, **{**args, "user_id": user_id})
             _elapsed = _time.monotonic() - _start
             TOOL_EXEC_LATENCY.labels(tool_name=tool_name).observe(_elapsed)
             return result

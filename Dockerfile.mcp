@@ -20,7 +20,8 @@ RUN groupadd --gid 1002 jefrey-mcp \
 
 COPY . .
 
-RUN chown -R jefrey-mcp:jefrey-mcp /app
+# Limpa cache Python para garantir que novas versoes de .py sejam usadas
+RUN find /app -name "*.pyc" -delete && rm -rf /app/__pycache__
 
 USER jefrey-mcp
 

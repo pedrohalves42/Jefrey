@@ -105,7 +105,7 @@ async def chat(request: Request, req: ChatRequest):
 
     async def _run_agent_task():
         try:
-            return await agent.run(sanitized, thread_id, user_id=user_id)
+            return await agent.run(sanitized, user_id=user_id)
         except Exception as e:
             logger.error(f"chat: falha na execução do agente (thread_id={thread_id} user={user_id}): {e}", exc_info=True)
             raise e
@@ -120,11 +120,13 @@ async def chat(request: Request, req: ChatRequest):
     while time.monotonic() - start_time < 5.0:
         if task.done():
             try:
-                response = task.result()
+                result = task.result()
+                # agent.run() returns dict with 'response' key
+                response_text = result.get('response', str(result)) if isinstance(result, dict) else str(result)
                 return {
-                    "status": "complete",
-                    "response": response,
-                    "thread_id": thread_id,
+                    'status': 'complete',
+                    'response': response_text,
+                    'thread_id': thread_id,
                 }
             except Exception as e:
                 logger.error("chat: erro na execução (thread=%s): %s", thread_id, e, exc_info=True)
@@ -290,4 +292,4 @@ async def get_chat_status(request: Request, thread_id: str):
             "status": "idle",
             "thread_id": thread_id,
             "message": "Nenhuma tarefa ativa sendo executada nesta thread no momento.",
-        }
+        }

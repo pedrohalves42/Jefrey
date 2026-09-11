@@ -1,0 +1,51 @@
+{
+  "name": "Jefrey — Stark Lab",
+  "short_name": "Jefrey",
+  "description": "Assistente pessoal inteligente Stark Lab — J.A.R.V.I.S. capabilities, agora com interface futurista, glassmorphism HUD e áudio chime.",
+  "start_url": "/?from=pwa",
+  "display": "standalone",
+  "background_color": "#0a0f14",
+  "theme_color": "#22d3ee",
+  "orientation": "portrait-primary",
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "images/manifest-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "images/manifest-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Iniciar conversa",
+      "short_name": "Conversa",
+      "url": "/",
+      "description": "Nova conversa com Jefrey",
+      "icons": [{ "src": "images/manifest-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Memória",
+      "short_name": "Memória",
+      "url": "/memory",
+      "description": "Ver e gerenciar suas memórias pessoais",
+      "icons": [{ "src": "images/manifest-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Conhecimento",
+      "short_name": "Knowledge",
+      "url": "/knowledge",
+      "description": "Notas e conhecimento pessoal",
+      "icons": [{ "src": "images/manifest-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

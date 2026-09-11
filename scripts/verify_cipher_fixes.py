@@ -64,13 +64,13 @@ CHECKS = [
      lambda: "arguments_json" not in open("src/jefrey/api/approvals.py", encoding="utf-8")
              .read().split("async def list_pending")[1]),
 
-    # CIPHER-021: mode='off' não pula RBAC (RBAC checado ANTES do off)
+    # CIPHER-021: mode='off' não pula RBAC (RBAC checado ANTES do off) — busca em PolicyEngine
     ("CIPHER-021: mode='off' não pula RBAC (RBAC antes do off)",
-     lambda: (lambda b: b.find("RBACEngine().check") != -1
+     lambda: (lambda txt: (lambda b: b.find("RBACEngine().check") != -1
               and b.find('self._mode == "off"') != -1
               and b.find("RBACEngine().check") < b.find('self._mode == "off"'))(
-         open("src/jefrey/core/policy.py", encoding="utf-8")
-         .read().split("def decide")[1].split("def _hitl")[0])),
+         txt.split("class PolicyEngine")[1] if "class PolicyEngine" in txt else txt))(
+         open("src/jefrey/core/policy.py", encoding="utf-8").read())),
 
     # CIPHER-022: actor_role resolvido server-side (resolve_role em rbac + agent)
     ("CIPHER-022: actor_role resolvido server-side (resolve_role em rbac+agent)",

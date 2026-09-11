@@ -10,6 +10,7 @@ from src.jefrey.core.memory import (
     LongTermMemory,
     get_memory_manager,
 )
+from src.jefrey.core.hitl import ApprovalManager as HITLManager
 from src.jefrey.core.events import event_bus, SystemEvents, event_handler, wildcard_handler
 from src.jefrey.core.agent import JefreyAgent, AgentState
 
@@ -27,4 +28,5 @@ __all__ = [
     "wildcard_handler",
     "JefreyAgent",
     "AgentState",
+    "HITLManager",
 ]

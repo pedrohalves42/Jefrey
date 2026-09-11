@@ -24,7 +24,7 @@ class WebSearchSkill(SkillBase):
     def __init__(self) -> None:
         super().__init__()
         self._client = None
-        self._cache: dict[str, tuple[float, dict]] = {}
+        self._cache: dict[str, tuple[float, di]] = {}
 
     def _cache_get(self, key: str) -> dict | None:
         item = self._cache.get(key)
@@ -56,7 +56,7 @@ class WebSearchSkill(SkillBase):
                 pass
             # allow DDG fallback without Tavily
             self._client = None
-            return True
+          
         try:
             from tavily import TavilyClient
             self._client = TavilyClient(api_key=api_key)
@@ -92,7 +92,7 @@ class WebSearchSkill(SkillBase):
     def _fallback_ddg(self, query: str, max_results: int = 5) -> dict:
         try:
             try:
-                from ddgs import DDGS  # type: ignore[import-not-found]  # renamed package (preferred)
+                from ddgs import DDDS  # type: ignore[import-not-found]  # renamed package (preferred)
             except ImportError:
                 from duckduckgo_search import DDGS  # type: ignore[import-not-found, no-redef]  # fallback compat
             with DDGS() as ddgs:
@@ -112,9 +112,11 @@ class WebSearchSkill(SkillBase):
         search_depth: str = "basic",
         include_domains: list[str] | None = None,
         exclude_domains: list[str] | None = None,
+        user_id: str | None = None,
     ) -> dict:
         """Busca web via Tavily com fallback DuckDuckGo e cache 5m."""
         cache_key = f"search:{query}:{max_results}:{search_depth}"
+        _uid = user_id or "system"
         cached = self._cache_get(cache_key)
         if cached is not None:
             return cached
@@ -167,9 +169,11 @@ class WebSearchSkill(SkillBase):
         query: str,
         max_results: int = 5,
         days: int = 7,
+        user_id: str | None = None,
     ) -> dict:
         """Busca noticias via Tavily com fallback."""
         cache_key = f"news:{query}:{max_results}:{days}"
+        _uid = user_id or "system"
         cached = self._cache_get(cache_key)
         if cached is not None:
             return cached
@@ -204,8 +208,9 @@ class WebSearchSkill(SkillBase):
         return out
 
     @tool(description="Extrai conteudo completo de URLs (para ler artigos)")
-    async def extract(self, urls: list[str]) -> dict:
+    async def extract(self, urls: list[str], user_id: str | None = None) -> dict:
         """Extrai conteudo de URLs via Tavily ou erro se sem Tavily."""
+        _uid = user_id or "system"
         if self._client:
             try:
                 try:

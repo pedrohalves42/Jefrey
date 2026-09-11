@@ -1,0 +1,11 @@
+/* style.css – Jefrey 3D Avatar (Phase 10)
+   Referências: normalize.css, guidelines de acessibilidade WCAG 2.1,
+   CIPHER‑025 (isolamento de dados), SWE@Google (separação de responsabilidades).
+   Este arquivo está inlined em index.html para simplicidade, mas pode ser
+   servido separadamente pelo nginx ou caddy no container frontend.
+   Variáveis de tema podem ser expostas via JEFREY_AVATAR__THEME no config.py.
+*/
+body{margin:0;font-family:system-ui,sans-serif;background:#121212;color:#e0e0e0}
+#ui{position:absolute;top:20px;left:20px;display:flex;gap:12px;align-items:center}
+button{padding:8px 16px;background:#0f0;border:none;border-radius:4px;cursor:pointer}
+#userId{font-weight:600;color:#ffd700}

@@ -14,7 +14,10 @@ import Memory from "@/pages/Memory"
 import Approvals from "@/pages/Approvals"
 import Observability from "@/pages/Observability"
 import Settings from "@/pages/Settings"
+import Knowledge from "@/pages/KnowledgePage"
 import { Tour } from "@/components/Tour"
+import { SkillCard } from "@/components/SkillCard"
+import { AuthButton } from "@/components/AuthButton"
 
 const qc = new QueryClient()
 
@@ -55,7 +58,8 @@ export default function App() {
               <h1 className="font-bold text-lg tracking-tight">Jefrey</h1>
               <span className="text-xs text-muted-foreground hidden sm:inline">1 programa, 7 pecas — 175/175 + 21/21</span>
               <div className="ml-auto flex items-center gap-3">
-                <button onClick={()=> setWakeEnabled(v=>!v)} title={wake.supported ? (wakeEnabled ? "Desativar wake Jefrey" : "Ativar wake Jefrey") : "Wake nao suportado neste browser"} className={`text-[10px] px-2 py-1 rounded-full border font-mono ${wakeEnabled ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-white/5 text-white/50 border-white/10"}`}>{wakeEnabled ? "WAKE ON" : "WAKE OFF"}</button>
+                <button onClick={()=> setWakeEnabled(v=>!v)} title={wake.supported ? (wakeEnabled ? "Desativar wake Jefrey" : "Ativar wake Jefrey") : "Wake nao suportado neste browser"} className={`text-[10px] px-2 py-1 rounded-full font-mono ${wakeEnabled ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-white/5 text-white/50 border-white/10"}`}>{wakeEnabled ? "WAKE ON" : "WAKE OFF"}</button>
+                <AuthButton />
                 <ThemeWheel />
                 {ready && <span className="text-xs text-emerald-600 font-medium hidden sm:inline">Pronto</span>}
               </div>
@@ -69,12 +73,14 @@ export default function App() {
             <div className="p-4 space-y-4">
               <OnboardingWizard onDone={() => setReady(!!getToken())} />
               <HealthBadge />
+              <SkillManager />
               <Routes>
                 <Route path="/" element={<Chat/>} />
                 <Route path="/memory" element={<Memory/>} />
                 <Route path="/approvals" element={<Approvals/>} />
                 <Route path="/observability" element={<Observability/>} />
                 <Route path="/settings" element={<Settings/>} />
+                <Route path="/knowledge" element={<Knowledge/>} />
               </Routes>
               <Tour />
             </div>

@@ -1,4 +1,4 @@
-"""HITL — Approval Manager (P4, Decisão 2 — Opção A).
+"""HITL – Approval Manager (P4, Decisão 2 — Opção A).
 
 Gerencia o ciclo de vida das aprovações Human-in-the-Loop na tabela ``approvals``:
 criar, listar pendentes, decidir (approve/reject) e expirar (approval_ttl).
@@ -22,12 +22,10 @@ from src.jefrey.core.metrics import APPROVALS_CREATED, APPROVALS_DECIDED
 
 logger = logging.getLogger(__name__)
 
-
 class ApprovalDecision(str, enum.Enum):
     APPROVED = "approved"
     REJECTED = "rejected"
     EXPIRED = "expired"
-
 
 class ApprovalManager:
     def __init__(self, ttl: "float | None" = None) -> None:
@@ -83,8 +81,23 @@ class ApprovalManager:
             r = s.get(Approval, uuid.UUID(approval_id))
             if r is None or r.status != "pending":
                 return False
-            # SECURITY: ownership check — só o dono pode decidir
-            if user_id is not None and r.user_id != user_id:
+            # ADMIN BYPASS (FASE 7): usuários com role admin podem contornar HITL
+            from src.jefrey.core.rbac import RBAC
+            rbac = RBAC()
+            is_admin = rbac.is_allowed(user_id or "guest", "admin") if user_id else False
+            if is_admin:
+                logger.info(
+                    "admin bypass: approval_id=%s decidindo como %s por user=%s (bypass admin)",
+                    approval_id, d, user_id,
+                )
+            # ADMIN BYPASS (FASE 7): registra que a decisão foi via bypass admin
+            admin_bypass = False
+            if is_admin:
+                r.admin_bypass = True
+                admin_bypass = True
+            
+            # SECURITY: ownership check — só o dono pode decidir (a menos que admin bypass)
+            if user_id is not None and r.user_id != user_id and not is_admin:
                 logger.warning(
                     "decide negado: approval_id=%s pertence a user=%s, não a user=%s",
                     approval_id, r.user_id, user_id,
@@ -168,11 +181,11 @@ class ApprovalManager:
         self, approval_id: str, timeout: "float | None" = None,
         poll_interval: "float | None" = None,
     ) -> str:
-        """Aguarda a decisão humana (ou expiração) por até `timeout` segundos.
+        """Await human decision (or expiry) for up to `timeout` seconds.
 
-        Retorna: 'approved' | 'rejected' | 'expired' | 'not_found'.
-        Se o prazo esgota sem decisão, a aprovação é marcada 'expired' e o
-        resultado é 'expired' (o agente então NEGA a ferramenta automaticamente).
+        Returns: 'approved' | 'rejected' | 'expired' | 'not_found'.
+        If the timeout expires without a decision, the approval is marked 'expired'
+        and the result is 'expired' (the agent then automatically TOOLS NEGA).
         """
         from src.jefrey.core.config import get_settings
 
@@ -197,3 +210,6 @@ class ApprovalManager:
                 self.expire_due()
                 return "expired"
             await asyncio.sleep(poll_interval)
+
+# Alias for direct imports (core.__init__ compatibility)
+HITLManager = ApprovalManager

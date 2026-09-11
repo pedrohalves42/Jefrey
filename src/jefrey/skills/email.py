@@ -9,7 +9,6 @@ from src.jefrey.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-
 class EmailSkill(SkillBase):
     metadata = SkillMetadata(
         name="email",
@@ -25,14 +24,14 @@ class EmailSkill(SkillBase):
             },
         },
     )
-    
+
     SCOPES: Final[list[str]] = ["https://www.googleapis.com/auth/gmail.modify"]
-    
+
     def __init__(self):
         super().__init__()
         self._service = None
         self._creds = None
-    
+
     def initialize(self) -> bool:
         """Inicializa OAuth do Gmail (AXIOM+CIPHER least privilege)."""
         try:
@@ -111,7 +110,6 @@ class EmailSkill(SkillBase):
                 pass
             return False
 
-
     def get_tools(self) -> list:
         if not self._service:
             return []
@@ -124,7 +122,7 @@ class EmailSkill(SkillBase):
             self.search_messages,
             self.list_labels,
         ]
-    
+
     @tool(description="Lista e-mails com filtros")
     async def list_messages(
         self,
@@ -132,8 +130,10 @@ class EmailSkill(SkillBase):
         max_results: int = 20,
         label_ids: list[str] | None = None,
         include_spam_trash: bool = False,
+        user_id: str | None = None,
     ) -> list[dict]:
         """Lista e-mails. Query usa sintaxe Gmail (ex: 'from:joao is:unread')."""
+        _uid = user_id or "system"
         try:
             params = {
                 "userId": "me",
@@ -144,19 +144,19 @@ class EmailSkill(SkillBase):
                 params["q"] = query
             if label_ids:
                 params["labelIds"] = label_ids
-            
+
             result = self._service.users().messages().list(**params).execute()
             messages = result.get("messages", [])
-            
+
             # Busca detalhes de cada mensagem
             detailed = []
             for msg in messages[:10]:  # Limita para nao estourar quota
                 detail = self._service.users().messages().get(
                     userId="me", id=msg["id"], format="metadata"
                 ).execute()
-                
+
                 headers = {h["name"]: h["value"] for h in detail.get("payload", {}).get("headers", [])}
-                
+
                 detailed.append({
                     "id": msg["id"],
                     "thread_id": msg["threadId"],
@@ -167,24 +167,25 @@ class EmailSkill(SkillBase):
                     "snippet": detail.get("snippet", ""),
                     "labels": detail.get("labelIds", []),
                 })
-            
+
             return detailed
         except Exception as e:
             logger.error(f"Erro ao listar e-mails: {e}")
             return [{"error": str(e)}]
-    
+
     @tool(description="Le e-mail completo por ID")
-    async def get_message(self, message_id: str) -> dict:
+    async def get_message(self, message_id: str, user_id: str | None = None) -> dict:
         """Le e-mail completo com corpo."""
+        _uid = user_id or "system"
         try:
             msg = self._service.users().messages().get(userId="me", id=message_id, format="full").execute()
-            
+
             payload = msg.get("payload", {})
             headers = {h["name"]: h["value"] for h in payload.get("headers", [])}
-            
+
             # Extrai corpo
             body = self._extract_body(payload)
-            
+
             return {
                 "id": msg["id"],
                 "thread_id": msg["threadId"],
@@ -200,11 +201,11 @@ class EmailSkill(SkillBase):
         except Exception as e:
             logger.error(f"Erro ao ler e-mail: {e}")
             return {"error": str(e)}
-    
+
     def _extract_body(self, payload: dict) -> str:
         """Extrai corpo do e-mail recursivamente."""
         import base64
-        
+
         if "parts" in payload:
             for part in payload["parts"]:
                 if part.get("mimeType") == "text/plain":
@@ -225,7 +226,7 @@ class EmailSkill(SkillBase):
                 if data:
                     return base64.urlsafe_b64decode(data).decode("utf-8", errors="ignore")
         return ""
-    
+
     @tool(description="Envia novo e-mail")
     async def send_message(
         self,
@@ -235,12 +236,14 @@ class EmailSkill(SkillBase):
         cc: list[str] | None = None,
         bcc: list[str] | None = None,
         thread_id: str | None = None,
+        user_id: str | None = None,
     ) -> dict:
         """Envia e-mail. Body pode ser HTML."""
         import base64
         from email.mime.text import MIMEText
         from email.mime.multipart import MIMEMultipart
-        
+
+        _uid = user_id or "system"
         try:
             message = MIMEMultipart("alternative")
             message["to"] = ", ".join(to) if isinstance(to, list) else to
@@ -249,19 +252,19 @@ class EmailSkill(SkillBase):
                 message["cc"] = ", ".join(cc)
             if bcc:
                 message["bcc"] = ", ".join(bcc)
-            
+
             # Detecta se e HTML
             if "<html" in body.lower() or "<body" in body.lower():
                 message.attach(MIMEText(body, "html"))
             else:
                 message.attach(MIMEText(body, "plain"))
-            
+
             raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
-            
+
             body_dict = {"raw": raw}
             if thread_id:
                 body_dict["threadId"] = thread_id
-            
+
             sent = self._service.users().messages().send(userId="me", body=body_dict).execute()
             return {
                 "id": sent["id"],
@@ -271,28 +274,29 @@ class EmailSkill(SkillBase):
         except Exception as e:
             logger.error(f"Erro ao enviar e-mail: {e}")
             return {"error": str(e)}
-    
+
     @tool(description="Responde a um e-mail existente")
-    async def reply_message(self, message_id: str, body: str, reply_all: bool = False) -> dict:
+    async def reply_message(self, message_id: str, body: str, reply_all: bool = False, user_id: str | None = None) -> dict:
         """Responde a um e-mail mantendo thread."""
+        _uid = user_id or "system"
         try:
             original = self._service.users().messages().get(userId="me", id=message_id, format="metadata").execute()
             headers = {h["name"]: h["value"] for h in original.get("payload", {}).get("headers", [])}
-            
+
             to = headers.get("From", "")
             subject = headers.get("Subject", "")
             if not subject.startswith("Re:"):
                 subject = f"Re: {subject}"
-            
+
             # Headers para threading
             in_reply_to = headers.get("Message-ID", "")
             references = headers.get("References", "")
             if in_reply_to:
                 references = f"{references} {in_reply_to}".strip()
-            
+
             import base64
             from email.mime.text import MIMEText
-            
+
             message = MIMEText(body, "plain")
             message["to"] = to
             message["subject"] = subject
@@ -300,45 +304,49 @@ class EmailSkill(SkillBase):
                 message["In-Reply-To"] = in_reply_to
             if references:
                 message["References"] = references
-            
+
             raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
-            
+
             sent = self._service.users().messages().send(
                 userId="me", body={"raw": raw, "threadId": original["threadId"]}
             ).execute()
-            
+
             return {"id": sent["id"], "message": "Resposta enviada"}
         except Exception as e:
             return {"error": str(e)}
-    
+
     @tool(description="Modifica labels de um e-mail")
     async def modify_labels(
         self,
         message_id: str,
         add_labels: list[str] | None = None,
         remove_labels: list[str] | None = None,
+        user_id: str | None = None,
     ) -> dict:
         """Adiciona/remove labels (ex: 'UNREAD', 'STARRED', 'INBOX', 'Label_123')."""
+        _uid = user_id or "system"
         try:
             body = {}
             if add_labels:
                 body["addLabelIds"] = add_labels
             if remove_labels:
                 body["removeLabelIds"] = remove_labels
-            
+
             self._service.users().messages().modify(userId="me", id=message_id, body=body).execute()
             return {"success": True, "message": "Labels atualizados"}
         except Exception as e:
             return {"error": str(e)}
-    
+
     @tool(description="Busca avancada de e-mails")
-    async def search_messages(self, query: str, max_results: int = 20) -> list[dict]:
+    async def search_messages(self, query: str, max_results: int = 20, user_id: str | None = None) -> list[dict]:
         """Busca usando sintaxe Gmail completa."""
-        return await self.list_messages(query=query, max_results=max_results)
-    
+        _uid = user_id or "system"
+        return await self.list_messages(query=query, max_results=max_results, user_id=user_id)
+
     @tool(description="Lista todos os labels disponiveis")
-    async def list_labels(self) -> list[dict]:
+    async def list_labels(self, user_id: str | None = None) -> list[dict]:
         """Lista labels do Gmail."""
+        _uid = user_id or "system"
         try:
             result = self._service.users().labels().list(userId="me").execute()
             return [{
@@ -350,7 +358,6 @@ class EmailSkill(SkillBase):
             } for l in result.get("labels", [])]
         except Exception as e:
             return [{"error": str(e)}]
-
 
 @skill("email", "Gmail integration com OAuth", tags=["email", "gmail"], requires_auth=True)
 class _EmailWrapper(EmailSkill):

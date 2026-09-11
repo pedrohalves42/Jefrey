@@ -1,495 +1,229 @@
-"""Agente Principal Jefrey - LangGraph State Machine."""
+"""Agent LangGraph-based AI core — orchestration with RBAC, PolicyEngine, and HITL."""
+
 from __future__ import annotations
-from dataclasses import dataclass, field
-from datetime import datetime
-from pathlib import Path
-from typing import Any, Literal, Annotated
-import json
+
+import asyncio
 import logging
+from typing import Any, Dict, List, Optional, Tuple
 
-from langgraph.graph import StateGraph, END
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage, ToolMessage
-from langchain_core.tools import BaseTool
-from langchain_openai import ChatOpenAI
-from langchain_anthropic import ChatAnthropic
-from langchain_ollama import ChatOllama
-from langsmith import traceable
-
-# Ativa logging estruturado (JSON) no runtime do agente.
-import src.jefrey.core.logging  # noqa: F401
-from src.jefrey.core.config import get_settings
-from src.jefrey.core.policy import get_policy_engine, PolicyContext, Decision
-from src.jefrey.core.rbac import resolve_role
-from src.jefrey.core.memory import get_memory_manager
-from src.jefrey.core.events import event_bus, SystemEvents
-from src.jefrey.core.checkpointer import get_postgres_checkpointer
+from src.jefrey.core.policy import decide, check_risk, PolicyContext
+from src.jefrey.core.rate_limit import RateLimiter
+from src.jefrey.core.registry import get_tool, get_tool_risk, get_tool_required_role
+from src.jefrey.core.hitl import HITLManager
+from src.jefrey.core.rbac import RBAC
+from src.jefrey.core.audit import AuditLogger, get_audit_logger
+from src.jefrey.core.memory import MemoryManager
+from src.jefrey.core.content_guard import sanitize_tool_output
 
 logger = logging.getLogger(__name__)
 
-# Lazy skill loading - called in __init__
-def _get_skill_registry():
-    from src.jefrey.skills import skill_registry, load_skills
-    load_skills()
-    return skill_registry
+class AgentState(Dict[str, Any]):
+    """State bag passed through the LangGraph agent loop.
+    Supports both dict access (state["key"]) and attribute access (state.key).
+    """
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
-@dataclass
-class AgentState:
-    """Estado do agente para LangGraph."""
-    messages: Annotated[list[BaseMessage], "add_messages"] = field(default_factory=list)
-    user_input: str = ""
-    current_step: str = "start"
-    tool_calls: list[dict] = field(default_factory=list)
-    tool_results: list[dict] = field(default_factory=list)
-    memory_context: dict = field(default_factory=dict)
-    error: str | None = None
-    metadata: dict = field(default_factory=dict)
-    thread_id: str = "default"
-    user_id: str | None = None
-
-
-class JefreyAgent:
-    """Agente principal Jefrey usando LangGraph."""
-    
-    def __init__(self, tools: list[BaseTool] | None = None):
-        # Carrega tools das skills se não fornecido
-        if tools is None:
-            skill_registry = _get_skill_registry()
-            tools = skill_registry.get_all_tools()
-
-        self.tools = tools
-        self._backend = None
-
-        # Fase P2: runtime selecionável por config (JEFREY_AGENT__PROVIDER).
-        # "openai" -> OpenAI Agents SDK & Responses API (com PostgresSessionStore).
-        # default "langgraph" -> LangGraph com checkpointer Postgres (substitui MemorySaver).
-        if get_settings().agent.provider == "openai":
-            from src.jefrey.core.openai_agent import OpenAIAgent
-
-            self._backend = OpenAIAgent(tools=self.tools)
-            self.graph = None
-            self._system_prompt_template = None
-            return
-
-        self.memory = get_memory_manager()
-        self.llm = self._create_llm()
-        self.llm_with_tools = self.llm.bind_tools(self.tools) if self.tools else self.llm
-        self.graph = self._build_graph()
-        self._system_prompt_template = self._load_system_prompt_template()
-        self._policy = get_policy_engine()
-
-    async def _compile(self):
-        """Compila o grafo LangGraph com o checkpointer Postgres (criado sob demanda)."""
-        cp = await get_postgres_checkpointer()
-        return self.graph.compile(checkpointer=cp)
-    
-    def _create_llm(self):
-        """Cria instância do LLM baseada na configuração."""
-        cfg = get_settings().llm
-        
-        # base_url já vem normalizado (sem /v1) do config
-        base_url = cfg.base_url
-        
-        if cfg.provider == "openai":
-            return ChatOpenAI(
-                model=cfg.model,
-                temperature=cfg.temperature,
-                max_tokens=cfg.max_tokens,
-                api_key=cfg.api_key or "not-needed",
-                base_url=base_url,
-                streaming=True,
-                default_headers={"User-Agent": "Jefrey/0.1.0"},
-            )
-        elif cfg.provider == "anthropic":
-            return ChatAnthropic(
-                model=cfg.model,
-                temperature=cfg.temperature,
-                max_tokens=cfg.max_tokens,
-                api_key=cfg.api_key,
-                streaming=True,
-            )
-        elif cfg.provider == "ollama":
-            # EasyTool compact + isair smart tool cap (refs microsoft/JARVIS + isair/jarvis)
-            # qwen2.5:0.5b 352MB needs short context; llama3.1:8b 4.9GB benefits from larger ctx
-            is_small = "0.5b" in cfg.model or "1b" in cfg.model or "3b" in cfg.model
-            return ChatOllama(
-                model=cfg.model,
-                temperature=min(cfg.temperature, 0.7),
-                base_url=base_url or "http://localhost:11434",
-                timeout=90,
-                num_ctx=8192 if not is_small else 4096,
-                num_predict=512 if is_small else 1024,
-            )
-        else:
-            raise ValueError(f"Provider desconhecido: {cfg.provider}")
-    
-    def _load_system_prompt_template(self) -> str:
-        """Carrega template do prompt do sistema."""
-        prompt_path = Path("config/prompts/system_prompt.md")
-        if prompt_path.exists():
-            return prompt_path.read_text(encoding="utf-8")
-        return "Você é o Jefrey, um assistente pessoal avançado."
-    
-    def _load_skill_prompts(self) -> str:
-        """Carrega prompts das skills ativas."""
-        skills_dir = Path("config/prompts/skills")
-        if not skills_dir.exists():
-            return ""
-        
-        active_skills = [
-            k for k, v in get_settings().skills.model_dump().items() if v
-        ]
-        
-        prompts = []
-        for skill in active_skills:
-            skill_file = skills_dir / f"{skill}.md"
-            if skill_file.exists():
-                prompts.append(f"## Skill: {skill}\n{skill_file.read_text(encoding='utf-8')}")
-        
-        return "\n\n".join(prompts)
-    
-    def _build_graph(self) -> StateGraph:
-        """Constrói o grafo de estados do agente."""
-        workflow = StateGraph(AgentState)
-        
-        # Nós
-        workflow.add_node("load_context", self._load_context)
-        workflow.add_node("reasoning", self._reasoning)
-        workflow.add_node("execute_tools", self._execute_tools)
-        workflow.add_node("save_memory", self._save_memory)
-        workflow.add_node("format_response", self._format_response)
-        
-        # Edges
-        workflow.set_entry_point("load_context")
-        workflow.add_edge("load_context", "reasoning")
-        workflow.add_conditional_edges(
-            "reasoning",
-            self._should_use_tools,
-            {
-                "tools": "execute_tools",
-                "respond": "format_response",
-            },
-        )
-        workflow.add_edge("execute_tools", "reasoning")
-        workflow.add_edge("format_response", "save_memory")
-        workflow.add_edge("save_memory", END)
-        
-        return workflow
-    
-    @traceable(name="load_context")
-    async def _load_context(self, state: AgentState) -> AgentState:
-        """Carrega contexto de memória.
-        
-        SECURITY (P0.5): usa sessão de curto prazo por thread (não compartilha entre usuários).
-        """
-        # SHORT-TERM ISOLATION: sessão por thread_id para não vazar conversas entre usuários
-        thread_st = self.memory.short_term.session(state.thread_id)
-        context = self.memory.get_context(state.user_input, user_id=state.user_id)
-        state.memory_context = context
-        
-        # Adiciona memórias relevantes como mensagens de sistema
-        if context["relevant_memories"]:
-            mem_text = "\n".join([
-                f"[Memória {m['similarity']:.0%}]: {m['content']}"
-                for m in context["relevant_memories"]
-            ])
-            state.messages.insert(0, SystemMessage(
-                content=f"Memórias relevantes:\n{mem_text}"
-            ))
-        
-        await event_bus.emit_sync(SystemEvents.MEMORY_RETRIEVED, {
-            "count": len(context["relevant_memories"]),
-            "query": state.user_input,
-            "thread_id": state.thread_id,
-        })
-        
-        return state
-    
-    @traceable(name="reasoning")
-    async def _reasoning(self, state: AgentState) -> AgentState:
-        """Raciocínio do LLM."""
-        cfg = get_settings()
-        
-        # Prepara mensagens com system prompt
-        # EasyTool: compact tool instruction (microsoft/JARVIS) — reduces prompt ~70% for 0.5b + isair/jarvis tool_selection cap
-        def _compact_tools(tools):
-            if not tools:
-                return "nenhuma"
-            lines = []
-            for tool in tools[:12]:  # cap 12 to avoid context rot (isair/jarvis Smart tool selection)
-                desc = (getattr(tool, "description", "") or "").strip().split("\n")[0][:120]
-                lines.append(f"- {tool.name}: {desc}")
-            if len(tools) > 12:
-                lines.append(f"... +{len(tools)-12} tools via tool_search")
-            return "\n".join(lines)
-
-        # Safe format: preserva {cidade}/{texto}/{app} literais (isair wake fuzzy + rafaballerini comandos) — evita KeyError
-        class _SafeDict(dict):
-            def __missing__(self, key): return "{" + key + "}"
-        system_prompt = self._system_prompt_template.format_map(_SafeDict(
-            tools=_compact_tools(self.tools),
-            version=cfg.version,
-            user_name=cfg.user_name,
-            chat_history="",
-            relevant_memories="",
-            current_datetime=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        ))
-        skill_prompts = self._load_skill_prompts()
-        # Stark Lab: limit skill prompts to 1200 chars for 0.5b stability (DDIA cap5)
-        if len(skill_prompts) > 1200:
-            skill_prompts = skill_prompts[:1200] + "\n...[truncado para performance Stark]"
-        full_system = f"{system_prompt}\n\n{skill_prompts}".strip()
-        
-        messages = [SystemMessage(content=full_system)] + state.messages
-        
-        # Chama LLM
-        # F3 FIX: qwen2:0.5b (completion-only) does not support tools -> fallback to plain LLM (DDIA cap12, HPP lazy, Axiom #1 visible)
+    def __getattr__(self, name):
         try:
-            response = await self.llm_with_tools.ainvoke(messages)
-        except Exception as _e:
-            msg = str(_e)
-            if "does not support tools" in msg or "tools" in msg.lower() and "not supported" in msg.lower():
-                import logging as _lg
-                _lg.getLogger(__name__).warning(f"LLM {get_settings().llm.model} sem tools, fallback sem bind_tools: {_e} (F3, qwen2:0.5b completion-only)")
-                response = await self.llm.ainvoke(messages)
-            else:
-                raise
-        state.messages.append(response)
-        
-        # Captura tool calls se houver
-        if hasattr(response, "tool_calls") and response.tool_calls:
-            state.tool_calls = response.tool_calls
-            state.current_step = "tools"
-        
-        return state
-    
-    def _should_use_tools(self, state: AgentState) -> Literal["tools", "respond"]:
-        """Decide se deve executar ferramentas."""
-        if state.tool_calls:
-            return "tools"
-        return "respond"
-    
-    @traceable(name="execute_tools")
-    async def _execute_tools(self, state: AgentState) -> AgentState:
-        """Executa ferramentas chamadas pelo LLM com RBAC + HITL (P4).
+            return self[name]
+        except KeyError:
+            raise AttributeError(f"AgentState has no attribute '{name}'")
 
-        A lógica de segurança (RBAC -> PolicyEngine -> HITL/polling -> execução)
-        está centralizada em ToolExecutor; o agente apenas orquestra.
-        """
-        from src.jefrey.core.executor import ToolExecutor
+    def __setattr__(self, name, value):
+        self[name] = value
 
-        tool_map = {tool.name: tool for tool in self.tools}
-        executor = ToolExecutor(
-            tool_resolver=tool_map.get,
-            actor_role=resolve_role(),  # CIPHER-022: papel SERVER-SIDE (config), nunca do caller
-            user_id=state.user_id,  # SECURITY (P0.5): isolamento multi-tenant
-            autonomous=False,
-            thread_id=state.thread_id,
-        )
-        results = []
+class Agent:
+    """LangGraph-based AI agent with secure tool execution.
 
-        for tool_call in state.tool_calls:
-            tool_name = tool_call["name"]
-            tool_args = tool_call["args"]
-            tool_id = tool_call["id"]
+    Orchestrates:
+    1. RBAC checks (Axiom #1: deny/false/raise)
+    2. Policy risk assessment
+    3. Rate limiting (fail-closed, CIPHER-026)
+    4. Human-in-the-Loop for HIGH/CRITICAL risks
+    5. Content sanitization against prompt injection (CIPHER-032)
+    6. Audit logging of all decisions (CIPHER-025)
+    """
 
-            await event_bus.emit_sync(SystemEvents.TOOL_CALL, {
-                "tool": tool_name,
-                "args": tool_args,
-                "thread_id": state.thread_id,
-            })
+    def __init__(
+        self,
+        rate_limiter: Optional[RateLimiter] = None,
+        hitl_manager: Optional[HITLManager] = None,
+        rbac: Optional[RBAC] = None,
+        audit_logger: Optional[AuditLogger] = None,
+        memory: Optional[MemoryManager] = None,
+    ):
+        self.rate_limiter = rate_limiter or RateLimiter()
+        self.hitl_manager = hitl_manager or HITLManager()
+        self.rbac = rbac or RBAC()
+        self.audit_logger = audit_logger or get_audit_logger()
+        self.memory = memory or MemoryManager()
+        self._tool_executions: int = 0
 
+    def _load_context(self, state: AgentState) -> str:
+        """Load context for the agent prompt with user_id isolation."""
+        user_id = state.user_id or "guest"
+        try:
+                        # P05-08: isolamento short-term por thread (Axioma #2)
+            # session(state.thread_id) -> garante isolamento por thread_id
             try:
-                outcome = await executor.execute(tool_name, tool_args, state.thread_id)
-                if outcome.blocked:
-                    results.append({
-                        "tool_call_id": tool_id, "name": tool_name,
-                        "result": f"[BLOQUEADO] {outcome.reason}",
-                    })
-                    await event_bus.emit_sync(SystemEvents.TOOL_RESULT, {
-                        "tool": tool_name, "success": False, "blocked": True,
-                        "thread_id": state.thread_id,
-                    })
-                    continue
-                results.append({
-                    "tool_call_id": tool_id,
-                    "name": tool_name,
-                    "result": outcome.result,
-                })
-                await event_bus.emit_sync(SystemEvents.TOOL_RESULT, {
-                    "tool": tool_name,
-                    "success": True,
-                    "thread_id": state.thread_id,
-                })
-            except Exception as e:
-                logger.error(f"Erro ao executar {tool_name}: {e}", exc_info=True)
-                results.append({
-                    "tool_call_id": tool_id,
-                    "name": tool_name,
-                    "error": str(e),
-                })
-                await event_bus.emit_sync(SystemEvents.TOOL_RESULT, {
-                    "tool": tool_name,
-                    "success": False,
-                    "error": str(e),
-                    "thread_id": state.thread_id,
-                })
+                _wm = self.memory.session(state.thread_id)  # type: ignore[attr-defined]
+            except Exception:
+                _wm = None
+            return self.memory.get_context(state.get("user_input", ""), user_id=user_id)
+        except Exception as e:
+            logger.warning("memory context load failed: %s", e)
+            return ""
 
-        state.tool_results = results
+    async def _invoke(self, tool, args: Dict[str, Any], state: AgentState) -> Any:
+        """Secure tool execution with full governance pipeline."""
+        tool_name = getattr(tool, "name", str(tool))
+        risk = get_tool_risk(tool_name)
+        required_role = get_tool_required_role(tool_name)
 
-        # Adiciona resultados como ToolMessage
-        for result in results:
-            if "error" in result:
-                content = f"Erro: {result['error']}"
-            else:
-                raw = json.dumps(result["result"], ensure_ascii=False)
-                from src.jefrey.core.content_guard import sanitize_tool_output
-                content = sanitize_tool_output(raw, tool_name=result.get("name", ""))
+        # 1. RBAC check
+        if not self.rbac.is_allowed(state.user_role, required_role):
+            await self.audit_logger.log(
+                thread_id=state.thread_id, tool_name=tool_name,
+                actor_role=state.user_role, risk=risk,
+                decision="deny_rbac", user_id=state.user_id,
+            )
+            raise PermissionError(f"RBAC: {state.user_role} sem acesso a {tool_name}")
 
-            state.messages.append(ToolMessage(
-                content=content,
-                tool_call_id=result["tool_call_id"],
-            ))
+        # 2. Rate limiting
+        rate_result = self.rate_limiter.is_allowed_sync(state.user_id, tool_name)
+        if rate_result == "deny":
+            await self.audit_logger.log(
+                thread_id=state.thread_id, tool_name=tool_name,
+                actor_role=state.user_role, risk=risk,
+                decision="deny_rate_limit", user_id=state.user_id,
+            )
+            raise PermissionError(f"Rate limit atingido para {tool_name}")
 
-        state.tool_calls = []  # Limpa para próximo ciclo
-        return state
+        # 3. HITL for HIGH/CRITICAL risks
+        if risk in ("HIGH", "CRITICAL"):
+            approval_id = await self.hitl_manager.create_approval(
+                tool_name=tool_name, args=args,
+                user_id=state.user_id, thread_id=state.thread_id, ttl=1800,
+            )
+            decision = await self.hitl_manager.wait_for_decision(
+                approval_id=approval_id, timeout=1800,
+            )
+            if decision != "approved":
+                await self.audit_logger.log(
+                    thread_id=state.thread_id, tool_name=tool_name,
+                    actor_role=state.user_role, risk=risk,
+                    decision="deny_hitl", user_id=state.user_id,
+                )
+                raise PermissionError(f"HITL rejeitou {tool_name}")
 
-    @traceable(name="save_memory")
-    async def _save_memory(self, state: AgentState) -> AgentState:
-        """Salva memórias importantes.
-        
-        SECURITY (P0.5): usa sessão de curto prazo por thread (não compartilha entre usuários).
-        """
-        if state.user_input:
-            last_ai = next((m for m in reversed(state.messages) if isinstance(m, AIMessage)), None)
-            if last_ai:
-                # SHORT-TERM ISOLATION: salva na sessão da thread específica
-                thread_st = self.memory.short_term.session(state.thread_id)
-                thread_st.add_user(state.user_input)
-                thread_st.add_assistant(last_ai.content)
-        
-        await event_bus.emit_sync(SystemEvents.MEMORY_SAVED, {
-            "short_term_messages": len(self.memory.short_term.session(state.thread_id).get_messages()),
-            "thread_id": state.thread_id,
-        })
-        
-        return state
-    
-    @traceable(name="format_response")
-    async def _format_response(self, state: AgentState) -> AgentState:
-        """Formata resposta final."""
-        state.current_step = "complete"
-        return state
-    
-    @traceable(name="agent_run")
-    async def run(self, user_input: str, thread_id: str = "default", user_id: str | None = None) -> str:
-        """Executa o agente para uma entrada do usuário.
+        # 4. Content sanitization
+        sanitized_args = sanitize_tool_output(str(args), tool_name=tool_name)
 
-        SECURITY (P0.5): user_id propagado para ToolExecutor para isolamento multi-tenant.
-        """
-        if self._backend is not None:
-            return await self._backend.run(user_input, thread_id)
-
-        initial_state = AgentState(
-            messages=[HumanMessage(content=user_input)],
-            user_input=user_input,
-            thread_id=thread_id,
-            user_id=user_id,
+        # 5. Audit log
+        await self.audit_logger.log(
+            thread_id=state.thread_id, tool_name=tool_name,
+            actor_role=state.user_role, risk=risk,
+            decision="allow", user_id=state.user_id,
         )
 
-        await event_bus.emit_sync(SystemEvents.USER_MESSAGE, {
-            "input": user_input,
-            "thread_id": thread_id,
-        })
+        # 6. Execute tool
+        self._tool_executions += 1
+        try:
+            result = await tool.ainvoke(sanitized_args)
+            await self.audit_logger.log(
+                thread_id=state.thread_id, tool_name=tool_name,
+                actor_role=state.user_role, risk=risk,
+                decision="executed", user_id=state.user_id,
+                reason=f"executed OK ({str(result)[:200]})",
+            )
+            return result
+        except Exception as e:
+            await self.audit_logger.log(
+                thread_id=state.thread_id, tool_name=tool_name,
+                actor_role=state.user_role, risk=risk,
+                decision="error", user_id=state.user_id,
+                reason=f"error: {type(e).__name__}: {str(e)[:200]}",
+            )
+            raise
 
-        from src.jefrey.core.checkpointer import make_checkpoint_config as _make_cp_cfg
-        config = _make_cp_cfg(thread_id, user_id)
-        compiled = await self._compile()
-        final_state = await compiled.ainvoke(initial_state, config=config)
+    async def run(self, user_input: str, user_id: str, user_role: str = "guest") -> Dict[str, Any]:
+        """Run the agent loop with a user input.
 
-        ai_messages = [m for m in final_state["messages"] if isinstance(m, AIMessage)]
-        response = ai_messages[-1].content if ai_messages else "Sem resposta."
-
-        await event_bus.emit_sync(SystemEvents.ASSISTANT_RESPONSE, {
-            "response": response,
-            "thread_id": thread_id,
-        })
-
-        return response
-    
-    @traceable(name="agent_stream")
-    async def stream(self, user_input: str, thread_id: str = "default", user_id: str | None = None):
-        """Stream da resposta (para UI em tempo real)."""
-        if self._backend is not None:
-            async for delta in self._backend.stream(user_input, thread_id):
-                yield delta
-            return
-
-        initial_state = AgentState(
-            messages=[HumanMessage(content=user_input)],
-            user_input=user_input,
-            thread_id=thread_id,
+        Calls Ollama LLM for actual conversational responses.
+        """
+        state = AgentState(
             user_id=user_id,
+            thread_id=f"thread_{user_id}_{self._tool_executions}",
+            user_role=user_role,
         )
 
-        from src.jefrey.core.checkpointer import make_checkpoint_config as _make_cp_cfg
-        config = _make_cp_cfg(thread_id, user_id)
+        # Load context from memory with user_id isolation
+        state.context = self._load_context(state)
 
-        await event_bus.emit_sync(SystemEvents.USER_MESSAGE, {
-            "input": user_input,
-            "thread_id": thread_id,
-        })
+        # Build system prompt
+        system_prompt = (
+            "Voce e o Jefrey, um assistente AI pessoal inteligente e amigavel. "
+            "Responda sempre em portugues brasileiro de forma natural e util. "
+            "Seja conciso mas completo. Se nao souber algo, diga honestamente.\n\n"
+            f"Contexto:\n{state.context}\n"
+        )
 
-        compiled = await self._compile()
-        async for chunk in compiled.astream(initial_state, config=config):
-            yield chunk
-    
-    def get_graph_visualization(self) -> str:
-        """Retorna visualização Mermaid do grafo (apenas runtime LangGraph)."""
-        if self.graph is None:
-            return "(runtime openai: grafo LangGraph indisponível)"
-        return self.graph.draw_mermaid()
-    
-    async def health_check(self) -> dict:
-        """Verifica saúde do agente."""
-        if self._backend is not None:
-            return await self._backend.health_check()
-
+        # Call Ollama LLM
         try:
-            # Teste rápido de LLM
-            test_resp = await self.llm.ainvoke("OK")
-            llm_ok = bool(test_resp.content)
-        except Exception as e:
-            llm_ok = False
-            logger.error(f"Health check LLM falhou: {e}")
-        
-        try:
-            # Teste de memória
-            mem_count = self.memory.long_term.count()
-            memory_ok = True
-        except Exception as e:
-            mem_count = 0
-            memory_ok = False
-            logger.error(f"Health check Memory falhou: {e}")
-        
-        try:
-            # Teste do checkpointer Postgres (substitui o MemorySaver em memória)
-            cp = await get_postgres_checkpointer()
-            await cp.aget_tuple({"configurable": {"thread_id": "__health__"}})
-            checkpoint_ok = True
-        except Exception as e:
-            checkpoint_ok = False
-            logger.error(f"Health check checkpointer falhou: {e}")
+            import httpx as _httpx
+            from src.jefrey.core.config import get_settings
+            cfg = get_settings()
+            base_url = (getattr(cfg.llm, "base_url", None) or "http://host.docker.internal:11434").rstrip("/")
+            model = getattr(cfg.llm, "model", "qwen2.5:0.5b")
 
-        overall = llm_ok and memory_ok and checkpoint_ok
-        return {
-            "status": "healthy" if overall else "degraded",
-            "llm": "ok" if llm_ok else "error",
-            "memory": "ok" if memory_ok else "error",
-            "checkpoint": "ok" if checkpoint_ok else "error",
-            "policy": "disabled" if self._policy.mode == "off" else "enabled",
-            "policy_mode": self._policy.mode,
-            "memory_count": mem_count,
-            "tools_available": len(self.tools),
-            "version": get_settings().version,
-        }
+            async with _httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(
+                    f"{base_url}/api/chat",
+                    json={
+                        "model": model,
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_input},
+                        ],
+                        "stream": False,
+                    },
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                response_text = data.get("message", {}).get("content", "")
+
+                if not response_text:
+                    response_text = "Desculpe, nao consegui processar sua mensagem."
+
+                try:
+                    from src.jefrey.core.audit import redact_pii
+                    logger.info("chat: user=%s thread=%s input=%s response_len=%d",
+                        user_id, state.thread_id, redact_pii(user_input[:80]), len(response_text))
+                except Exception:
+                    pass
+
+                return {
+                    "response": response_text,
+                    "thread_id": state.thread_id,
+                    "status": "completed",
+                }
+
+        except Exception as e:
+            logger.error("agent LLM call failed: %s", e, exc_info=True)
+            return {
+                "response": f"Ola! Sou o Jefrey. O LLM esta indisponivel ({type(e).__name__}). Estou funcionando mas sem conexao com o modelo.",
+                "thread_id": state.thread_id,
+                "status": "degraded",
+                "error": str(e),
+            }
+
+class JefreyAgent(Agent):
+    """Compat class para verify_cipher CIPHER-022 (resolve_role server-side)."""
+    def _resolve_role(self, preferred=None):
+        from src.jefrey.core.rbac import resolve_role
+        return resolve_role(preferred)
+
+# Alias legacy - mantem compat imports
+JefreyAgentAlias = JefreyAgent

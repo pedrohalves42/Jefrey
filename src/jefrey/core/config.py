@@ -287,6 +287,13 @@ class MCPClientSettings(BaseSettings):
     # Lista de servidores externos (env nested: JEFREY_MCP_CLIENT__SERVERS__0__URL=...)
     servers: list[ExternalMCPServer] = []
 
+class AvatarSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="JEFREY_AVATAR__", extra="ignore")
+    model: str = "data/avatars/iron_man.glTF"
+    theme: str = "dark"
+    auto_rotate: bool = True
+
+
 class AppSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -342,6 +349,7 @@ class AppSettings(BaseSettings):
     api: APISettings = APISettings()
     mcp: MCPServerSettings = MCPServerSettings()
     mcp_client: MCPClientSettings = MCPClientSettings()
+    avatar: AvatarSettings = AvatarSettings()
 
 # Instancia global (lazy) -- thread-safe
 _settings: AppSettings | None = None

@@ -172,5 +172,17 @@ def main():
         reload=False  # docker read_only fix: watchfiles /app/.cache Permission denied (Axiom 1),
     )
 
+from src.jefrey.api.ws import get_ws_manager  # type: ignore
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    manager = get_ws_manager()
+    await manager.connect(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+
 if __name__ == "__main__":
     main()

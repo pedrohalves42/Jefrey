@@ -11,7 +11,6 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-
 class RateLimiter:
     """Token bucket rate limiter stored in Redis — fail-closed."""
 
@@ -100,19 +99,20 @@ class RateLimiter:
             return "deny"
 
     def is_allowed_sync(self, user_id: str, tool_name: str, rate: int = 60, burst: int = 20) -> str:
-        """Sync wrapper para PolicyEngine.decide (sync) — nao quebrar assinatura."""
+        """Sync wrapper para PolicyEngine.decide (sync) — nao quebrar assinatura.
+        Axioma #6: sem Redis => deny/raise, nunca allow. Pipeline atomico, sem delete.
+        """
         if not user_id:
             logger.warning("rate_limit: user_id ausente => deny (Axiom #2) [sync]")
             try:
                 from src.jefrey.core.metrics import RATE_LIMIT_TOTAL
-
                 RATE_LIMIT_TOTAL.labels(tool_name=tool_name, decision="deny").inc()
             except Exception as _e:
                 logger.debug("rate_limit metrics inc falhou: %s", _e)
             return "deny"
-        redis = self._get_redis_sync()
-        key = f"rate:{user_id}:{tool_name}"
         try:
+            redis = self._get_redis_sync()
+            key = f"rate:{user_id}:{tool_name}"
             pipe = redis.pipeline()
             pipe.incr(key)
             pipe.expire(key, 60)
@@ -124,18 +124,22 @@ class RateLimiter:
             decision = "deny" if count > rate else "allow"
             try:
                 from src.jefrey.core.metrics import RATE_LIMIT_TOTAL
-
                 RATE_LIMIT_TOTAL.labels(tool_name=tool_name, decision=decision).inc()
             except Exception as _e:
                 logger.debug("rate_limit metrics inc falhou: %s", _e)
             return decision
         except RuntimeError:
-            raise
+            logger.error("rate_limit: Redis indisponivel (fail-closed deny)")
+            try:
+                from src.jefrey.core.metrics import RATE_LIMIT_TOTAL
+                RATE_LIMIT_TOTAL.labels(tool_name=tool_name, decision="deny").inc()
+            except Exception as _e:
+                logger.debug("rate_limit metrics inc falhou: %s", _e)
+            return "deny"
         except Exception as e:
             logger.error("rate_limit: erro pipeline sync (fail-closed deny): %s", e)
             try:
                 from src.jefrey.core.metrics import RATE_LIMIT_TOTAL
-
                 RATE_LIMIT_TOTAL.labels(tool_name=tool_name, decision="deny").inc()
             except Exception as _e:
                 logger.debug("rate_limit metrics inc falhou: %s", _e)
@@ -148,9 +152,7 @@ class RateLimiter:
 
             raise HTTPException(status_code=429, detail="rate limit exceeded")
 
-
 _RATE_LIMITER: RateLimiter | None = None
-
 
 def get_rate_limiter() -> RateLimiter:
     global _RATE_LIMITER

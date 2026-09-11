@@ -442,12 +442,7 @@ class MemoryManager:
         # Working memory (curto prazo) — Redis com fallback em memória local
         from src.jefrey.core.redis_memory import RedisWorkingMemory
 
-        self.short_term = RedisWorkingMemory(
-            session_id="default",
-            max_messages=s.memory.short_term.max_messages,
-            max_tokens=s.memory.short_term.max_tokens,
-            redis_url=s.redis.dsn,
-        )
+        self.short_term = RedisWorkingMemory(redis_url=s.redis.dsn)
 
         # Long-term memory (vetorial) — Postgres+pgvector ou ChromaDB (fallback)
         if lt.provider in ("postgres", "postgresql"):

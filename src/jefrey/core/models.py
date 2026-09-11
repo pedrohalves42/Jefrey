@@ -22,10 +22,8 @@ from src.jefrey.core.config import get_settings
 
 EMBED_DIM = get_settings().memory.long_term.embedding_dim
 
-
 class Base(DeclarativeBase):
     pass
-
 
 class _MemoryMixin:
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -42,7 +40,6 @@ class _MemoryMixin:
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
-
 class EpisodicMemory(_MemoryMixin, Base):
     __tablename__ = "episodic_memory"
 
@@ -50,7 +47,6 @@ class EpisodicMemory(_MemoryMixin, Base):
         Index("ix_episodicmemory_embedding_hnsw", "embedding", postgresql_using="hnsw", postgresql_with={"m": 16, "ef_construction": 64}, postgresql_ops={"embedding": "vector_cosine_ops"}),
         Index("ix_episodicmemory_user_created", "user_id", "created_at"),
     )
-
 
 class SemanticMemory(_MemoryMixin, Base):
     __tablename__ = "semantic_memory"
@@ -60,7 +56,6 @@ class SemanticMemory(_MemoryMixin, Base):
         Index("ix_semanticmemory_user_created", "user_id", "created_at"),
     )
 
-
 class PreferenceMemory(_MemoryMixin, Base):
     __tablename__ = "preference_memory"
 
@@ -68,7 +63,6 @@ class PreferenceMemory(_MemoryMixin, Base):
         Index("ix_preferencememory_embedding_hnsw", "embedding", postgresql_using="hnsw", postgresql_with={"m": 16, "ef_construction": 64}, postgresql_ops={"embedding": "vector_cosine_ops"}),
         Index("ix_preferencememory_user_created", "user_id", "created_at"),
     )
-
 
 class ProceduralMemory(_MemoryMixin, Base):
     __tablename__ = "procedural_memory"
@@ -78,7 +72,6 @@ class ProceduralMemory(_MemoryMixin, Base):
         Index("ix_proceduralmemory_user_created", "user_id", "created_at"),
     )
 
-
 class OperationalMemory(_MemoryMixin, Base):
     __tablename__ = "operational_memory"
 
@@ -86,7 +79,6 @@ class OperationalMemory(_MemoryMixin, Base):
         Index("ix_operationalmemory_embedding_hnsw", "embedding", postgresql_using="hnsw", postgresql_with={"m": 16, "ef_construction": 64}, postgresql_ops={"embedding": "vector_cosine_ops"}),
         Index("ix_operationalmemory_user_created", "user_id", "created_at"),
     )
-
 
 class Approval(Base):
     """Solicitações de aprovação Human-in-the-Loop (P4)."""
@@ -106,15 +98,16 @@ class Approval(Base):
     decided_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=True, index=True)  # P4: prazo do approval (approval_ttl)
+    admin_bypass = Column(String(16), nullable=True, default=None)  # FASE 7: rastreamento de bypass admin
 
     __table_args__ = (
         Index("ix_approvals_user_thread", "user_id", "thread_id"),
         Index("ix_approvals_expires", "expires_at"),
     )
 
-
 class AuditLog(Base):
     """Log de auditoria forense (P4, CIPHER-010) — substitui docker logs."""
+
     __tablename__ = "audit_logs"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -131,6 +124,23 @@ class AuditLog(Base):
     source = Column(String(32), nullable=False, default="agent")
     detail_json = Column(JSONB, nullable=False, default=lambda: {})
 
+class LongTermMemory(_MemoryMixin, Base):
+    __tablename__ = "longterm_memory"
+
+    __table_args__ = (
+        Index(
+            "ix_longtermemory_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+        Index(
+            "ix_longtermemory_user_created",
+            "user_id",
+            "created_at",
+        ),
+    )
 
 MEMORY_TABLES = {
     "episodic": EpisodicMemory,
@@ -139,7 +149,6 @@ MEMORY_TABLES = {
     "procedural": ProceduralMemory,
     "operational": OperationalMemory,
 }
-
 
 def memory_table(layer: str):
     if layer not in MEMORY_TABLES:

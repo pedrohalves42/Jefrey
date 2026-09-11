@@ -5,7 +5,8 @@ const links = [
   { to: "/memory", label: "Memoria" },
   { to: "/approvals", label: "Approvals" },
   { to: "/observability", label: "Observabilidade" },
-  { to: "/settings", label: "Settings" }
+  { to: "/settings", label: "Settings" },
+  { to: "/knowledge", label: "Conhecimento" }
 ]
 export function Nav() {
   return (

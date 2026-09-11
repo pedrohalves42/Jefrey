@@ -113,3 +113,10 @@ class EventBusPublisher:
     @property
     def memory_fallback(self):
         return self._memory_fallback
+
+# === Module-level convenience function ===
+
+async def publish_event(event_type: str, payload: dict, **kwargs):
+    """Publish an event using the default EventBusPublisher."""
+    publisher = EventBusPublisher(**kwargs)
+    await publisher.publish(event_type=event_type, payload=payload)

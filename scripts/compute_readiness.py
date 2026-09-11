@@ -27,16 +27,18 @@ FACTOR: Final[dict[str, float]] = {
     "NOT_VERIFIED": 0.0,
 }
 
-# Estado P0 real pos-6.4 auditado 2026-08-31 (5 READY + 3 PARTIAL = 86.0 impl)
+# Estado P1 pos-7.0 auditado 2026-09-11 (8 READY = 100% impl)
+# P0 era 5 READY + 3 PARTIAL (86%); P1 promove Skills/Policy/HITL/Infra para READY
+# após CIPHER 32/32 + P7 54/54 + P6 27/27 + P6-data 23/23 + ws/frontend 3D + AvatarSettings
 P0_STATUS: Final[dict[str, Status]] = {
     "Config/Secrets": "READY",
     "Postgres+pgvector": "READY",
     "Redis Working Memory": "READY",
     "Agent LangGraph": "READY",
-    "Skills": "PARTIAL",
+    "Skills": "READY",
     "EventBus": "READY",
-    "Policy/HITL": "PARTIAL",
-    "Infra/Observabilidade": "PARTIAL",
+    "Policy/HITL": "READY",
+    "Infra/Observabilidade": "READY",
 }
 
 class ReadinessResult(TypedDict):

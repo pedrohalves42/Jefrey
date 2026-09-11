@@ -111,3 +111,6 @@ def require_role(required_role: "str | Role", risk=None, source: str = "skill"):
         return func
 
     return decorator
+
+# Alias for direct imports (agent.py compatibility)
+RBAC = RBACEngine

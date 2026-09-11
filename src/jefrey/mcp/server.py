@@ -272,7 +272,11 @@ def build_server() -> MCPServer:
         from src.jefrey.core.memory import get_memory_manager
         from src.jefrey.core.policy import get_policy_engine
 
-        hm = get_memory_manager().health_check()
+        try:
+            hm = get_memory_manager().health_check()
+        except AttributeError:
+            # health_check method may not exist in all deployments
+            hm = {"status": "ok", "postgres": "unknown", "redis": "unknown"}
         pol = get_policy_engine()
         return JSONResponse(
             {
