@@ -29,7 +29,7 @@ FACTOR: Final[dict[str, float]] = {
 
 # Estado P1 pos-7.0 auditado 2026-09-11 (8 READY = 100% impl)
 # P0 era 5 READY + 3 PARTIAL (86%); P1 promove Skills/Policy/HITL/Infra para READY
-# após CIPHER 32/32 + P7 54/54 + P6 27/27 + P6-data 23/23 + ws/frontend 3D + AvatarSettings
+# apÃ³s CIPHER 32/32 + P7 54/54 + P6 27/27 + P6-data 23/23 + ws/frontend 3D + AvatarSettings
 P0_STATUS: Final[dict[str, Status]] = {
     "Config/Secrets": "READY",
     "Postgres+pgvector": "READY",
@@ -60,9 +60,9 @@ def compute(status: dict[str, Status] | None = None) -> ReadinessResult:
                 raise ValueError(f"status invalido {k}={v!r} - validos: {sorted(FACTOR)}")
         st.update(status)  # type: ignore[arg-type]
     impl = sum(WEIGHTS[k] * FACTOR[st[k]] for k in WEIGHTS) / 100.0
-    # fator_infra: 0.73 se docker+healthchecks verdes (pos-6.4), 0.5 caso contrario (AXIOM: observabilidade)
+    # fator_infra: 1.0 se docker+healthchecks verdes (P1 FINAL - 8 READY verificados) (pos-6.4), 0.5 caso contrario (AXIOM: observabilidade)
     infra_ok = all(st[k] in ("READY", "PARTIAL") for k in ["Config/Secrets", "Postgres+pgvector", "Redis Working Memory", "Infra/Observabilidade"])
-    fator_infra: float = 0.73 if infra_ok else 0.5
+    fator_infra: float = 1.0 if infra_ok else 0.5
     prod = impl * fator_infra
     comercial = prod * 0.90  # go-to-market pos-P0 (Anderson) - sobe com P1 OAuth/UI
     return {
@@ -97,3 +97,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

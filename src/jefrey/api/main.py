@@ -67,7 +67,7 @@ def create_app() -> FastAPI:
         _ok = True
         if "CHANGE_ME" in _sk or not _sk or len(_sk) < 32:
             _ok = False
-        if "CHANGE_ME" in _pw or (_pw == "jefrey" and not cfg.debug):
+        if "CHANGE_ME" in _pw or (_pw == "jefrey" and cfg.is_prod):
             _ok = False
         if cfg.mcp.service_role not in cfg.mcp.allowed_roles:
             _ok = False
@@ -147,12 +147,12 @@ def create_app() -> FastAPI:
     approvals_app = build_approvals_app()
     app.mount("/approvals", approvals_app)
 
-    # UI-1 Shell â€” serve Vite build em / (Axiom #1: 1 programa, 7 pecas -> sem novo container)
+    # UI-1 Shell Ã¢â‚¬â€ serve Vite build em / (Axiom #1: 1 programa, 7 pecas -> sem novo container)
     # FastAPI StaticFiles serve src/jefrey/static com html=True; rotas /api/* tem precedencia sobre mount "/"
     try:
         _static_dir = Path(__file__).resolve().parent.parent / "static"  # src/jefrey/static (fix: api/ -> jefrey/)
         if _static_dir.exists():
-            # mount em "/" depois das rotas â€” /health, /chat, /memory, /approvals continuam com prioridade
+            # mount em "/" depois das rotas Ã¢â‚¬â€ /health, /chat, /memory, /approvals continuam com prioridade
             app.mount("/", StaticFiles(directory=str(_static_dir), html=True), name="ui-static")
             logger.info("UI static mounted at / from %s", _static_dir)
     except Exception as e:
@@ -186,3 +186,4 @@ async def websocket_endpoint(websocket: WebSocket):
 
 if __name__ == "__main__":
     main()
+
