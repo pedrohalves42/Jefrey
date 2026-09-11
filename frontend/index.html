@@ -2,24 +2,53 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Jefrey 3D Avatar</title>
   <style>
     body{margin:0;overflow:hidden;background:#111;font-family:system-ui,sans-serif;color:#e0e0e0}
-    #ui{position:absolute;top:20px;left:20px;display:flex;gap:12px;align-items:center}
-    button{padding:8px 16px;background:#0f0;border:none;border-radius:4px;cursor:pointer}
+    #ui{position:absolute;top:20px;left:20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;z-index:10}
+    button{padding:8px 16px;background:#0a84ff;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600}
+    button:disabled{opacity:0.5;cursor:not-allowed}
+    #btnMic.recording{background:#ff3b30;animation:pulse 1s infinite}
+    @keyframes pulse{0%{opacity:1}50%{opacity:0.6}100%{opacity:1}}
+    #status{font-size:12px;opacity:0.8;max-width:320px}
+    #player{width:260px;height:28px}
+    #canvas{display:block;width:100vw;height:100vh}
+    #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:8px;display:none;z-index:20}
   </style>
 </head>
 <body>
 <div id="ui">
-  <h3>Jefrey <span id="userId">guest</span></h3>
+  <h3 style="margin:0">Jefrey <span id="userId">guest</span></h3>
   <button id="btnAvatar">Trocar Avatar</button>
+  <button id="btnMic" title="Clique para falar (5s)">🎤 Falar</button>
+  <span id="status">pronto</span>
+  <audio id="player" controls style="display:none"></audio>
 </div>
+<div id="toast"></div>
 <canvas id="canvas"></canvas>
 <script type="module">
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js';
 import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/loaders/GLTFLoader.js';
 
+// --- Config (env fallback para volume :ro) ---
+const TOKEN = localStorage.getItem('jefrey_token') || '73a63e869da21db4d478e1ec1b453111257c12371d8aca44751405270ee049e3';
+const userId = localStorage.getItem('jefrey_user_id') || 'demo_user';
+document.getElementById('userId').textContent = userId;
+const API_BASE = (window.JEFREY_API_URL || 'http://localhost:8000').replace(/\/$/,'');
+const WS_URL = window.JEFREY_WS_URL || 'ws://localhost:8000/ws';
+
+function toast(msg, ms=3000){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.style.display='block';
+  setTimeout(()=>el.style.display='none', ms);
+}
+function setStatus(msg){
+  document.getElementById('status').textContent = msg;
+}
+
+// --- Three.js scene ---
 const canvas = document.getElementById('canvas');
 const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -37,26 +66,202 @@ loader.load('/data/avatars/iron_man.glTF', (gltf)=>{
   avatarMesh = gltf.scene;
   avatarMesh.name='avatar';
   scene.add(avatarMesh);
+}, undefined, (err)=>{
+  console.warn('GLTF load falhou, usando fallback box', err);
+  const geo=new THREE.BoxGeometry(0.6,1.2,0.3);
+  const mat=new THREE.MeshStandardMaterial({color:0x0a84ff});
+  avatarMesh=new THREE.Mesh(geo,mat);
+  avatarMesh.name='avatar';
+  scene.add(avatarMesh);
 });
 
-const ws = new WebSocket('ws://localhost:8000/ws');
+// --- WebSocket 4 handlers (diretriz) ---
+const ws = new WebSocket(WS_URL);
+ws.onopen = ()=> console.log('WS open', WS_URL);
 ws.onmessage = (e)=>{
   try{
     const msg = JSON.parse(e.data);
     console.log('Jefrey event:',msg.type);
     if(msg.type==='tool_start'){ if(avatarMesh){ avatarMesh.rotation.y+=0.02; } }
-    if(msg.type==='memory_retrieved'){ /* pulse effect */ }
-    if(msg.type==='approval_pending'){ if(avatarMesh){ avatarMesh.traverse(o=>{ if(o.isMesh) o.material.color.set(0xff0000); }); } }
-    if(msg.type==='security_alert'){ if(avatarMesh){ avatarMesh.traverse(o=>{ if(o.isMesh) o.material.color.set(0xff0000); }); } }
+    if(msg.type==='memory_retrieved'){ if(avatarMesh){ avatarMesh.scale.set(1.05,1.05,1.05); setTimeout(()=>avatarMesh.scale.set(1,1,1),300); } }
+    if(msg.type==='approval_pending'){ if(avatarMesh){ avatarMesh.traverse(o=>{ if(o.isMesh) o.material.color.set(0xff0000); }); } toast('Aprovacao pendente'); }
+    if(msg.type==='security_alert'){ if(avatarMesh){ avatarMesh.traverse(o=>{ if(o.isMesh) o.material.color.set(0xff0000); }); } toast('Alerta de seguranca'); }
   }catch(err){ console.error('WS msg parse error',err); }
 };
+ws.onerror = (e)=> console.warn('WS error', e);
+ws.onclose = ()=> console.log('WS closed');
 
 const animate=()=>{ requestAnimationFrame(animate); controls.update(); renderer.render(scene,camera); };
 animate();
+window.addEventListener('resize', ()=>{
+  camera.aspect=window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
 
 document.getElementById('btnAvatar').addEventListener('click',()=>{
-  alert('Troca de avatar configurada via JEFREY_AVATAR__MODEL no backend.');
+  toast('Troca de avatar via JEFREY_AVATAR__MODEL no backend.');
 });
+
+// --- VOZ: getUserMedia + MediaRecorder -> POST /stt -> POST /chat -> POST /tts -> Audio.play() + AnalyserNode lip-sync ---
+const btnMic = document.getElementById('btnMic');
+const player = document.getElementById('player');
+let rec = null;
+let chunks = [];
+let audioCtx = null;
+let analyser = null;
+
+function startLipSync(audioEl){
+  try{
+    if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state==='suspended') audioCtx.resume();
+    const src = audioCtx.createMediaElementSource(audioEl);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    src.connect(analyser);
+    analyser.connect(audioCtx.destination);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    function tick(){
+      if(!analyser || audioEl.paused) return;
+      analyser.getByteFrequencyData(data);
+      const avg = data.reduce((a,b)=>a+b,0)/data.length;
+      const s = 1 + Math.min(0.12, avg/600);
+      if(avatarMesh) avatarMesh.scale.set(s,s,s);
+      requestAnimationFrame(tick);
+    }
+    tick();
+    audioEl.onended = ()=>{ if(avatarMesh) avatarMesh.scale.set(1,1,1); };
+  }catch(e){ console.warn('lip-sync falhou', e); }
+}
+
+btnMic.onclick = async ()=>{
+  if(rec && rec.state==='recording'){
+    rec.stop();
+    btnMic.classList.remove('recording');
+    btnMic.textContent='🎤 Falar';
+    setStatus('processando...');
+    return;
+  }
+  // iniciar captura
+  try{
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      toast('Navegador sem suporte a microfone (getUserMedia). Use Chrome/Edge.');
+      return;
+    }
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    chunks = [];
+    const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
+    rec = new MediaRecorder(stream, {mimeType: mime});
+    rec.ondataavailable = e=>{ if(e.data && e.data.size>0) chunks.push(e.data); };
+    rec.onstop = async ()=>{
+      stream.getTracks().forEach(t=>t.stop());
+      btnMic.disabled=true;
+      try{
+        const blob = new Blob(chunks, {type:'audio/webm'});
+        chunks=[];
+        if(blob.size < 500){
+          toast('Audio muito curto, fale por 1-5s.');
+          setStatus('pronto');
+          btnMic.disabled=false;
+          return;
+        }
+        setStatus('transcrevendo...');
+        // 1) STT
+        const fd = new FormData();
+        fd.append('audio', blob, 'mic.webm');
+        const r = await fetch(`${API_BASE}/stt`, {
+          method:'POST',
+          headers:{ Authorization:`Bearer ${TOKEN}`, 'X-User-Id': userId },
+          body: fd
+        });
+        if(!r.ok){
+          const txt = await r.text();
+          throw new Error(`STT ${r.status}: ${txt.slice(0,300)}`);
+        }
+        const {transcript} = await r.json();
+        if(!transcript){
+          toast('Nao entendi, tente novamente.');
+          setStatus('pronto');
+          btnMic.disabled=false;
+          return;
+        }
+        setStatus(`voce: "${transcript.slice(0,60)}"`);
+        console.log('STT transcript:', transcript);
+
+        // 2) CHAT
+        setStatus('pensando...');
+        const chatRes = await fetch(`${API_BASE}/chat`, {
+          method:'POST',
+          headers:{ Authorization:`Bearer ${TOKEN}`, 'X-User-Id': userId, 'Content-Type':'application/json' },
+          body: JSON.stringify({message: transcript})
+        });
+        let chatText = transcript;
+        if(chatRes.ok){
+          const j = await chatRes.json();
+          chatText = j.response || j.message || j.text || transcript;
+        } else {
+          console.warn('chat falhou, usando transcript como fallback', await chatRes.text());
+        }
+        setStatus(`jefrey: "${String(chatText).slice(0,80)}"`);
+
+        // 3) TTS
+        setStatus('sintetizando voz...');
+        const tts = await fetch(`${API_BASE}/tts`, {
+          method:'POST',
+          headers:{ Authorization:`Bearer ${TOKEN}`, 'X-User-Id': userId, 'Content-Type':'application/json' },
+          body: JSON.stringify({text: String(chatText).slice(0,1000), voice_id:'pt_BR-faber-medium', format:'wav'})
+        });
+        if(!tts.ok){
+          const txt = await tts.text();
+          throw new Error(`TTS ${tts.status}: ${txt.slice(0,300)}`);
+        }
+        const audioBlob = await tts.blob();
+        const url = URL.createObjectURL(audioBlob);
+        player.src = url;
+        player.style.display='block';
+        player.onloadeddata = ()=>{
+          player.play().catch(e=>{ console.warn('play falhou', e); toast('Clique no player para ouvir.'); });
+          startLipSync(player);
+        };
+        // fallback imediato se onloadeddata nao disparar (wav pequeno)
+        setTimeout(()=>{ if(player.paused) player.play().catch(()=>{}); }, 300);
+        setStatus('tocando resposta...');
+        console.log('TTS wav bytes', audioBlob.size);
+
+        // avatar pulse extra
+        if(avatarMesh) { avatarMesh.rotation.y += 0.15; }
+
+      }catch(err){
+        console.error('voz pipeline falhou', err);
+        toast(String(err.message||err).slice(0,120));
+        setStatus('erro - tente novamente');
+      }finally{
+        btnMic.disabled=false;
+        btnMic.classList.remove('recording');
+        btnMic.textContent='🎤 Falar';
+      }
+    };
+    rec.start(100);
+    btnMic.classList.add('recording');
+    btnMic.textContent='⏹ Parar (5s)';
+    setStatus('gravando... clique em Parar');
+    toast('Gravando - fale agora');
+    // auto-stop 5s
+    setTimeout(()=>{ if(rec && rec.state==='recording') rec.stop(); }, 5000);
+  }catch(e){
+    console.error('getUserMedia falhou', e);
+    if(e.name==='NotAllowedError') toast('Permissao de microfone negada. Libere no navegador.');
+    else if(e.name==='NotFoundError') toast('Microfone nao encontrado.');
+    else toast(`Microfone erro: ${e.message}`);
+    setStatus('pronto');
+    btnMic.classList.remove('recording');
+    btnMic.textContent='🎤 Falar';
+  }
+};
+
+// expose for E2E / main.js
+window.jefreyVoice = { getState: ()=>({recording: rec && rec.state==='recording'}) };
+console.log('Jefrey 3D voice ready: btnMic + getUserMedia + /stt + /chat + /tts + Audio.play()');
 </script>
 </body>
 </html>
