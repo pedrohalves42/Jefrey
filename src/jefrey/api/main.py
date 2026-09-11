@@ -92,6 +92,14 @@ def create_app() -> FastAPI:
     async def _f3_startup_llm_probe():
         await _f3_llm_probe()
 
+    @app.on_event("startup")
+    async def _startup_register_tools():
+        try:
+            from src.jefrey.core.registry import register_default_tools
+            register_default_tools()
+        except Exception as e:
+            logger.warning("register_default_tools falhou: %s", e)
+
     # CIPHER-104: fecha pool do checkpointer em shutdown (evita leak de conexoes AsyncPG)
     @app.on_event("shutdown")
     async def _close_checkpointer():
@@ -186,4 +194,4 @@ async def websocket_endpoint(websocket: WebSocket):
 
 if __name__ == "__main__":
     main()
-
+
