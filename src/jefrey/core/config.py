@@ -11,10 +11,10 @@ class LLMSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="JEFREY_LLM__", extra="ignore")
     
     provider: Literal["openai", "anthropic", "ollama"] = "ollama"
-    model: str = "llama3.1:8b"
+    model: str = "qwen2.5:0.5b"
     temperature: float = 0.7
     max_tokens: int = 4000
-    base_url: Optional[str] = "http://localhost:11434"
+    base_url: Optional[str] = "http://ollama:11434"
     api_key: Optional[str] = None
     
     @field_validator("base_url", mode="before")
@@ -31,7 +31,7 @@ class EmbeddingsSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="JEFREY_EMBEDDINGS__", extra="ignore")
     
     model: str = "nomic-embed-text"
-    base_url: str = "http://localhost:11434"
+    base_url: str = "http://ollama:11434"
     api_key: str = ""
 
 class MemoryShortTermSettings(BaseSettings):

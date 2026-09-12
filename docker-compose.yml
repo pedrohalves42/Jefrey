@@ -65,8 +65,8 @@ services:
       JEFREY_REDIS__HOST: ${JEFREY_REDIS__HOST:-redis}
       JEFREY_REDIS__PASSWORD: ${JEFREY_REDIS__PASSWORD:?required}
       JEFREY_LLM__MODEL: ${JEFREY_LLM__MODEL:-qwen2.5:0.5b}
-      JEFREY_LLM__BASE_URL: ${JEFREY_LLM__BASE_URL:-http://host.docker.internal:11434}
-      JEFREY_EMBEDDINGS__BASE_URL: ${JEFREY_EMBEDDINGS__BASE_URL:-http://host.docker.internal:11434}
+      JEFREY_LLM__BASE_URL: ${JEFREY_LLM__BASE_URL:-http://ollama:11434}
+      JEFREY_EMBEDDINGS__BASE_URL: ${JEFREY_EMBEDDINGS__BASE_URL:-http://ollama:11434}
       JEFREY_API__SECRET_KEY: ${JEFREY_API__SECRET_KEY:?required - defina JEFREY_API__SECRET_KEY no .env}
       JEFREY_API__AUDIT_FALLBACK_PATH: ${JEFREY_API__AUDIT_FALLBACK_PATH:-/tmp/audit_fallback.jsonl}
       JEFREY_ENV: ${JEFREY_ENV:-dev}
@@ -98,6 +98,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      ollama:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health',timeout=2).status==200 else 1)"]
       interval: 30s
@@ -127,8 +129,8 @@ services:
       JEFREY_REDIS__HOST: ${JEFREY_REDIS__HOST:-redis}
       JEFREY_REDIS__PASSWORD: ${JEFREY_REDIS__PASSWORD:?required}
       JEFREY_LLM__MODEL: ${JEFREY_LLM__MODEL:-qwen2.5:0.5b}
-      JEFREY_LLM__BASE_URL: ${JEFREY_LLM__BASE_URL:-http://host.docker.internal:11434}
-      JEFREY_EMBEDDINGS__BASE_URL: ${JEFREY_EMBEDDINGS__BASE_URL:-http://host.docker.internal:11434}
+      JEFREY_LLM__BASE_URL: ${JEFREY_LLM__BASE_URL:-http://ollama:11434}
+      JEFREY_EMBEDDINGS__BASE_URL: ${JEFREY_EMBEDDINGS__BASE_URL:-http://ollama:11434}
       JEFREY_MCP__HOST: ${JEFREY_MCP__HOST:-0.0.0.0}
       JEFREY_MCP__PORT: ${JEFREY_MCP__PORT:-8001}
       JEFREY_ENV: ${JEFREY_ENV:-dev}
@@ -152,12 +154,29 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      ollama:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8001/health',timeout=2).status==200 else 1)"]
       interval: 10s
       timeout: 5s
       retries: 15
       start_period: 40s
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: jefrey-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - jefrey_ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     restart: unless-stopped
 
   n8n:
@@ -258,3 +277,5 @@ volumes:
     name: jefrey_prometheus_data
   jefrey_grafana_data:
     name: jefrey_grafana_data
+  jefrey_ollama:
+    name: jefrey_ollama

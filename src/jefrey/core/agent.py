@@ -175,7 +175,7 @@ class Agent:
             import httpx as _httpx
             from src.jefrey.core.config import get_settings
             cfg = get_settings()
-            base_url = (getattr(cfg.llm, "base_url", None) or "http://host.docker.internal:11434").rstrip("/")
+            base_url = (getattr(cfg.llm, "base_url", None) or "http://ollama:11434").rstrip("/")
             model = getattr(cfg.llm, "model", "qwen2.5:0.5b")
 
             async with _httpx.AsyncClient(timeout=30.0) as client:
