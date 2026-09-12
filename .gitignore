@@ -133,3 +133,6 @@ ui/tsconfig*.tsbuildinfo
 !frontend/data/
 !frontend/data/avatars/
 !frontend/data/avatars/*
+scripts/_*.py
+scripts/_*.json
+scripts/_audit_total.json
