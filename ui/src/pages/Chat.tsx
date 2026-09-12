@@ -84,7 +84,93 @@ export default function Chat() {
     setMsgs((m) => [...m, userMsg])
     setInput("")
     setLoading(true)
+    // placeholder para streaming token-por-token (typewriter)
+    const placeholderIdx = msgs.length + 1
+    let streamed = ""
+    let didStream = false
+    let streamDone = false
+    // helper para atualizar placeholder
+    function upsertPlaceholder(chunk: string){
+      if(!didStream){
+        didStream = true
+        setMsgs((m) => [...m, { role: "assistant" as const, content: "" }])
+      }
+      streamed += chunk
+      setMsgs((m) => m.map((msg,i) => i === placeholderIdx ? { ...msg, content: streamed } : msg))
+      try{ (window as any).__setHudLevel?.(0.35 + Math.random()*0.15) }catch{}
+    }
+    function finalizeStream(){
+      if(didStream && !streamDone){
+        streamDone = true
+        setHud("speaking"); setTimeout(()=> setHud("idle"), Math.min(4000, streamed.length*40))
+      }
+    }
     try {
+      // Tenta SSE /chat/stream primeiro (DIFF4.1)
+      const headers: Record<string,string> = { "Content-Type":"application/json" }
+      try{
+        const tok = localStorage.getItem("jefrey_token"); if(tok) headers["Authorization"] = `Bearer ${tok}`
+        const uid = localStorage.getItem("jefrey_user_id") || "demo"; headers["X-User-Id"] = uid
+      }catch{}
+      let sseOk = false
+      try{
+        const r = await fetch("/chat/stream", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ message: text, thread_id: threadId }),
+        })
+        if(r.ok && r.body && (r.headers.get("content-type")||"").includes("text/event-stream")){
+          const reader = (r.body as ReadableStream<Uint8Array>).getReader()
+          const decoder = new TextDecoder()
+          let buf = ""
+          let sawDone = false
+          while(true){
+            const {done, value} = await reader.read()
+            if(done) break
+            buf += decoder.decode(value, {stream:true})
+            const lines = buf.split("\n")
+            buf = lines.pop() || ""
+            for(const line of lines){
+              const t = line.trim()
+              if(!t.startsWith("data:")) continue
+              const dataStr = t.slice(5).trim()
+              if(!dataStr) continue
+              try{
+                const evt = JSON.parse(dataStr)
+                if(evt.type === "token" && evt.content){
+                  upsertPlaceholder(evt.content)
+                  sseOk = true
+                } else if(evt.type === "done"){
+                  sawDone = true
+                } else if(evt.type === "pending_approval"){
+                  const msg = evt.message || `Aprovacao pendente ${evt.approval_id || threadId}`
+                  if(!didStream) setMsgs((m)=> [...m, { role:"assistant", content: msg }])
+                  else setMsgs((m)=> m.map((x,i)=> i===placeholderIdx ? {...x, content: msg} : x))
+                  sawDone = true; sseOk = true
+                } else if(evt.type === "error"){
+                  throw new Error(evt.message || "stream error")
+                }
+              }catch(e){
+                const m2 = e instanceof Error ? e.message : String(e)
+                if(m2.includes("stream error")) throw e
+              }
+            }
+            if(sawDone) break
+          }
+          if(sawDone || sseOk) sseOk = true
+        }
+      }catch(e){
+        // falha de stream -> fallback classico
+        console.warn("SSE falhou, fallback classico", e)
+      }
+      if(sseOk){
+        finalizeStream()
+        if(!didStream){
+          // stream retornou done sem tokens (ex: HITL) -> ja tratado
+        }
+        return
+      }
+      // fallback classico /chat
       const res = await apiFetch("/chat", {
         method: "POST",
         body: JSON.stringify({ message: text, thread_id: threadId, user_id: getUserId() }),
@@ -109,7 +195,11 @@ export default function Chat() {
         reply = data.response || data.message || data.output || data.content || JSON.stringify(data).slice(0, 800) || "(sem resposta)"
         if (!reply || reply.includes("Execucao longa")) reply = await pollStatus(threadId)
       }
-      setMsgs((m) => [...m, { role: "assistant", content: reply }])
+      if(didStream){
+        setMsgs((m) => m.map((msg,i) => i===placeholderIdx ? {...msg, content: reply} : msg))
+      } else {
+        setMsgs((m) => [...m, { role: "assistant", content: reply }])
+      }
       setHud("speaking"); setTimeout(()=> setHud("idle"), Math.min(4000, reply.length*40))
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -119,7 +209,11 @@ export default function Chat() {
         setError(msg)
       }
       setHud("idle");
-      setMsgs((m) => [...m, { role: "assistant", content: "Sir, erro: " + msg + " — verifique docker 7/7 e tente novamente." }])
+      if(didStream){
+        setMsgs((m) => m.map((x,i)=> i===placeholderIdx ? {...x, content: "Sir, erro: " + msg + " — verifique docker 7/7 e tente novamente." + (streamed ? "\n\n(parcial: "+streamed.slice(0,600)+")" : "")} : x))
+      } else {
+        setMsgs((m) => [...m, { role: "assistant", content: "Sir, erro: " + msg + " — verifique docker 7/7 e tente novamente." }])
+      }
     } finally {
       setLoading(false)
       setPolling(false)

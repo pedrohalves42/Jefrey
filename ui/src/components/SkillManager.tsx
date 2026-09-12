@@ -262,10 +262,12 @@ export function SkillManager() {
               }>
                 <SelectTrigger>
                   <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="error">Error</SelectItem>
                 </SelectContent>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="error">Error</SelectItem>
               </Select>
             </div>
           </div>
@@ -276,8 +278,7 @@ export function SkillManager() {
             className="w-full"
           >
             {isLoading ? (
-              <span className="inline-block h-4 w-4 animate-spin rounded-full border-b-2 border-current"></span>
-              "Adicionando..."
+              <><span className="inline-block h-4 w-4 animate-spin rounded-full border-b-2 border-current"></span> Adicionando...</>
             ) : "Adicionar Skill ao Jefrey"
           </Button>
         </form>
