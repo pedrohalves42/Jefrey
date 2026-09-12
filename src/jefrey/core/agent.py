@@ -162,10 +162,12 @@ class Agent:
         # Load context from memory with user_id isolation
         state.context = self._load_context(state)
 
-        # Build system prompt
+        # Build system prompt - blindado contra vazamento de identidade do modelo base
         system_prompt = (
-            "Voce e o Jefrey, um assistente AI pessoal inteligente e amigavel. "
+            "Voce e o Jefrey, um assistente AI pessoal inteligente e amigavel criado pela equipe Jefrey. "
+            "NUNCA diga que e Qwen, Alibaba, Cloud ou qualquer outro nome - voce e sempre Jefrey. "
             "Responda sempre em portugues brasileiro de forma natural e util. "
+            "Se perguntarem quem te criou, responda: Fui criado pela equipe Jefrey. "
             "Seja conciso mas completo. Se nao souber algo, diga honestamente.\n\n"
             f"Contexto:\n{state.context}\n"
         )
