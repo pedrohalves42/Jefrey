@@ -127,3 +127,6 @@ ui/dist/
 # UI build cache
 ui/*.tsbuildinfo
 ui/tsconfig*.tsbuildinfo
+
+# Allowlist frontend favicon (ver _fix_cors_3d)
+!frontend/favicon.ico

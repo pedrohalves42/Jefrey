@@ -73,6 +73,9 @@ class FastAPIAuthMiddleware(BaseHTTPMiddleware):
     """CIPHER-019 extensao: valida Bearer token em endpoints FastAPI."""
 
     async def dispatch(self, request: Request, call_next):
+        # CORS preflight: never block OPTIONS - let CORSMiddleware handle headers
+        if request.method == "OPTIONS":
+            return await call_next(request)
         path = request.url.path
         # UI-1 public whitelist — FAIL-CLOSED exceto UI estatica (Axiom 5, CIPHER-019)
         if path in _PUBLIC_PATHS or path.startswith(_PUBLIC_PREFIXES):

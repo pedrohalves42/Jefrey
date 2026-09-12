@@ -114,22 +114,22 @@ def create_app() -> FastAPI:
     # In production, JEFREY_API__CORS_ORIGINS must be set to specific allowed domains
     # Without explicit config, CORS is NOT enabled (fail-closed security)
     # This prevents accidental open CORS in production without env var setup
+    # SECURITY (P6-pre): autenticacao Bearer + user context (multi-tenant)
+    # Added FIRST so CORS (added second) is outermost and handles preflight before auth
+    app.add_middleware(FastAPIAuthMiddleware)
+
+    # CIPHER-031: CORS origins must be explicitly configured via env var
     cors_origins_raw = os.getenv("JEFREY_API__CORS_ORIGINS")
     cors_origins = [] if not cors_origins_raw else [o.strip() for o in cors_origins_raw.split(",") if o.strip()]
-    
-    # Only add CORS middleware if origins are explicitly configured
-    # Fail-closed: no CORS env var = no CORS middleware added
     if cors_origins:
         app.add_middleware(
             CORSMiddleware,
             allow_origins=cors_origins,
             allow_credentials=False,
-            allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-            allow_headers=["Authorization", "Content-Type", "X-User-Id"],
+            allow_methods=["*"],
+            allow_headers=["*"],
+            expose_headers=["*"],
         )
-
-    # SECURITY (P6-pre): autenticacao Bearer + user context (multi-tenant)
-    app.add_middleware(FastAPIAuthMiddleware)
 
     # P6: Observability -- Prometheus metrics endpoint (PUBLICO, sem auth)
     SERVICE_HEALTH.labels(component="api").set(1)
