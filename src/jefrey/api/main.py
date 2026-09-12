@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import os
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from fastapi.middleware.cors import CORSMiddleware
@@ -152,15 +152,25 @@ def create_app() -> FastAPI:
     # FIX: mount em /approvals (nao /) para evitar conflito com outros routers.
     # Rotas relativas do sub-app: /pending e /{id}/decide
     # Resultado final: /approvals/pending e /approvals/{id}/decide
+    @app.websocket("/ws")
+    async def websocket_endpoint(websocket: WebSocket):
+        manager = get_ws_manager()
+        await manager.connect(websocket)
+        try:
+            while True:
+                await websocket.receive_text()
+        except WebSocketDisconnect:
+            manager.disconnect(websocket)
+
     approvals_app = build_approvals_app()
     app.mount("/approvals", approvals_app)
 
-    # UI-1 Shell Ã¢â‚¬â€ serve Vite build em / (Axiom #1: 1 programa, 7 pecas -> sem novo container)
+    # UI-1 Shell Ã¢â‚¬â€' serve Vite build em / (Axiom #1: 1 programa, 7 pecas -> sem novo container)
     # FastAPI StaticFiles serve src/jefrey/static com html=True; rotas /api/* tem precedencia sobre mount "/"
     try:
         _static_dir = Path(__file__).resolve().parent.parent / "static"  # src/jefrey/static (fix: api/ -> jefrey/)
         if _static_dir.exists():
-            # mount em "/" depois das rotas Ã¢â‚¬â€ /health, /chat, /memory, /approvals continuam com prioridade
+            # mount em "/" depois das rotas Ã¢â‚¬â€' /health, /chat, /memory, /approvals continuam com prioridade
             app.mount("/", StaticFiles(directory=str(_static_dir), html=True), name="ui-static")
             logger.info("UI static mounted at / from %s", _static_dir)
     except Exception as e:
@@ -181,16 +191,6 @@ def main():
     )
 
 from src.jefrey.api.ws import get_ws_manager  # type: ignore
-
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    manager = get_ws_manager()
-    await manager.connect(websocket)
-    try:
-        while True:
-            await websocket.receive_text()
-    except WebSocketDisconnect:
-        manager.disconnect(websocket)
 
 if __name__ == "__main__":
     main()
