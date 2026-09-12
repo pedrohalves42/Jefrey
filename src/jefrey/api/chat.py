@@ -12,11 +12,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import json
 import time
 from typing import Any, Dict
 
 import re as _re
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from src.jefrey.core.agent import JefreyAgent
@@ -160,6 +162,44 @@ async def chat(request: Request, req: ChatRequest):
         "thread_id": thread_id,
         "message": "Execução longa iniciada. Consulte o status ou aguarde notificações.",
     }
+
+
+@router.post("/stream")
+async def chat_stream(request: Request, req: ChatRequest):
+    """POST /chat/stream — SSE token por token via Ollama stream:true (DIFF4.1).
+    
+    Retorna text/event-stream com eventos JSON:
+      data: {"type":"token","content":"..."}
+      data: {"type":"done","thread_id":"..."}
+      data: {"type":"pending_approval"} quando HITL pendente
+    Mantem POST /chat classico intacto para compat.
+    """
+    user_id = getattr(request.state, "user_id", "anonymous")
+    thread_id = req.thread_id
+    message = req.message.strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="Mensagem nao pode ser vazia")
+    sanitized = sanitize_tool_output(message, source="user_input")
+    if "[CONTE" in sanitized and "BLOQUEADO" in sanitized:
+        raise HTTPException(status_code=400, detail="Mensagem bloqueada por regras de seguranca")
+    pending = ApprovalManager().get_pending(thread_id, user_id=user_id)
+    if pending:
+        async def pending_gen():
+            yield f"data: {json.dumps({"type": "pending_approval", "approval_id": pending[0]["id"], "thread_id": thread_id}, ensure_ascii=False)}\n\n"
+        return StreamingResponse(pending_gen(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    agent = JefreyAgent()
+    async def event_gen():
+        full = ""
+        try:
+            async for chunk in agent.run_stream(sanitized, user_id=user_id):
+                full += chunk
+                yield f"data: {json.dumps({"type": "token", "content": chunk}, ensure_ascii=False)}\n\n"
+            _brain2_enqueue_fire_and_forget(user_id, thread_id, sanitized, full)
+            yield f"data: {json.dumps({"type": "done", "thread_id": thread_id}, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            logger.error("chat/stream event_gen error: %s", e, exc_info=True)
+            yield f"data: {json.dumps({"type": "error", "message": str(e)[:200]}, ensure_ascii=False)}\n\n"
+    return StreamingResponse(event_gen(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"})
 
 @router.post("/resume/{thread_id}")
 async def resume_chat(request: Request, thread_id: str):

@@ -221,6 +221,45 @@ class Agent:
                 "error": str(e),
             }
 
+    async def run_stream(self, user_input: str, user_id: str, user_role: str = "guest"):
+        """Streaming LLM via Ollama /api/chat stream:true — DIFF4.1 SSE token por token."""
+        state = AgentState(user_id=user_id, thread_id=f"thread_{user_id}_{self._tool_executions}", user_role=user_role)
+        state.context = self._load_context(state)
+        system_prompt = (
+            "Voce e o Jefrey, um assistente AI pessoal inteligente e amigavel criado pela equipe Jefrey. "
+            "NUNCA diga que e Qwen, Alibaba, Cloud ou qualquer outro nome - voce e sempre Jefrey. "
+            "Responda sempre em portugues brasileiro de forma natural e util. "
+            "Se perguntarem quem te criou, responda: Fui criado pela equipe Jefrey. "
+            "Seja conciso mas completo. Se nao souber algo, diga honestamente.\n\n"
+            f"Contexto:\n{state.context}\n"
+        )
+        try:
+            import httpx as _httpx
+            import json as _json
+            from src.jefrey.core.config import get_settings
+            cfg = get_settings()
+            base_url = (getattr(cfg.llm, "base_url", None) or "http://ollama:11434").rstrip("/")
+            model = getattr(cfg.llm, "model", "qwen2.5:0.5b")
+            async with _httpx.AsyncClient(timeout=60.0) as client:
+                async with client.stream("POST", f"{base_url}/api/chat", json={"model": model, "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_input}], "stream": True}) as resp:
+                    resp.raise_for_status()
+                    async for line in resp.aiter_lines():
+                        if not line:
+                            continue
+                        try:
+                            data = _json.loads(line)
+                            if data.get("done"):
+                                break
+                            chunk = data.get("message", {}).get("content", "")
+                            if chunk:
+                                yield chunk
+                        except Exception:
+                            continue
+        except Exception as e:
+            logger.error("agent run_stream failed: %s", e, exc_info=True)
+            yield f"[erro LLM {type(e).__name__}]"
+
+
 class JefreyAgent(Agent):
     """Compat class para verify_cipher CIPHER-022 (resolve_role server-side)."""
     def _resolve_role(self, preferred=None):
