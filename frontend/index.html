@@ -5,34 +5,57 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Jefrey 3D Avatar</title>
   <style>
-    body{margin:0;overflow:hidden;background:#111;font-family:system-ui,sans-serif;color:#e0e0e0}
-    #ui{position:absolute;top:20px;left:20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;z-index:10}
-    button{padding:8px 16px;background:#0a84ff;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600}
+    *{box-sizing:border-box}
+    body{margin:0;overflow:hidden;background:#0f1419;font-family:system-ui,sans-serif;color:#e0e0e0}
+    #ui{position:absolute;top:14px;left:14px;right:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;z-index:10;background:rgba(15,20,25,0.92);padding:10px 14px;border-radius:10px;border:1px solid #1e2a33;backdrop-filter:blur(6px)}
+    button{padding:8px 14px;background:#0a84ff;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px}
+    button:hover{background:#0969cc}
     button:disabled{opacity:0.5;cursor:not-allowed}
     #btnMic.recording{background:#ff3b30;animation:pulse 1s infinite}
     @keyframes pulse{0%{opacity:1}50%{opacity:0.6}100%{opacity:1}}
-    #status{font-size:12px;opacity:0.8;max-width:320px}
-    #player{width:260px;height:28px}
+    #status{font-size:12px;opacity:0.9;max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #player{width:220px;height:28px}
     #canvas{display:block;width:100vw;height:100vh}
-    #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:8px;display:none;z-index:20}
+    #chatPanel{position:absolute;bottom:14px;left:14px;right:14px;max-width:560px;margin:0 auto;z-index:10;background:rgba(15,20,25,0.94);border:1px solid #1e2a33;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px}
+    #chatLog{max-height:38vh;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:4px;font-size:13px;line-height:1.4}
+    .msg{padding:8px 10px;border-radius:8px;max-width:85%;word-break:break-word}
+    .msg.user{align-self:flex-end;background:#0a84ff;color:#fff}
+    .msg.jefrey{align-self:flex-start;background:#1e2a33;color:#cfe6ff;border:1px solid #263545}
+    .msg.sys{align-self:center;background:#1a1a1a;color:#aaa;font-size:11px}
+    #chatRow{display:flex;gap:8px}
+    #chatInput{flex:1;padding:9px 11px;border-radius:8px;border:1px solid #243140;background:#0d1117;color:#e0e0e0;outline:none}
+    #chatInput:focus{border-color:#0a84ff}
+    #btnSend{white-space:nowrap}
+    #avatarFallback{position:absolute;inset:0;display:none;place-items:center;z-index:5;pointer-events:none}
+    #avatarFallback span{width:110px;height:160px;border-radius:18px;background:linear-gradient(180deg,#0a84ff,#083a6b);display:block;animation:float 2.2s ease-in-out infinite;box-shadow:0 10px 30px rgba(10,132,255,0.35)}
+    @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+    #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:8px;display:none;z-index:20;max-width:90vw;text-align:center}
   </style>
 </head>
 <body>
 <div id="ui">
-  <h3 style="margin:0">Jefrey <span id="userId">guest</span></h3>
+  <h3 style="margin:0;font-size:15px">Jefrey <span id="userId">guest</span></h3>
   <button id="btnAvatar">Trocar Avatar</button>
   <button id="btnMic" title="Clique para falar (5s)">🎤 Falar</button>
-  <span id="status">pronto</span>
+  <span id="status">pronto — digite no chat ou clique em Falar</span>
   <audio id="player" controls style="display:none"></audio>
 </div>
+<div id="avatarFallback"><span></span></div>
 <div id="toast"></div>
 <canvas id="canvas"></canvas>
-<script type="module">
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js';
-import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/controls/OrbitControls.js';
-import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/loaders/GLTFLoader.js';
 
-// --- Config (env fallback para volume :ro) ---
+<div id="chatPanel">
+  <div id="chatLog">
+    <div class="msg sys">Conectado em <b>http://localhost:3001</b> — backend em :8000. Digite ou use o microfone.</div>
+  </div>
+  <div id="chatRow">
+    <input id="chatInput" placeholder="Digite sua mensagem e tecle Enter..." autocomplete="off" />
+    <button id="btnSend">Enviar</button>
+  </div>
+</div>
+
+<script type="module">
+// --- Config ---
 const TOKEN = localStorage.getItem('jefrey_token') || '73a63e869da21db4d478e1ec1b453111257c12371d8aca44751405270ee049e3';
 const userId = localStorage.getItem('jefrey_user_id') || 'demo_user';
 document.getElementById('userId').textContent = userId;
@@ -44,77 +67,58 @@ function toast(msg, ms=3000){
   el.textContent=msg; el.style.display='block';
   setTimeout(()=>el.style.display='none', ms);
 }
-function setStatus(msg){
-  document.getElementById('status').textContent = msg;
+function setStatus(msg){ document.getElementById('status').textContent = msg; }
+function addMsg(text, who){
+  const log=document.getElementById('chatLog');
+  const d=document.createElement('div');
+  d.className='msg '+who;
+  d.textContent=text;
+  log.appendChild(d);
+  log.scrollTop=log.scrollHeight;
 }
 
-// --- Three.js scene ---
-const canvas = document.getElementById('canvas');
-const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
-renderer.setSize(window.innerWidth, window.innerHeight);
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x111111);
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 100);
-camera.position.set(0,1.5,4);
-const controls = new OrbitControls(camera, renderer.domElement);
-const hem = new THREE.HemisphereLight(0xffffff,0x444444,1); scene.add(hem);
-const dir = new THREE.DirectionalLight(0xffffff,0.8); dir.position.set(5,5,5); scene.add(dir);
-
-// Avatar imediato visivel (fix tela preta) - box fallback instantaneo, glTF tenta por cima
-let avatarMesh = new THREE.Mesh(new THREE.BoxGeometry(0.6,1.2,0.3), new THREE.MeshStandardMaterial({color:0x0a84ff}));
-avatarMesh.name='avatar';
-scene.add(avatarMesh);
-// tenta carregar glTF por cima; se 404 mantem box
-const loader = new GLTFLoader();
-loader.load('/data/avatars/iron_man.glTF', (gltf)=>{
-  scene.remove(avatarMesh);
-  avatarMesh = gltf.scene;
-  avatarMesh.name='avatar';
-  scene.add(avatarMesh);
-  console.log('iron_man.glTF carregado');
-}, undefined, (err)=>{
-  console.warn('GLTF 404, mantendo box fallback', err);
-});
-
-// --- WebSocket 4 handlers (diretriz) ---
-const ws = new WebSocket(WS_URL);
-ws.onopen = ()=> console.log('WS open', WS_URL);
-ws.onmessage = (e)=>{
+// --- CHAT (independe de Three.js) ---
+async function sendChat(text){
+  text=(text||'').trim();
+  if(!text) return;
+  const input=document.getElementById('chatInput');
+  addMsg(text,'user');
+  if(input) input.value='';
+  setStatus('pensando...');
   try{
-    const msg = JSON.parse(e.data);
-    console.log('Jefrey event:',msg.type);
-    if(msg.type==='tool_start'){ if(avatarMesh){ avatarMesh.rotation.y+=0.02; } }
-    if(msg.type==='memory_retrieved'){ if(avatarMesh){ avatarMesh.scale.set(1.05,1.05,1.05); setTimeout(()=>avatarMesh.scale.set(1,1,1),300); } }
-    if(msg.type==='approval_pending'){ if(avatarMesh){ avatarMesh.traverse(o=>{ if(o.isMesh) o.material.color.set(0xff0000); }); } toast('Aprovacao pendente'); }
-    if(msg.type==='security_alert'){ if(avatarMesh){ avatarMesh.traverse(o=>{ if(o.isMesh) o.material.color.set(0xff0000); }); } toast('Alerta de seguranca'); }
-  }catch(err){ console.error('WS msg parse error',err); }
-};
-ws.onerror = (e)=> console.warn('WS error', e);
-ws.onclose = ()=> console.log('WS closed');
+    const r=await fetch(`${API_BASE}/chat`,{
+      method:'POST',
+      headers:{ Authorization:`Bearer ${TOKEN}`, 'X-User-Id': userId, 'Content-Type':'application/json' },
+      body: JSON.stringify({message:text})
+    });
+    if(!r.ok){
+      const t=await r.text();
+      throw new Error(`chat ${r.status}: ${t.slice(0,200)}`);
+    }
+    const j=await r.json();
+    const reply=j.response || j.message || j.text || JSON.stringify(j).slice(0,400);
+    addMsg(reply,'jefrey');
+    setStatus('resposta recebida');
+    // TTS da resposta do chat tbm
+    try{ await speakText(reply); }catch(e){ console.warn('tts do chat falhou',e); }
+  }catch(e){
+    console.error(e);
+    addMsg('Erro: '+ (e.message||e).slice(0,160),'sys');
+    toast(String(e.message||e).slice(0,120));
+    setStatus('erro no chat');
+  }
+}
+document.getElementById('btnSend').addEventListener('click',()=> sendChat(document.getElementById('chatInput').value));
+document.getElementById('chatInput').addEventListener('keydown',(e)=>{ if(e.key==='Enter') sendChat(e.target.value); });
 
-const animate=()=>{ requestAnimationFrame(animate); controls.update(); renderer.render(scene,camera); };
-animate();
-window.addEventListener('resize', ()=>{
-  camera.aspect=window.innerWidth/window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
-
-document.getElementById('btnAvatar').addEventListener('click',()=>{
-  toast('Troca de avatar via JEFREY_AVATAR__MODEL no backend.');
-});
-
-// --- VOZ: getUserMedia + MediaRecorder -> POST /stt -> POST /chat -> POST /tts -> Audio.play() + AnalyserNode lip-sync ---
+// --- VOZ ---
 const btnMic = document.getElementById('btnMic');
 const player = document.getElementById('player');
 const audioCtx = new (window.AudioContext||window.webkitAudioContext)();
-let rec = null;
-let chunks = [];
-let analyser = null;
+let rec=null, chunks=[], analyser=null;
 
 function startLipSync(audioEl){
   try{
-    if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
     if(audioCtx.state==='suspended') audioCtx.resume();
     const src = audioCtx.createMediaElementSource(audioEl);
     analyser = audioCtx.createAnalyser();
@@ -127,143 +131,141 @@ function startLipSync(audioEl){
       analyser.getByteFrequencyData(data);
       const avg = data.reduce((a,b)=>a+b,0)/data.length;
       const s = 1 + Math.min(0.12, avg/600);
-      if(avatarMesh) avatarMesh.scale.set(s,s,s);
+      if(window.avatarMesh) window.avatarMesh.scale.set(s,s,s);
       requestAnimationFrame(tick);
     }
     tick();
-    audioEl.onended = ()=>{ if(avatarMesh) avatarMesh.scale.set(1,1,1); };
+    audioEl.onended = ()=>{ if(window.avatarMesh) window.avatarMesh.scale.set(1,1,1); };
   }catch(e){ console.warn('lip-sync falhou', e); }
 }
-
+async function speakText(text){
+  text=String(text).slice(0,1000);
+  if(!text) return;
+  setStatus('sintetizando voz...');
+  const tts = await fetch(`${API_BASE}/tts`,{
+    method:'POST',
+    headers:{ Authorization:`Bearer ${TOKEN}`, 'X-User-Id': userId, 'Content-Type':'application/json' },
+    body: JSON.stringify({text, voice_id:'pt_BR-faber-medium', format:'wav'})
+  });
+  if(!tts.ok){ const txt=await tts.text(); throw new Error(`TTS ${tts.status}: ${txt.slice(0,200)}`); }
+  const blob=await tts.blob();
+  const url=URL.createObjectURL(blob);
+  player.src=url;
+  player.style.display='block';
+  player.onloadeddata=()=>{ player.play().catch(()=>toast('Clique no player para ouvir.')); startLipSync(player); };
+  setTimeout(()=>{ if(player.paused) player.play().catch(()=>{}); }, 300);
+  setStatus('tocando resposta...');
+  if(window.avatarMesh) window.avatarMesh.rotation.y+=0.15;
+}
 btnMic.onclick = async ()=>{
-  if(audioCtx.state==='suspended') audioCtx.resume();
-  if(rec && rec.state==='recording'){
-    rec.stop();
-    btnMic.classList.remove('recording');
-    btnMic.textContent='🎤 Falar';
-    setStatus('processando...');
-    return;
-  }
-  // iniciar captura
+  if(audioCtx.state==='suspended') await audioCtx.resume();
+  if(rec && rec.state==='recording'){ rec.stop(); btnMic.classList.remove('recording'); btnMic.textContent='🎤 Falar'; setStatus('processando...'); return; }
   try{
-    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-      toast('Navegador sem suporte a microfone (getUserMedia). Use Chrome/Edge.');
-      return;
-    }
+    if(!navigator.mediaDevices?.getUserMedia){ toast('Navegador sem microfone. Use Chrome/Edge.'); return; }
     const stream = await navigator.mediaDevices.getUserMedia({audio:true});
-    chunks = [];
+    chunks=[];
     const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
-    rec = new MediaRecorder(stream, {mimeType: mime});
-    rec.ondataavailable = e=>{ if(e.data && e.data.size>0) chunks.push(e.data); };
+    rec = new MediaRecorder(stream,{mimeType:mime});
+    rec.ondataavailable=e=>{ if(e.data && e.data.size>0) chunks.push(e.data); };
     rec.onstop = async ()=>{
       stream.getTracks().forEach(t=>t.stop());
       btnMic.disabled=true;
       try{
-        const blob = new Blob(chunks, {type:'audio/webm'});
-        chunks=[];
-        if(blob.size < 500){
-          toast('Audio muito curto, fale por 1-5s.');
-          setStatus('pronto');
-          btnMic.disabled=false;
-          return;
-        }
+        const blob=new Blob(chunks,{type:'audio/webm'}); chunks=[];
+        if(blob.size<500){ toast('Audio muito curto, fale 1-5s.'); setStatus('pronto'); return; }
         setStatus('transcrevendo...');
-        // 1) STT
-        const fd = new FormData();
-        fd.append('audio', blob, 'mic.webm');
-        const r = await fetch(`${API_BASE}/stt`, {
-          method:'POST',
-          headers:{ Authorization:`Bearer ${TOKEN}`, 'X-User-Id': userId },
-          body: fd
-        });
-        if(!r.ok){
-          const txt = await r.text();
-          throw new Error(`STT ${r.status}: ${txt.slice(0,300)}`);
-        }
-        const {transcript} = await r.json();
-        if(!transcript){
-          toast('Nao entendi, tente novamente.');
-          setStatus('pronto');
-          btnMic.disabled=false;
-          return;
-        }
+        const fd=new FormData(); fd.append('audio',blob,'mic.webm');
+        const r=await fetch(`${API_BASE}/stt`,{ method:'POST', headers:{ Authorization:`Bearer ${TOKEN}`, 'X-User-Id': userId }, body:fd });
+        if(!r.ok){ const txt=await r.text(); throw new Error(`STT ${r.status}: ${txt.slice(0,200)}`); }
+        const {transcript}=await r.json();
+        if(!transcript){ toast('Nao entendi, tente novamente.'); setStatus('pronto'); return; }
         setStatus(`voce: "${transcript.slice(0,60)}"`);
-        console.log('STT transcript:', transcript);
-
-        // 2) CHAT
-        setStatus('pensando...');
-        const chatRes = await fetch(`${API_BASE}/chat`, {
-          method:'POST',
-          headers:{ Authorization:`Bearer ${TOKEN}`, 'X-User-Id': userId, 'Content-Type':'application/json' },
-          body: JSON.stringify({message: transcript})
-        });
-        let chatText = transcript;
-        if(chatRes.ok){
-          const j = await chatRes.json();
-          chatText = j.response || j.message || j.text || transcript;
-        } else {
-          console.warn('chat falhou, usando transcript como fallback', await chatRes.text());
-        }
-        setStatus(`jefrey: "${String(chatText).slice(0,80)}"`);
-
-        // 3) TTS
-        setStatus('sintetizando voz...');
-        const tts = await fetch(`${API_BASE}/tts`, {
-          method:'POST',
-          headers:{ Authorization:`Bearer ${TOKEN}`, 'X-User-Id': userId, 'Content-Type':'application/json' },
-          body: JSON.stringify({text: String(chatText).slice(0,1000), voice_id:'pt_BR-faber-medium', format:'wav'})
-        });
-        if(!tts.ok){
-          const txt = await tts.text();
-          throw new Error(`TTS ${tts.status}: ${txt.slice(0,300)}`);
-        }
-        const audioBlob = await tts.blob();
-        const url = URL.createObjectURL(audioBlob);
-        player.src = url;
-        player.style.display='block';
-        player.onloadeddata = ()=>{
-          player.play().catch(e=>{ console.warn('play falhou', e); toast('Clique no player para ouvir.'); });
-          startLipSync(player);
-        };
-        // fallback imediato se onloadeddata nao disparar (wav pequeno)
-        setTimeout(()=>{ if(player.paused) player.play().catch(()=>{}); }, 300);
-        setStatus('tocando resposta...');
-        console.log('TTS wav bytes', audioBlob.size);
-
-        // avatar pulse extra
-        if(avatarMesh) { avatarMesh.rotation.y += 0.15; }
-
-      }catch(err){
-        console.error('voz pipeline falhou', err);
-        toast(String(err.message||err).slice(0,120));
-        setStatus('erro - tente novamente');
-      }finally{
-        btnMic.disabled=false;
-        btnMic.classList.remove('recording');
-        btnMic.textContent='🎤 Falar';
-      }
+        addMsg(transcript,'user');
+        // chat + tts via funcao existente
+        await sendChat(transcript);
+      }catch(err){ console.error(err); toast(String(err.message||err).slice(0,120)); setStatus('erro - tente novamente'); }
+      finally{ btnMic.disabled=false; btnMic.classList.remove('recording'); btnMic.textContent='🎤 Falar'; }
     };
     rec.start(100);
-    btnMic.classList.add('recording');
-    btnMic.textContent='⏹ Parar (5s)';
-    setStatus('gravando... clique em Parar');
-    toast('Gravando - fale agora');
-    // auto-stop 5s
-    setTimeout(()=>{ if(rec && rec.state==='recording') rec.stop(); }, 5000);
+    btnMic.classList.add('recording'); btnMic.textContent='⏹ Parar (5s)'; setStatus('gravando... clique em Parar'); toast('Gravando - fale agora');
+    setTimeout(()=>{ if(rec && rec.state==='recording') rec.stop(); },5000);
   }catch(e){
-    console.error('getUserMedia falhou', e);
-    if(e.name==='NotAllowedError') toast('Permissao de microfone negada. Libere no navegador.');
+    console.error(e);
+    if(e.name==='NotAllowedError') toast('Permissao de microfone negada.');
     else if(e.name==='NotFoundError') toast('Microfone nao encontrado.');
     else toast(`Microfone erro: ${e.message}`);
-    setStatus('pronto');
-    btnMic.classList.remove('recording');
-    btnMic.textContent='🎤 Falar';
+    setStatus('pronto'); btnMic.classList.remove('recording'); btnMic.textContent='🎤 Falar';
   }
 };
+window.jefreyVoice={ getState:()=>({recording: rec && rec.state==='recording'}) };
 
-// expose for E2E / main.js
-window.jefreyVoice = { getState: ()=>({recording: rec && rec.state==='recording'}) };
-console.log('Jefrey 3D voice ready: btnMic + getUserMedia + /stt + /chat + /tts + Audio.play()');
+// --- 3D ISOLADO (nao quebra chat/voz se CDN falhar) ---
+const canvas=document.getElementById('canvas');
+let avatarMesh=null;
+window.avatarMesh=null;
+let threeReady=false;
+
+async function init3D(){
+  try{
+    const THREE = await import('https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js');
+    const { OrbitControls } = await import('https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/controls/OrbitControls.js');
+    const { GLTFLoader } = await import('https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/loaders/GLTFLoader.js');
+    const renderer=new THREE.WebGLRenderer({canvas, antialias:true, alpha:false});
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio||1));
+    const scene=new THREE.Scene();
+    scene.background=new THREE.Color(0x0f1419);
+    const camera=new THREE.PerspectiveCamera(58, window.innerWidth/window.innerHeight, 0.1, 100);
+    camera.position.set(0,1.35,3.8);
+    const controls=new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping=true; controls.target.set(0,0.9,0);
+    scene.add(new THREE.HemisphereLight(0xffffff,0x223344,1.1));
+    const dir=new THREE.DirectionalLight(0xffffff,0.9); dir.position.set(4,6,4); scene.add(dir);
+    // box fallback imediato
+    avatarMesh=new THREE.Mesh(new THREE.BoxGeometry(0.6,1.2,0.3), new THREE.MeshStandardMaterial({color:0x0a84ff}));
+    avatarMesh.position.y=0.9;
+    scene.add(avatarMesh); window.avatarMesh=avatarMesh;
+    // animacao base
+    let t=0;
+    const animate=()=>{ requestAnimationFrame(animate); t+=0.01; if(avatarMesh) avatarMesh.rotation.y+=0.003; controls.update(); renderer.render(scene,camera); };
+    animate();
+    window.addEventListener('resize',()=>{ camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+    // tenta glTF por cima
+    const loader=new GLTFLoader();
+    loader.load('/data/avatars/iron_man.glTF',(gltf)=>{
+      scene.remove(avatarMesh);
+      avatarMesh=gltf.scene; avatarMesh.position.y=0; window.avatarMesh=avatarMesh; scene.add(avatarMesh);
+      addMsg('Avatar 3D carregado.','sys'); console.log('iron_man.glTF carregado');
+    }, undefined, (err)=>{ console.warn('GLTF fallback mantido',err); addMsg('Avatar box (GLTF offline).','sys'); });
+    // WS com feedback visual
+    try{
+      const ws=new WebSocket(WS_URL);
+      ws.onopen=()=>{ console.log('WS open',WS_URL); setStatus('conectado'); };
+      ws.onmessage=(e)=>{
+        try{
+          const msg=JSON.parse(e.data);
+          if(msg.type==='tool_start' && avatarMesh) avatarMesh.rotation.y+=0.06;
+          if(msg.type==='memory_retrieved' && avatarMesh){ avatarMesh.scale.set(1.06,1.06,1.06); setTimeout(()=>avatarMesh.scale.set(1,1,1),280); }
+          if(msg.type==='approval_pending' || msg.type==='security_alert'){ toast(msg.type); if(avatarMesh) avatarMesh.traverse(o=>o.isMesh && o.material.color.set(0xff3b30)); }
+        }catch(err){ console.warn('WS parse',err); }
+      };
+      ws.onerror=(e)=>console.warn('WS error',e);
+      ws.onclose=()=>console.log('WS closed');
+    }catch(e){ console.warn('WS falhou',e); }
+    document.getElementById('avatarFallback').style.display='none';
+    document.getElementById('btnAvatar').addEventListener('click',()=>toast('Troca via JEFREY_AVATAR__MODEL no backend.'));
+    threeReady=true;
+    setStatus('3D pronto — chat e voz ativos');
+  }catch(e){
+    console.error('3D falhou — fallback 2D ativo',e);
+    document.getElementById('avatarFallback').style.display='grid';
+    addMsg('3D offline (CDN bloqueado) — chat e voz continuam funcionando.','sys');
+    setStatus('modo 2D — chat e voz OK');
+    document.getElementById('btnAvatar').addEventListener('click',()=>toast('3D offline — avatar 2D ativo.'));
+  }
+}
+init3D();
+console.log('Jefrey UI pronta: chat + btnMic + 3D isolado (nao quebra se CDN falhar)');
 </script>
 </body>
 </html>
