@@ -107,9 +107,9 @@ document.getElementById('btnAvatar').addEventListener('click',()=>{
 // --- VOZ: getUserMedia + MediaRecorder -> POST /stt -> POST /chat -> POST /tts -> Audio.play() + AnalyserNode lip-sync ---
 const btnMic = document.getElementById('btnMic');
 const player = document.getElementById('player');
+const audioCtx = new (window.AudioContext||window.webkitAudioContext)();
 let rec = null;
 let chunks = [];
-let audioCtx = null;
 let analyser = null;
 
 function startLipSync(audioEl){
@@ -136,6 +136,7 @@ function startLipSync(audioEl){
 }
 
 btnMic.onclick = async ()=>{
+  if(audioCtx.state==='suspended') audioCtx.resume();
   if(rec && rec.state==='recording'){
     rec.stop();
     btnMic.classList.remove('recording');
