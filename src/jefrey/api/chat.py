@@ -22,9 +22,18 @@ from pydantic import BaseModel, Field
 from src.jefrey.core.agent import JefreyAgent
 from src.jefrey.core.content_guard import sanitize_tool_output
 from src.jefrey.core.audit import redact_pii
+from src.jefrey.brain2.queue import get_brain2_queue
 from src.jefrey.core.hitl import ApprovalManager
 
 logger = logging.getLogger(__name__)
+def _brain2_enqueue_fire_and_forget(user_id: str, thread_id: str, user_input: str, response: str):
+    try:
+        q = get_brain2_queue()
+        mid = q.enqueue(user_id=user_id, thread_id=thread_id, user_input=user_input, response=response, meta={"source": "chat"})
+        logger.info("brain2 enqueue ok user=%s thread=%s id=%s", user_id, thread_id, mid)
+    except Exception as e:
+        logger.warning("brain2 enqueue failed (non-critical): %s", e, exc_info=True)
+
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -123,6 +132,7 @@ async def chat(request: Request, req: ChatRequest):
                 result = task.result()
                 # agent.run() returns dict with 'response' key
                 response_text = result.get('response', str(result)) if isinstance(result, dict) else str(result)
+                _brain2_enqueue_fire_and_forget(user_id, thread_id, sanitized, response_text)
                 return {
                     'status': 'complete',
                     'response': response_text,
@@ -292,4 +302,4 @@ async def get_chat_status(request: Request, thread_id: str):
             "status": "idle",
             "thread_id": thread_id,
             "message": "Nenhuma tarefa ativa sendo executada nesta thread no momento.",
-        }
+        }

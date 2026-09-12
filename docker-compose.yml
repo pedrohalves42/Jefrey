@@ -254,6 +254,37 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  jefrey-brain2:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    image: jefrey-api:local
+    container_name: jefrey-brain2
+    command: ["python", "-m", "src.jefrey.brain2.service"]
+    volumes:
+      - ./:/app:ro
+    env_file: [.env]
+    environment:
+      JEFREY_REDIS__URL: redis://:${JEFREY_REDIS__PASSWORD:?required}@redis:6379/0
+      JEFREY_REDIS__HOST: ${JEFREY_REDIS__HOST:-redis}
+      JEFREY_REDIS__PASSWORD: ${JEFREY_REDIS__PASSWORD:?required}
+      JEFREY_LLM__MODEL: ${JEFREY_LLM__MODEL:-qwen2.5:0.5b}
+      JEFREY_LLM__BASE_URL: ${JEFREY_LLM__BASE_URL:-http://ollama:11434}
+      JEFREY_EMBEDDINGS__BASE_URL: ${JEFREY_EMBEDDINGS__BASE_URL:-http://ollama:11434}
+      JEFREY_ENV: ${JEFREY_ENV:-dev}
+    depends_on:
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep -q \"[s]rc.jefrey.brain2.service\" || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
   frontend:
     build:
       context: ./frontend
