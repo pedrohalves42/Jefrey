@@ -388,7 +388,67 @@ async function init3D(){
     renderer.toneMappingExposure = 1.15;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    const scene=new THREE.Scene();
+    
+
+// HDR Environment Map (Equirectangular HDRi)
+const rgbeLoader = new THREE.RGBELoader();
+rgbeLoader.load(
+  '/data/hdr/envmap.hdr',
+  (texture) => {
+    texture.mapping = THREE.EquirectangularReflectionMapping;
+    scene.environment = texture;
+    scene.background = texture;
+    console.log('HDR envmap loaded');
+  },
+  undefined,
+  (err) => {
+    console.warn('HDR envmap failed, using fallback', err);
+    scene.background = new THREE.Color(0x0f1419);
+  }
+);
+
+// Post-processing: Bloom pipeline
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+const composer = new EffectComposer(renderer);
+const renderPass = new RenderPass(scene, camera);
+composer.addPass(renderPass);
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  0.4,
+  0.4,
+  0.85
+);
+composer.addPass(bloomPass);
+
+// Resize handler
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// DRACOLoader for compressed GLTF models
+const dracoLoader = new THREE.DRACOLoader();
+dracoLoader.setDecoderPath('/data/draco/');
+GLTFLoader.setDRACOLoader(dracoLoader.load);
+
+// Load iron_man.glTF with DRACO support
+const gltfLoader = new THREE.GLTFLoader();
+gltfLoader.load('/data/avatars/iron_man.glTF', (gltf) => {
+  scene.remove(avatarMesh);
+  avatarMesh = gltf.scene;
+  avatarMesh.position.y = 0;
+  window.avatarMesh = avatarMesh;
+  scene.add(avatarMesh);
+  console.log('iron_man.glTF (DRACO) loaded');
+}, undefined, (err) => {
+  console.warn('GLTF DRACO load failed, keeping box fallback', err);
+  addMsg('Avatar box (HDR offline).', 'sys');
+});
+
     scene.background=new THREE.Color(0x0f1419);
     const camera=new THREE.PerspectiveCamera(58, window.innerWidth/window.innerHeight, 0.1, 100);
     camera.position.set(0,1.35,3.8);
