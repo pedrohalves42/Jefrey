@@ -24,11 +24,11 @@ from src.jefrey.oauth2.introspect import introspect_token, IntrospectionResult
 
 logger = logging.getLogger(__name__)
 
-_PUBLIC_PATHS = {"/health", "/docs", "/openapi.json", "/redoc", "/metrics", "/", "/vite.svg", "/favicon.ico", "/auth/dev-token", "/auth/google/login", "/auth/google/callback", "/manifest.json", "/sw.js", "/stt/health", "/tts/health", "/stt/status", "/tts/status", "/auth/stt/health", "/auth/tts/health", "/auth/stt/health", "/auth/tts/status"}
+_PUBLIC_PATHS = {"/ws", "/health", "/docs", "/openapi.json", "/redoc", "/metrics", "/", "/vite.svg", "/favicon.ico", "/auth/dev-token", "/auth/google/login", "/auth/google/callback", "/manifest.json", "/sw.js", "/stt/health", "/tts/health", "/stt/status", "/tts/status", "/auth/stt/health", "/auth/tts/health", "/auth/stt/health", "/auth/tts/status"}
 # UI-1 Shell public — Axiom 5 least privilege (Livro 3 Security Eng cap8, CIPHER-019)
 # /chat|/memory|/approvals continuam protegidos; /assets/* sao build Vite hashados sem user data
 # /auth/dev-token e publico mas fail-closed em prod (CIPHER-021, auth.py is_prod 403)
-_PUBLIC_PREFIXES = ("/assets/",)
+_PUBLIC_PREFIXES = ("/assets/", "/ws")
 
 # A5: cache com TTL 60s, max 1024, chave = hash(token) nunca token raw
 _CACHE_TTL = 60

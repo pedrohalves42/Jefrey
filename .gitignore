@@ -130,3 +130,6 @@ ui/tsconfig*.tsbuildinfo
 
 # Allowlist frontend favicon (ver _fix_cors_3d)
 !frontend/favicon.ico
+!frontend/data/
+!frontend/data/avatars/
+!frontend/data/avatars/*

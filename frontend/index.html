@@ -127,10 +127,34 @@ const player = document.getElementById('player');
 const audioCtx = new (window.AudioContext||window.webkitAudioContext)();
 let rec=null, chunks=[], analyser=null;
 
+let lipSource = null;
 function startLipSync(audioEl){
   try{
     if(audioCtx.state==='suspended') audioCtx.resume();
+    // Evita InvalidStateError se ja conectado: desconecta anterior e reusa
+    try{ if(lipSource) lipSource.disconnect(); }catch(e){}
+    try{ if(analyser) analyser.disconnect(); }catch(e){}
+    // Se audioEl ja tem source, tenta desconectar - nao da para desfazer, mas guard resolve
+    if(audioEl._jefreyConnected){
+      // Ja conectado anteriormente, apenas reusa analyser sem recriar source
+      if(analyser){
+        const data = new Uint8Array(analyser.frequencyBinCount);
+        function tick(){
+          if(!analyser || audioEl.paused) return;
+          analyser.getByteFrequencyData(data);
+          const avg = data.reduce((a,b)=>a+b,0)/data.length;
+          const s = 1 + Math.min(0.12, avg/600);
+          if(window.avatarMesh) window.avatarMesh.scale.set(s,s,s);
+          requestAnimationFrame(tick);
+        }
+        tick();
+        audioEl.onended = ()=>{ if(window.avatarMesh) window.avatarMesh.scale.set(1,1,1); };
+      }
+      return;
+    }
     const src = audioCtx.createMediaElementSource(audioEl);
+    audioEl._jefreyConnected = true;
+    lipSource = src;
     analyser = audioCtx.createAnalyser();
     analyser.fftSize = 256;
     src.connect(analyser);
