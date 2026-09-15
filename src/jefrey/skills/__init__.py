@@ -75,7 +75,13 @@ class SkillRegistry:
         try:
             import asyncio
             if asyncio.iscoroutinefunction(skill.initialize):
-                success = asyncio.run(skill.initialize())
+                try:
+                    success = asyncio.run(skill.initialize())
+                except RuntimeError:
+                    # asyncio.run() cannot be called from a running event loop (e.g., FastAPI)
+                    # Fall back to using the event loop directly
+                    loop = asyncio.get_event_loop()
+                    success = loop.run_until_complete(skill.initialize())
             else:
                 success = skill.initialize()
             if not success:

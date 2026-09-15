@@ -26,7 +26,10 @@ from src.jefrey.api.stt import router as stt_router
 from src.jefrey.api.connections import router as connections_router
 from src.jefrey.api.tts import router as tts_router
 from src.jefrey.core.config import get_settings
-from src.jefrey.core.metrics import SERVICE_HEALTH
+import time as _time
+_START_TIME = _time.time()
+from src.jefrey.core.metrics import SERVICE_HEALTH, UPTIME
+from src.jefrey.api.signing_routes import router as signing_router
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +136,12 @@ def create_app() -> FastAPI:
 
     # P6: Observability -- Prometheus metrics endpoint (PUBLICO, sem auth)
     SERVICE_HEALTH.labels(component="api").set(1)
+    try:
+        UPTIME.set_function(lambda: _time.time() - _START_TIME)
+    except Exception:
+        pass
     app.include_router(metrics_router)
+    app.include_router(signing_router)
 
     # Health check no nivel raiz (PUBLICO, sem auth)
     @app.get("/health", tags=["system"])

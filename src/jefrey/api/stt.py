@@ -18,6 +18,12 @@ async def stt_health():
     except Exception as ex:
         return {"status": "degraded", "error": str(ex)}
 
+
+@router.get("/status")
+async def stt_status():
+    """Alias para /health (compat frontend D2)."""
+    return await stt_health()
+
 @router.post("")
 async def stt_transcribe(request: Request, audio: UploadFile = File(...)):
     # Axiom #2: user_id obrigatório (fail-closed)
@@ -30,11 +36,13 @@ async def stt_transcribe(request: Request, audio: UploadFile = File(...)):
     try:
         from src.jefrey.core.policy import get_policy_engine, PolicyContext
         from src.jefrey.core.registry import register_default_tools, TOOL_REGISTRY
+
+_stt = type("stt_transcribe", (), {"name": "stt_transcribe", "risk": "LOW", "required_role": "USER"})
         register_default_tools()
         try:
             if not TOOL_REGISTRY.get_tool("stt_transcribe"):
                 _stt = type("stt_transcribe", (), {"name": "stt_transcribe", "risk": "LOW", "required_role": "USER"})()
-                TOOL_REGISTRY.register(_stt, overwrite=True)
+                TOOL_REGISTRY.register(_stt)
         except Exception:
             pass
         pe = get_policy_engine()

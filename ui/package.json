@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port 5173 --host",
-    "build": "tsc -b && vite build",
+    "build": "vite build",
     "preview": "vite preview --port 5173",
     "lint": "eslint ."
   },
@@ -18,22 +18,25 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "framer-motion": "^13.2.0",
-    "lucide-react": "^0.417.0",
+    "lucide-react": "^0.468.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.26.2",
-    "recharts": "^2.12.7",
-    "tailwind-merge": "^2.4.0"
+    "react-router-dom": "^6.28.0",
+    "sharp": "^0.33.5",
+    "tailwind-merge": "^2.5.5",
+    "vali-as": "^1.0.0"
   },
   "devDependencies": {
-    "@types/node": "^22.5.0",
-    "@types/react": "^18.3.4",
-    "@types/react-dom": "^18.3.0",
-    "@vitejs/plugin-react": "^4.3.3",
+    "@types/node": "^20.14.2",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.20",
-    "postcss": "^8.4.40",
-    "tailwindcss": "^3.4.10",
-    "typescript": "^5.5.4",
-    "vite": "^5.4.2"
+    "eslint": "^8.57.0",
+    "eslint-plugin-react": "^7.37.2",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.14",
+    "vite": "^5.3.5"
   }
 }

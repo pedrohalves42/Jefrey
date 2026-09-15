@@ -135,12 +135,12 @@ def get_tool(tool_name: str) -> object | None:
 
 def get_tool_risk(tool_name: str) -> str:
     """Get the risk level for a tool (alias for compatibility)."""
-    return TOOL_REGISTRY.risk_of(tool_name) or "LOW"
+    return TOOL_REGISTRY.risk_of(tool_name) or "UNKNOWN"  # D3.2 fail-closed: unknown -> UNKNOWN -> deny (Anderson)
 
 
 def get_tool_required_role(tool_name: str) -> str:
     """Get the required role for a tool (alias for compatibility)."""
-    return TOOL_REGISTRY.required_role_of(tool_name) or "GUEST"
+    return TOOL_REGISTRY.required_role_of(tool_name) or "GUEST"  # UNKNOWN risk will deny via PolicyEngine even if role GUEST
 
 
 def register_default_tools():

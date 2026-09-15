@@ -71,13 +71,11 @@ class RateLimiter:
         key = f"rate:{user_id}:{tool_name}"
         try:
             pipe = redis.pipeline()
+            pipe.multi()
             pipe.incr(key)
             pipe.expire(key, 60)
-            pipe.ttl(key)
-            results = await pipe.execute()
+            results = pipe.execute()
             count = int(results[0])
-            if results[2] == -1:
-                await redis.expire(key, 60)
             decision = "deny" if count > rate else "allow"
             try:
                 from src.jefrey.core.metrics import RATE_LIMIT_TOTAL

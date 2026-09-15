@@ -1,5 +1,4 @@
-FROM python:3.12-slim
-WORKDIR /app
-COPY . .
+FROM nginx:alpine
+COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
+COPY src/jefrey/static /usr/share/nginx/html
 EXPOSE 8080
-CMD ["python", "-m", "http.server", "8080"]

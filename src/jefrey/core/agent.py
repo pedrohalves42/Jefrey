@@ -76,32 +76,52 @@ class Agent:
             logger.warning("memory context load failed: %s", e)
             return ""
 
+    async def _audit_log(self, **kwargs):
+        try:
+            r = self.audit_logger.log(**kwargs)
+            if hasattr(r, "__await__"):
+                await r
+        except Exception:
+            pass
+
     async def _invoke(self, tool, args: Dict[str, Any], state: AgentState) -> Any:
         """Secure tool execution with full governance pipeline."""
         tool_name = getattr(tool, "name", str(tool))
         risk = get_tool_risk(tool_name)
         required_role = get_tool_required_role(tool_name)
+        # D3.4 fail-closed: unknown tool -> UNKNOWN -> deny (Anderson) even if RBAC would allow
+        if risk == "UNKNOWN":
+            try:
+                _r = self.audit_logger.log(thread_id=state.thread_id, tool_name=tool_name, actor_role=state.user_role, risk=risk, decision="deny_unknown", user_id=state.user_id)
+                if hasattr(_r, "__await__"):
+                    await _r
+            except Exception:
+                pass
+            raise PermissionError(f"Tool desconhecida '{tool_name}' negada (UNKNOWN fail-closed)")
 
-        # 1. RBAC check
+        # 1. Content sanitization — FIRST: sanitize before any policy decisions (CIPHER-032)
+        sanitized_args = sanitize_tool_output(str(args), source=tool_name)
+
+        # 2. RBAC check
         if not self.rbac.is_allowed(state.user_role, required_role):
-            await self.audit_logger.log(
+            await self._audit_log(
                 thread_id=state.thread_id, tool_name=tool_name,
                 actor_role=state.user_role, risk=risk,
                 decision="deny_rbac", user_id=state.user_id,
             )
             raise PermissionError(f"RBAC: {state.user_role} sem acesso a {tool_name}")
 
-        # 2. Rate limiting
+        # 3. Rate limiting (CIPHER-026 fail-closed)
         rate_result = self.rate_limiter.is_allowed_sync(state.user_id, tool_name)
         if rate_result == "deny":
-            await self.audit_logger.log(
+            await self._audit_log(
                 thread_id=state.thread_id, tool_name=tool_name,
                 actor_role=state.user_role, risk=risk,
                 decision="deny_rate_limit", user_id=state.user_id,
             )
             raise PermissionError(f"Rate limit atingido para {tool_name}")
 
-        # 3. HITL for HIGH/CRITICAL risks
+        # 4. HITL for HIGH/CRITICAL risks (CIPHER-033)
         if risk in ("HIGH", "CRITICAL"):
             approval_id = await self.hitl_manager.create_approval(
                 tool_name=tool_name, args=args,
@@ -111,18 +131,15 @@ class Agent:
                 approval_id=approval_id, timeout=1800,
             )
             if decision != "approved":
-                await self.audit_logger.log(
+                await self._audit_log(
                     thread_id=state.thread_id, tool_name=tool_name,
                     actor_role=state.user_role, risk=risk,
                     decision="deny_hitl", user_id=state.user_id,
                 )
                 raise PermissionError(f"HITL rejeitou {tool_name}")
 
-        # 4. Content sanitization
-        sanitized_args = sanitize_tool_output(str(args), tool_name=tool_name)
-
-        # 5. Audit log
-        await self.audit_logger.log(
+        # 5. Audit log allow
+        await self._audit_log(
             thread_id=state.thread_id, tool_name=tool_name,
             actor_role=state.user_role, risk=risk,
             decision="allow", user_id=state.user_id,
@@ -132,7 +149,7 @@ class Agent:
         self._tool_executions += 1
         try:
             result = await tool.ainvoke(sanitized_args)
-            await self.audit_logger.log(
+            await self._audit_log(
                 thread_id=state.thread_id, tool_name=tool_name,
                 actor_role=state.user_role, risk=risk,
                 decision="executed", user_id=state.user_id,
@@ -140,7 +157,7 @@ class Agent:
             )
             return result
         except Exception as e:
-            await self.audit_logger.log(
+            await self._audit_log(
                 thread_id=state.thread_id, tool_name=tool_name,
                 actor_role=state.user_role, risk=risk,
                 decision="error", user_id=state.user_id,

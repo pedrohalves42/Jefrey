@@ -82,13 +82,27 @@ Uma seleção de 10 referências fundamentais para o entendimento, evolução e 
 
 ---
 
-## 10. Software Engineering at Google — Winters, Manshreck, Wright (gratuito online)
+## 10. Software Engineering at Google — Winters, Manshreck, Wright (gratuita online)
 
 **URL:** `abseil.io/resources/swe-book`
 
 **Por que ler:** O Jefrey não tem CI/CD, não tem testes de carga, não tem runbooks de operação — tudo isso é P8. Este livro explica como o Google pensa sobre confiabilidade, testes em escala, e o custo real da dívida técnica. O capítulo sobre "toil" é diretamente aplicável: cada vez que você roda `verify_p3b.py` manualmente e faz re-bootstrap do n8n, isso é toil que CI/CD elimina.
 
 **Aplicação direta no projeto:** estruturar o pipeline de CI/CD de P8, definir SLOs para o Jefrey (latência máxima aceitável, disponibilidade mínima), e criar runbooks para os cenários de falha documentados no resumo acima.
+
+---
+
+## 11. Projetos de Referência GitHub — Jarvis/Agentes IA
+
+Repositórios usados como referência arquitetural e de implementação para o Jefrey:
+
+| Repositório | Descrição | Uso no Jefrey |
+|-------------|-----------|---------------|
+| [BrenoXBR/Jarvis-AI](https://github.com/BrenoXBR/Jarvis-AI) | Assistente pessoal em Python com voz, automação, plugins | Arquitetura de skills/plugins, integração STT/TTS |
+| [isair/jarvis](https://github.com/isair/jarvis) | Framework de agente modular com memory, tools, planning | Padrão de memory layers, tool registry |
+| [open-jarvis/OpenJarvis](https://github.com/open-jarvis/OpenJarvis) | Agente open-source com foco em privacidade local | Execução local, Ollama integration, privacy-first |
+| [microsoft/JARVIS](https://github.com/microsoft/JARVIS) | Microsoft HuggingGPT — LLM como controller de modelos HF | Orquestração multi-modelo, task planning |
+| [FatihMakes/Mark-XXXIX-OR](https://github.com/FatihMakes/Mark-XXXIX-OR) | Implementação Iron Man JARVIS com computer vision, voice | Multimodal pipeline, real-time interaction |
 
 ---
 
@@ -109,4 +123,5 @@ DEPOIS DE P8 (qualidade contínua):
   7. Fluent Python cap. 19-21 → refatora descritores e async
   8. High Performance Python  → profiling real sob carga
   9. Building LLM Apps        → evals e qualidade de resposta
- 10. Pragmatic Programmer     → processo e cultura de desenvolvimento
+  10. Pragmatic Programmer     → processo e cultura de desenvolvimento
+```

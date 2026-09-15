@@ -14,7 +14,7 @@ import chromadb
 from chromadb.config import Settings as ChromaSettings
 from langchain_openai import OpenAIEmbeddings
 from langchain_ollama import OllamaEmbeddings
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage
 
 from src.jefrey.core.config import get_settings
 
@@ -545,7 +545,9 @@ def safe_deserialize(data: dict) -> BaseMessage:
     if msg_type == "system":
         return SystemMessage(content=content)
     if msg_type == "tool":
-        return ToolMessage(content=content, role=data.get("role", "tool"))
+        from src.jefrey.core.content_guard import sanitize_tool_output
+    sanitized = sanitize_tool_output(content, source="memory")
+    return ToolMessage(content=sanitized, role=data.get("role", "tool"))
     raise ValueError(f"Tipo de mensagem desconhecido: {msg_type}")
 
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react"
+﻿import { useState, useEffect, useRef } from "react"
 import { Link } from "react-router-dom"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -10,7 +10,7 @@ import { ConnectionHub } from "@/components/ConnectionHub"
 type Msg = { role: "user" | "assistant"; content: string }
 
 function renderMarkdown(text: string) {
-  const esc = (s: string) => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+  const esc = (s: string) => s.replace(/&/g,"&").replace(/</g,"<").replace(/>/g,">")
   let html = esc(text)
   html = html.replace(/```([\s\S]*?)```/g, '<pre class="bg-black/30 rounded p-2 overflow-x-auto text-xs font-mono border border-cyan-500/20"><code>$1</code></pre>')
   html = html.replace(/`([^`]+)`/g, '<code class="bg-cyan-500/10 px-1 py-0.5 rounded text-xs font-mono border border-cyan-500/20">$1</code>')
@@ -25,7 +25,7 @@ export default function Chat() {
   const [llmOk,setLlmOk] = useState<boolean|null>(null)
   useEffect(()=>{ fetch("/health").then(r=>setLlmOk(r.ok)).catch(()=>setLlmOk(false)); },[])
   const [msgs, setMsgs] = useState<Msg[]>([
-    { role: "assistant", content: "Good evening, Sir. Jefrey online — 7/7 systems nominal. How may I assist you? (diga 'oi' ou clique no microfone)" },
+    { role: "assistant", content: "Good evening, Sir. Jefrey online Ã¢â‚¬â€ 7/7 systems nominal. How may I assist you? (diga 'oi' ou clique no microfone)" },
   ])
   const [loading, setLoading] = useState(false)
   const [polling, setPolling] = useState(false)
@@ -65,11 +65,11 @@ export default function Chat() {
           const j: any = await r.json().catch(() => ({}))
           if (j.status === "complete") return j.response || j.message || j.output || JSON.stringify(j).slice(0, 2000) || "(sem resposta)"
           if (j.status === "error") throw new Error(j.error || "erro no agente")
-          if (j.status === "pending_approval") return j.message || `Aprovacao pendente ${j.approval_id} — vá em Approvals`
+          if (j.status === "pending_approval") return j.message || `Aprovacao pendente ${j.approval_id} â€” vÃ¢ em Approvals`
           if (j.status === "idle") continue
         } catch {}
       }
-      throw new Error("Timeout 60s — Sir, o reator ainda esta aquecendo (qwen2.5:0.5b frio). Tente novamente.")
+      throw new Error("Timeout 60s â€” Sir, o reator ainda esta aquecendo (qwen2.5:0.5b frio). Tente novamente.")
     } finally {
       setPolling(false)
     }
@@ -84,27 +84,45 @@ export default function Chat() {
     setMsgs((m) => [...m, userMsg])
     setInput("")
     setLoading(true)
-    // placeholder para streaming token-por-token (typewriter)
+    // placeholder para streaming token-por-token (typewriter) com lip-sync realtime
     const placeholderIdx = msgs.length + 1
     let streamed = ""
     let didStream = false
     let streamDone = false
-    // helper para atualizar placeholder
-    function upsertPlaceholder(chunk: string){
-      if(!didStream){
-        didStream = true
-        setMsgs((m) => [...m, { role: "assistant" as const, content: "" }])
+    let lastUpdateTime = 0
+    const updateInterval = 20 // Update every 20ms for smoother typewriter
+    // helper para atualizar placeholder com timing control e lip-sync
+    function upsertPlaceholder(chunk: string, force: boolean = false){
+      const now = Date.now()
+      if(!didStream || force || now - lastUpdateTime > updateInterval){
+        if(!didStream){
+          didStream = true
+          setMsgs((m) => [...m, { role: "assistant" as const, content: "" }])
+        }
+        streamed += chunk
+        setMsgs((m) => m.map((msg,i) => i === placeholderIdx ? { ...msg, content: streamed } : msg))
+        lastUpdateTime = now
+        // Lip-sync: update hud speaking state based on stream activity
+        setHud("speaking")
+        // Reset idle after a brief pause of no new tokens
+        clearTimeout(upsertPlaceholder.idleTimer)
+        upsertPlaceholder.idleTimer = setTimeout(()=>{
+          if(didStream && !streamDone){
+            setHud("idle")
+          }
+        }, 1500 - streamed.length * 20) // Faster idle for longer messages
       }
-      streamed += chunk
-      setMsgs((m) => m.map((msg,i) => i === placeholderIdx ? { ...msg, content: streamed } : msg))
-      try{ (window as any).__setHudLevel?.(0.35 + Math.random()*0.15) }catch{}
     }
     function finalizeStream(){
       if(didStream && !streamDone){
         streamDone = true
-        setHud("speaking"); setTimeout(()=> setHud("idle"), Math.min(4000, streamed.length*40))
+        setHud("speaking")
+        setTimeout(()=> setHud("idle"), Math.max(1000, streamed.length * 30))
       }
     }
+    // Cleanup idle timer on component unmount
+    useEffect(()=>{clearTimeout(upsertPlaceholder.idleTimer)}, [])
+
     try {
       // Tenta SSE /chat/stream primeiro (DIFF4.1)
       const headers: Record<string,string> = { "Content-Type":"application/json" }
@@ -204,15 +222,15 @@ export default function Chat() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       if (msg.includes("401") || msg.includes("Nao autenticado")) {
-        setError("Sessao expirou — clique para liberar acesso (1s).")
+        setError("Sessao expirou â€” clique para liberar acesso (1s).")
       } else {
         setError(msg)
       }
       setHud("idle");
       if(didStream){
-        setMsgs((m) => m.map((x,i)=> i===placeholderIdx ? {...x, content: "Sir, erro: " + msg + " — verifique docker 7/7 e tente novamente." + (streamed ? "\n\n(parcial: "+streamed.slice(0,600)+")" : "")} : x))
+        setMsgs((m) => m.map((x,i)=> i===placeholderIdx ? {...x, content: "Sir, erro: " + msg + " â€” verifique docker 7/7 e tente novamente." + (streamed ? "\n\n(parcial: "+streamed.slice(0,600)+")" : "")} : x))
       } else {
-        setMsgs((m) => [...m, { role: "assistant", content: "Sir, erro: " + msg + " — verifique docker 7/7 e tente novamente." }])
+        setMsgs((m) => [...m, { role: "assistant", content: "Sir, erro: " + msg + " â€” verifique docker 7/7 e tente novamente." }])
       }
     } finally {
       setLoading(false)
@@ -222,17 +240,17 @@ export default function Chat() {
 
   return (
     <div className="space-y-4">
-      {llmOk===false && <div className="text-amber-400 text-xs p-2 mb-2 border border-amber-500/30 rounded bg-amber-500/10">LLM offline — modo mock (inicie Ollama: ollama serve & ollama pull qwen2.5:0.5b)</div>}
+      {llmOk===false && <div className="text-amber-400 text-xs p-2 mb-2 border border-amber-500/30 rounded bg-amber-500/10">LLM offline â€” modo mock (inicie Ollama: ollama serve & ollama pull qwen2.5:0.5b)</div>}
       <Card className="glass border-cyan-500/20">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-cyan-100">
             <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
-            Jefrey <span className="text-xs font-normal text-cyan-400/70">Stark-mode • Jefrey capabilities</span>
+            Jefrey <span className="text-xs font-normal text-cyan-400/70">Stark-mode â€” Jefrey capabilities</span>
             <Badge variant="secondary" className="ml-2 font-mono text-[10px]">thread {threadId}</Badge>
             {hasToken ? <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30">ONLINE</Badge> : <Badge variant="secondary" className="animate-pulse">conectando...</Badge>}
           </CardTitle>
           <p className="text-xs text-cyan-200/50 font-mono">
-            Sir, sistemas em Stark Lab — Bearer + user_id <span className="font-mono text-cyan-300">{getUserId()}</span> — Axiom #2 isolamento. {hasToken ? "Pronto, Sir." : "Liberando acesso automaticamente..."}
+            Sir, sistemas em Stark Lab â€” Bearer + user_id <span className="font-mono text-cyan-300">{getUserId()}</span> â€” Axiom #2 isolamento. {hasToken ? "Pronto, Sir." : "Liberando acesso automaticamente..."}
           </p>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -272,9 +290,9 @@ export default function Chat() {
               <span>{error}</span>
               {(error.includes("401") || error.includes("Liberar") || error.includes("Sessao")) && (
                 <Button size="sm" className="ml-2 bg-cyan-600 hover:bg-cyan-700" onClick={() => ensureAndRetry(send)}>Liberar acesso (1s)</Button>
-              )}
+              )} 
               {(error.includes("401") || error.includes("Nao autenticado")) && (
-                <Link to="/settings" className="ml-2 underline font-medium">Ir para Settings →</Link>
+                <Link to="/settings" className="ml-2 underline font-medium">Ir para Settings</Link>
               )}
             </div>
           )}
@@ -296,7 +314,7 @@ export default function Chat() {
           <ConnectionHub onResult={(r)=> setMsgs(m=>[...m, { role: "assistant", content: `[${r.kind}] ${r.text}` }])} />
           {!hasToken && (
             <p className="text-xs text-cyan-200/40 font-mono">
-              Conectando automaticamente, Sir... Se falhar, <Link to="/settings" className="underline text-cyan-400">Settings → Obter token dev</Link>
+              Conectando automaticamente, Sir... Se falhar, <Link to="/settings" className="underline text-cyan-400">Settings Obter token dev</Link>
             </p>
           )}
         </CardContent>

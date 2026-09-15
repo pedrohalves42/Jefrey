@@ -70,6 +70,11 @@ class RBACResult:
 class RBACEngine:
     """Verifica se um ator pode usar uma ferramenta dado o papel exigido."""
 
+    def is_allowed(self, actor_role: "str | Role", required_role: "str | Role", tool_name: str = "") -> bool:
+        """Compat alias for Agent._invoke (D3.3): returns bool True if allowed."""
+        res = self.check(actor_role, required_role, tool_name=tool_name)
+        return res.decision == "allow"
+
     def check(
         self,
         actor_role: "str | Role",

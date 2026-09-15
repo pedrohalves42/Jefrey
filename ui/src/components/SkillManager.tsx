@@ -278,9 +278,11 @@ export function SkillManager() {
             className="w-full"
           >
             {isLoading ? (
-              <><span className="inline-block h-4 w-4 animate-spin rounded-full border-b-2 border-current"></span> Adicionando...</>
+              <>
+                <span className="inline-block h-4 w-4 animate-spin rounded-full border-b-2 border-current"></span> Adicionando...
+              </>
             ) : "Adicionar Skill ao Jefrey"
-          </Button>
+            }</Button>
         </form>
       </CardContent>
     </Card>

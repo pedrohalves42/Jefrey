@@ -45,10 +45,10 @@ class _DecisionValue(str):
 class PolicyContext:
     thread_id: str = ""
     user_role: str = "guest"
-    user_id: str = "guest"
+    user_id: str | None = None
     autonomous: bool = False
 
-def decide(tool_name: str, user_role: str = "guest", risk: str = "LOW", user_id: str = "guest") -> Dict[str, Any]:
+def decide(tool_name: str, user_role: str = "guest", risk: str = "LOW", user_id: str | None = None) -> Dict[str, Any]:
     """Core decision function - evaluates policy for a tool call. RBACEngine().check before self._mode == "off" (CIPHER-021).
 
     Returns a dict with 'decision' ('allow'/'deny') and 'reason'.
@@ -63,8 +63,8 @@ def decide(tool_name: str, user_role: str = "guest", risk: str = "LOW", user_id:
 
     # Check if risk is valid
     if risk_upper not in valid_risks:
-        # UNKNOWN risk: allow with audit warning
-        return {"decision": "allow", "reason": f"Unknown risk level '{risk}' - allowed with monitoring, user_role={user_role_norm}"}
+        # UNKNOWN risk: deny by default - fall-safe
+        return {"decision": "deny", "reason": f"Unknown risk level '{risk}' - deny fail-closed (Anderson Cap.4), user_role={user_role_norm}"}
 
     # Policy decisions by risk level
     if risk_upper == "LOW":
@@ -74,9 +74,9 @@ def decide(tool_name: str, user_role: str = "guest", risk: str = "LOW", user_id:
         return {"decision": "deny", "reason": f"Invalid user_role '{user_role_norm}' for LOW risk"}
 
     if risk_upper == "MEDIUM":
-        # Medium risk: allow admin/manager, deny guest
-        if user_role_norm in ("ADMIN", "MANAGER"):
-            return {"decision": "allow", "reason": "Medium risk operation allowed for admin/manager"}
+        # Medium risk: allow user/admin/manager, deny guest (D3.1: USER must pass MEDIUM)
+        if user_role_norm in ("ADMIN", "MANAGER", "USER"):
+            return {"decision": "allow", "reason": "Medium risk operation allowed for user/admin/manager"}
         return {"decision": "deny", "reason": "Medium risk operation denied for guest/unknown role"}
 
     if risk_upper == "HIGH":
@@ -93,8 +93,8 @@ def decide(tool_name: str, user_role: str = "guest", risk: str = "LOW", user_id:
 
     # ferramenta nao registrada -> UNKNOWN -> DENY fail-safe (P07-023)
     if risk_upper == "UNKNOWN":
-        # UNKNOWN risk: allow with monitoring and audit
-        return {"decision": "allow", "reason": "UNKNOWN risk level - allowed with monitoring and audit logging, user_role=" + user_role_norm}
+        # UNKNOWN risk: deny by default - fall-safe
+        return {"decision": "deny", "reason": "UNKNOWN risk - deny fail-closed (Anderson), user_role=" + user_role_norm}
 
     # Fallback
     return {"decision": "deny", "reason": f"Unknown risk level: {risk_upper}"}
@@ -112,7 +112,7 @@ def check_risk(tool_name: str, user_role: str = "guest") -> str:
         "stt_transcribe": "LOW",
         "tts_synthesize": "LOW",
     }
-    return risk_map.get(tool_name, "LOW")
+    return risk_map.get(tool_name, "UNKNOWN")  # Anderson fail-closed: unknown tool = UNKNOWN -> deny
 
 class PolicyEngine:
     """Policy evaluation engine with RBAC and HITL integration."""
@@ -133,8 +133,10 @@ class PolicyEngine:
                 reg_risk = TOOL_REGISTRY.risk_of(tool_name)
                 if reg_risk is not None:
                     eff_risk = str(reg_risk).upper() if hasattr(reg_risk, "upper") else str(getattr(reg_risk, "value", reg_risk)).upper()
+                else:
+                    eff_risk = "UNKNOWN"
             except Exception:
-                pass
+                eff_risk = "UNKNOWN"
         # HIGH autonomous without admin -> deny/hitl
         if eff_risk.upper() == "HIGH" and eff_role.lower() != "admin" and getattr(_ctx, "thread_id", "") and self.autonomous:
             result = {"decision": "deny", "reason": "HIGH risk requires HITL - autonomous deny"}

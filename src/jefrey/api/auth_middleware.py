@@ -24,7 +24,7 @@ from src.jefrey.oauth2.introspect import introspect_token, IntrospectionResult
 
 logger = logging.getLogger(__name__)
 
-_PUBLIC_PATHS = {"/ws", "/health", "/docs", "/openapi.json", "/redoc", "/metrics", "/", "/vite.svg", "/favicon.ico", "/auth/dev-token", "/auth/google/login", "/auth/google/callback", "/manifest.json", "/sw.js", "/stt/health", "/tts/health", "/stt/status", "/tts/status", "/auth/stt/health", "/auth/tts/health", "/auth/stt/health", "/auth/tts/status"}
+_PUBLIC_PATHS = {"/ws", "/health", "/docs", "/openapi.json", "/redoc", "/metrics", "/", "/vite.svg", "/favicon.ico", "/auth/dev-token", "/auth/google/login", "/auth/google/callback", "/manifest.json", "/sw.js", "/stt/health", "/tts/health", "/stt/status", "/tts/status", "/auth/stt/health", "/auth/tts/health", "/auth/stt/status", "/auth/tts/status", "/hmac-status", "/rotate-hmac"}
 # UI-1 Shell public — Axiom 5 least privilege (Livro 3 Security Eng cap8, CIPHER-019)
 # /chat|/memory|/approvals continuam protegidos; /assets/* sao build Vite hashados sem user data
 # /auth/dev-token e publico mas fail-closed em prod (CIPHER-021, auth.py is_prod 403)
@@ -47,7 +47,11 @@ def _cache_key(token: str) -> str:
 def _cache_get(token: str) -> IntrospectionResult | None:
     k = _cache_key(token)
     if _USE_TTLCACHE:
-        return _introspection_cache.get(k)  # type: ignore
+        item = _introspection_cache.get(k)  # type: ignore
+        if item is None:
+            return None
+        # TTLCache already expires automatically, but return the result part for consistency
+        return item[0] if isinstance(item, tuple) else item
     else:
         item = _introspection_cache.get(k)  # type: ignore
         if item is None:

@@ -67,6 +67,15 @@ class ApprovalManager:
         APPROVALS_CREATED.labels(tool_name=tool_name, risk_level=risk_level).inc()
         return aid
 
+    # D3.3 alias for Agent._invoke (async wrapper)
+    async def create_approval(self, *, tool_name: str, args: dict | None = None, arguments: dict | None = None, user_id: str = "system", thread_id: str = "", ttl: float | None = None, **kwargs) -> str:
+        """Async alias to create() for Agent compatibility. Accepts both args/arguments."""
+        _args = arguments if arguments is not None else (args or {})
+        _risk = kwargs.get("risk_level") or kwargs.get("risk") or "HIGH"
+        _reason = kwargs.get("reason")
+        # sync create is fast (DB), run in same thread
+        return self.create(thread_id=thread_id, tool_name=tool_name, arguments=dict(_args), risk_level=_risk, reason=_reason, user_id=user_id)
+
     def decide(self, approval_id: str, decision: str, decided_by: str | None = None,
                user_id: str | None = None) -> bool:
         from src.jefrey.core.db import get_db

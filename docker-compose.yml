@@ -56,7 +56,7 @@ services:
       - /tmp
       - /app/.cache:size=2g,mode=1777
     volumes:
-      - ./:/app:ro
+      - ./:/app:rw
     env_file: [.env]
     environment:
       JEFREY_DATABASE__URL: postgresql+psycopg://${JEFREY_DATABASE__USER:-jefrey}:${JEFREY_DATABASE__PASSWORD:?required}@postgres:5432/${JEFREY_DATABASE__DB:-jefrey}
@@ -120,7 +120,7 @@ services:
       - /tmp
       - /app/.cache:size=2g,mode=1777
     volumes:
-      - ./:/app:ro
+      - ./:/app:rw
     env_file: [.env]
     environment:
       JEFREY_DATABASE__URL: postgresql+psycopg://${JEFREY_DATABASE__USER:-jefrey}:${JEFREY_DATABASE__PASSWORD:?required}@postgres:5432/${JEFREY_DATABASE__DB:-jefrey}
@@ -262,7 +262,7 @@ services:
     container_name: jefrey-brain2
     command: ["python", "-m", "src.jefrey.brain2.service"]
     volumes:
-      - ./:/app:ro
+      - ./:/app:rw
     env_file: [.env]
     environment:
       JEFREY_REDIS__URL: redis://:${JEFREY_REDIS__PASSWORD:?required}@redis:6379/0
@@ -287,14 +287,21 @@ services:
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile.frontend
+      context: .
+      dockerfile: frontend/Dockerfile.frontend
+    image: jefrey-frontend:local
+    container_name: jefrey-frontend
     ports:
       - "3001:8080"
-    environment:
-      - JEFREY_API_URL=http://api:8000
-      - JEFREY_WS_URL=ws://api:8000/ws
-    depends_on: []
+    depends_on:
+      jefrey-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8080/ || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
     restart: unless-stopped
 
 volumes:

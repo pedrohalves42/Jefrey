@@ -11,6 +11,8 @@ from fastapi.responses import Response
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/tts", tags=["tts"])
 
+_tts = type("tts_synthesize", (), {"name": "tts_synthesize", "risk": "LOW", "required_role": "USER"})
+
 class TTSRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=5000, description="Texto para sintetizar (1-5000 chars)")
     voice_id: Optional[str] = Field(default=None, description="Voz ElevenLabs ou piper voice id")
@@ -24,6 +26,12 @@ async def tts_health():
         return {"status": "ok", "provider": getattr(cfg.voice.tts, "provider", "piper"), "voice": getattr(cfg.voice.tts, "voice", "pt_BR-faber-medium")}
     except Exception as ex:
         return {"status": "degraded", "error": str(ex)}
+
+
+@router.get("/status")
+async def tts_status():
+    """Alias para /health (compat frontend D2)."""
+    return await tts_health()
 
 @router.get("/voices")
 async def tts_voices():
@@ -50,7 +58,7 @@ async def tts_synthesize(request: Request, req: TTSRequest):
         try:
             if not TOOL_REGISTRY.get_tool("tts_synthesize"):
                 _tts = type("tts_synthesize", (), {"name": "tts_synthesize", "risk": "LOW", "required_role": "USER"})()
-                TOOL_REGISTRY.register(_tts, overwrite=True)
+                TOOL_REGISTRY.register(_tts)
         except Exception as _re:
             logger.warning("TTS registry warn: %s", _re)
         pe = get_policy_engine()

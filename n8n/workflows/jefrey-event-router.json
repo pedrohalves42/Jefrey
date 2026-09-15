@@ -257,5 +257,6 @@
     "p3b",
     "event-router",
     "mcp"
-  ]
+  ],
+  "active": true
 }

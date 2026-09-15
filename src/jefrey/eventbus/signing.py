@@ -178,3 +178,32 @@ def verify_message(
     if _verify_with_key(signed_message, expected_key):
         return True, None
     return False, "invalid_signature"
+
+
+def rotate_hmac_key():
+    """Gera nova chave HMAC e retorna (new_key, new_kid).
+
+    - Multi-key (HMAC_KEYS_JSON): adiciona proximo kid v{N+1}.
+    - Single-key: promove atual para v1 em HMAC_KEYS_JSON {v1: old, v2: new}.
+    Dual-verify permanece ativo (v1+v2 validos) para nao quebrar Redis Streams.
+    """
+    import secrets as _secrets
+    keys_json = os.getenv("JEFREY_EVENTBUS__HMAC_KEYS_JSON", "")
+    if keys_json:
+        keys = json.loads(keys_json)
+        nums = [int(k[1:]) for k in keys if k.startswith("v") and k[1:].isdigit()]
+        new_kid = "v%d" % ((max(nums) + 1) if nums else 2)
+        new_key = _secrets.token_hex(32)
+        keys[new_kid] = new_key
+        os.environ["JEFREY_EVENTBUS__HMAC_KEYS_JSON"] = json.dumps(keys, sort_keys=True)
+        logger.info("HMAC key rotated (multi-key): new_kid=%s total=%d", new_kid, len(keys))
+        return new_key, new_kid
+    old_key = os.getenv("JEFREY_EVENTBUS__HMAC_KEY", "")
+    if not old_key:
+        raise RuntimeError("JEFREY_EVENTBUS__HMAC_KEY ausente (C1a) - nada para rotacionar")
+    new_key = _secrets.token_hex(32)
+    keys = {"v1": old_key, "v2": new_key}
+    os.environ["JEFREY_EVENTBUS__HMAC_KEYS_JSON"] = json.dumps(keys, sort_keys=True)
+    os.environ["JEFREY_EVENTBUS__HMAC_KID"] = "v2"
+    logger.info("HMAC key rotated (single->multi): new_kid=v2 total=2")
+    return new_key, "v2"

@@ -42,7 +42,7 @@ def _ns_thread_id(thread_id: str, user_id: str | None) -> str:
 
 def _psycopg_dsn() -> str:
     """DSN psycopg puro ('postgresql://') a partir do DSN SQLAlchemy ('postgresql+psycopg://')."""
-    return get_settings().database.dsn.replace("+psycopg", "")
+    return get_settings().database.dsn.replace("+psycopg", "") if get_settings().database.dsn.startswith("postgresql+psycopg") else get_settings().database.dsn
 
 
 async def get_postgres_checkpointer() -> AsyncPostgresSaver:

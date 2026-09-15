@@ -158,7 +158,7 @@ class DatabaseSettings(BaseSettings):
     # SECURITY NOTE: password default e 'jefrey' para DEV. Em producao, via env var.
     # Senha obrigatoria — definir via JEFREY_DATABASE__PASSWORD no .env.
     # Sem ela, o middleware de auth recusa todas as requests (CIPHER-018/025).
-    password: str = Field(default="", alias="JEFREY_DATABASE__PASSWORD")
+    password: str = Field(alias="JEFREY_DATABASE__PASSWORD")
     db: str = "jefrey"
     pool_size: int = 10
     max_overflow: int = 20
