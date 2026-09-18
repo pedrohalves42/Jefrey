@@ -11,7 +11,7 @@ authors = [
 ]
 license = {text = "MIT"}
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = "==3.12"
 keywords = ["AI", "LLM", "assistant", "memory", "agent", "skills"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -121,7 +121,7 @@ line_length = 100
 target_version = "py312"
 
 [tool.vercel]
-python = "^3.12"
+python = "3.12"
 entrypoint = "src.jefrey.api.main:app"
 
 [tool.pytest.ini_options]
