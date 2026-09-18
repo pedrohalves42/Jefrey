@@ -123,6 +123,7 @@ line_length = 100
 target_version = "py312"
 
 [tool.vercel]
+python = "^3.12"
 entrypoint = "src.jefrey.api.main:app"
 
 [tool.pytest.ini_options]
