@@ -179,8 +179,6 @@ all = [
     "black",
     "isort",
     "pre-commit",
-    "types-python-dotenv",
-    "types-pyyaml",
 ]
 
 [virtualenvs]
