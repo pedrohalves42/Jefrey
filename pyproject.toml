@@ -122,6 +122,9 @@ profile = "black"
 line_length = 100
 target_version = "py312"
 
+[tool.vercel]
+entrypoint = "src.jefrey.api.main:app"
+
 [tool.pytest.ini_options]
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "function"
