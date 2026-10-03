@@ -2,6 +2,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import ModelSettings from "@/components/ModelSettings"
 import { getToken, getUserId, getThreadId, setToken, setUserId, setThreadId } from "@/lib/api"
 
 export default function Settings() {
@@ -112,6 +113,7 @@ export default function Settings() {
 
   return (
     <div className="space-y-4">
+      <ModelSettings />
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">

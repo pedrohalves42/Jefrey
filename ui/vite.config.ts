@@ -23,6 +23,7 @@ export default defineConfig({
       '/stt': 'http://localhost:8000',
       '/tts': 'http://localhost:8000',
       '/connections': 'http://localhost:8000',
+      '/settings/llm': 'http://localhost:8000',
       '/ws': { target: 'ws://localhost:8000', ws: true }
     }
   },

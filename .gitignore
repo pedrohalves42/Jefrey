@@ -144,3 +144,5 @@ scripts/_audit_total.json
 *.ses
 *.bak
 tmp/
+evals/reports/
+config/llm.runtime.json

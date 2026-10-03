@@ -8,6 +8,7 @@ import logging
 import os
 
 import httpx
+from src.jefrey.core.llm_provider import friendly_error
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.jefrey.core.policy import decide, check_risk, PolicyContext
@@ -274,101 +275,86 @@ class Agent:
 
         # Call Ollama LLM (CIPHER-014: timeout de 30s + mensagem clara se timeout)
         try:
-            import httpx as _httpx
             import json as _json
-            from src.jefrey.core.config import get_settings
             from src.jefrey.skills import skill_registry
-            
-            cfg = get_settings()
-            base_url = (getattr(cfg.llm, "base_url", None) or "http://ollama:11434").rstrip("/")
-            model = getattr(cfg.llm, "model", "qwen2.5:0.5b")
+
+            from src.jefrey.core.llm_provider import get_llm_client
 
             history = self._load_history(state)
-            llm_timeout = float(os.getenv("JEFREY_LLM_TIMEOUT", "90"))
-            async with _httpx.AsyncClient(timeout=llm_timeout) as client:
-                resp = await client.post(
-                    f"{base_url}/api/chat",
-                    json={
-                        "model": model,
-                        "messages": [
-                            {"role": "system", "content": system_prompt},
-                            *history,
-                            {"role": "user", "content": user_input},
-                        ],
-                        "stream": False,
-                    },
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                response_text = data.get("message", {}).get("content", "")
+            llm = get_llm_client()
+            response_text = await llm.chat([
+                {"role": "system", "content": system_prompt},
+                *history,
+                {"role": "user", "content": user_input},
+            ])
 
-                if not response_text:
-                    response_text = "Desculpe, nao consegui processar sua mensagem."
+            if not response_text:
+                response_text = "Desculpe, nao consegui processar sua mensagem."
 
-                # Tenta detectar tool-calling JSON na resposta
-                tool_result = None
-                try:
-                    # Procura JSON no final da resposta
-                    if response_text.strip().endswith('}'):
-                        json_start = response_text.rfind('{')
-                        if json_start > 0:
-                            json_str = response_text[json_start:]
-                            tool_call = _json.loads(json_str)
-                            if "tool" in tool_call:
-                                tool_name = tool_call["tool"]
-                                tool_params = tool_call.get("params", {})
-                                # Adiciona user_id para isolamento
-                                tool_params["user_id"] = user_id
-                                
-                                # Executa a tool via executor
-                                from src.jefrey.core.executor import ToolExecutor
-                                executor = ToolExecutor(
-                                    tool_resolver=skill_registry.get_tool,
-                                    actor_role=user_role,
-                                    user_id=user_id,
-                                    thread_id=namespaced_thread_id,
-                                )
-                                exec_result = await executor.execute(tool_name, tool_params)
-                                
-                                if exec_result.executed and exec_result.result:
-                                    tool_result = exec_result.result
-                                    # CIPHER-008: Extrair content do formato normalizado
-                                    if isinstance(tool_result, dict) and "content" in tool_result:
-                                        tool_content = tool_result["content"]
-                                    else:
-                                        tool_content = str(tool_result)
-                                    # Remove o JSON da resposta final
-                                    response_text = response_text[:json_start].strip()
-                except Exception as tool_err:
-                    logger.warning("tool execution failed: %s", tool_err)
-                    # Continua com a resposta original
+            # Tenta detectar tool-calling JSON na resposta
+            tool_result = None
+            try:
+                # Procura JSON no final da resposta
+                if response_text.strip().endswith('}'):
+                    json_start = response_text.rfind('{')
+                    if json_start > 0:
+                        json_str = response_text[json_start:]
+                        tool_call = _json.loads(json_str)
+                        if "tool" in tool_call:
+                            tool_name = tool_call["tool"]
+                            tool_params = tool_call.get("params", {})
+                            # Adiciona user_id para isolamento
+                            tool_params["user_id"] = user_id
+                            
+                            # Executa a tool via executor
+                            from src.jefrey.core.executor import ToolExecutor
+                            executor = ToolExecutor(
+                                tool_resolver=skill_registry.get_tool,
+                                actor_role=user_role,
+                                user_id=user_id,
+                                thread_id=namespaced_thread_id,
+                            )
+                            exec_result = await executor.execute(tool_name, tool_params)
+                            
+                            if exec_result.executed and exec_result.result:
+                                tool_result = exec_result.result
+                                # CIPHER-008: Extrair content do formato normalizado
+                                if isinstance(tool_result, dict) and "content" in tool_result:
+                                    tool_content = tool_result["content"]
+                                else:
+                                    tool_content = str(tool_result)
+                                # Remove o JSON da resposta final
+                                response_text = response_text[:json_start].strip()
+            except Exception as tool_err:
+                logger.warning("tool execution failed: %s", tool_err)
+                # Continua com a resposta original
 
-                try:
-                    from src.jefrey.core.audit import redact_pii
-                    logger.info("chat: user=%s thread=%s input=%s response_len=%d tool=%s",
-                        user_id, state.thread_id, redact_pii(user_input[:80]), len(response_text),
-                        tool_result.get("tool") if tool_result else None)
-                except Exception:
-                    pass
+            try:
+                from src.jefrey.core.audit import redact_pii
+                logger.info("chat: user=%s thread=%s input=%s response_len=%d tool=%s",
+                    user_id, state.thread_id, redact_pii(user_input[:80]), len(response_text),
+                    tool_result.get("tool") if tool_result else None)
+            except Exception:
+                pass
 
-                final_response = response_text
-                if tool_result:
-                    if isinstance(tool_result, dict) and "content" in tool_result:
-                        # CIPHER-008: Usar content normalizado
-                        tool_content = tool_result["content"]
-                    elif isinstance(tool_result, str):
-                        tool_content = tool_result
-                    else:
-                        tool_content = str(tool_result)
-                    
-                    final_response = f"{response_text}\n\nResultado: {tool_content}"
+            final_response = response_text
+            if tool_result:
+                if isinstance(tool_result, dict) and "content" in tool_result:
+                    # CIPHER-008: Usar content normalizado
+                    tool_content = tool_result["content"]
+                elif isinstance(tool_result, str):
+                    tool_content = tool_result
+                else:
+                    tool_content = str(tool_result)
+                
+                final_response = f"{response_text}\n\nResultado: {tool_content}"
 
-                self._save_turn(state, user_input, final_response)
-                return {
-                    "response": final_response,
-                    "thread_id": state.thread_id,
-                    "status": "completed",
-                }
+            self._save_turn(state, user_input, final_response)
+            return {
+                "response": final_response,
+                "thread_id": state.thread_id,
+                "status": "completed",
+            }
 
         except httpx.TimeoutException as e:
             logger.error("agent LLM timeout (CIPHER-014): %s", e, exc_info=True)
@@ -381,7 +367,7 @@ class Agent:
         except Exception as e:
             logger.error("agent LLM call failed: %s", e, exc_info=True)
             return {
-                "response": f"Ola! Sou o Jefrey. O LLM esta indisponivel ({type(e).__name__}). Estou funcionando mas sem conexao com o modelo.",
+                "response": friendly_error(e),
                 "thread_id": state.thread_id,
                 "status": "degraded",
                 "error": str(e),
@@ -409,37 +395,24 @@ class Agent:
             f"Contexto:\n{self._format_context(state.context)}\n"
         )
         try:
-            import httpx as _httpx
-            import json as _json
-            from src.jefrey.core.config import get_settings
-            cfg = get_settings()
-            base_url = (getattr(cfg.llm, "base_url", None) or "http://ollama:11434").rstrip("/")
-            model = getattr(cfg.llm, "model", "qwen2.5:0.5b")
+            from src.jefrey.core.llm_provider import get_llm_client
+            llm = get_llm_client()
             _acc: list[str] = []
-            async with _httpx.AsyncClient(timeout=float(os.getenv("JEFREY_LLM_TIMEOUT", "90"))) as client:
-                async with client.stream("POST", f"{base_url}/api/chat", json={"model": model, "messages": [{"role": "system", "content": system_prompt}, *self._load_history(state), {"role": "user", "content": user_input}], "stream": True}) as resp:
-                    resp.raise_for_status()
-                    async for line in resp.aiter_lines():
-                        if not line:
-                            continue
-                        try:
-                            data = _json.loads(line)
-                            if data.get("done"):
-                                break
-                            chunk = data.get("message", {}).get("content", "")
-                            if chunk:
-                                _acc.append(chunk)
-                                yield chunk
-                        except Exception:
-                            continue
+            async for chunk in llm.stream([
+                {"role": "system", "content": system_prompt},
+                *self._load_history(state),
+                {"role": "user", "content": user_input},
+            ]):
+                _acc.append(chunk)
+                yield chunk
             if _acc:
                 self._save_turn(state, user_input, "".join(_acc))
         except httpx.TimeoutException as e:
             logger.error("agent run_stream timeout (CIPHER-014): %s", e, exc_info=True)
-            yield f"[erro timeout LLM - tente novamente]"
+            yield friendly_error(e)
         except Exception as e:
             logger.error("agent run_stream failed: %s", e, exc_info=True)
-            yield f"[erro LLM {type(e).__name__}]"
+            yield friendly_error(e)
 
 
 class JefreyAgent(Agent):

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --port 5173 --host",
     "build": "vite build",
+    "build:api": "vite build --outDir ../src/jefrey/static --emptyOutDir",
     "preview": "vite preview --port 5173",
     "lint": "eslint ."
   },

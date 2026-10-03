@@ -310,6 +310,8 @@ def create_app() -> FastAPI:
     # Registra routers do FastAPI
     app.include_router(auth_router)
     app.include_router(chat_router)
+    from src.jefrey.api.llm_settings import router as llm_settings_router
+    app.include_router(llm_settings_router)
     app.include_router(memory_router)
     app.include_router(stt_router)
     app.include_router(tts_router)

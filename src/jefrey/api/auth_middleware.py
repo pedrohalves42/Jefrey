@@ -11,13 +11,14 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+from pathlib import Path
 import logging
 
 import time
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import FileResponse, JSONResponse
 
 from src.jefrey.core.config import get_settings
 from src.jefrey.oauth2.introspect import introspect_token, IntrospectionResult
@@ -29,6 +30,11 @@ _PUBLIC_PATHS = {"/ws", "/health", "/docs", "/openapi.json", "/redoc", "/metrics
 # /chat|/memory|/approvals continuam protegidos; /assets/* sao build Vite hashados sem user data
 # /auth/dev-token e publico mas fail-closed em prod (CIPHER-021, auth.py is_prod 403)
 _PUBLIC_PREFIXES = ("/assets/", "/ws")
+
+# Paginas do app (React Router). Sao tambem prefixos de API (/memory, /approvals...), entao so
+# servimos o index.html quando e navegacao de navegador (GET + Accept: text/html).
+_SPA_PAGES = {"/studio", "/memory", "/approvals", "/observability", "/settings", "/knowledge", "/chat"}
+_INDEX_HTML = Path(__file__).resolve().parent.parent / "static" / "index.html"
 # CIPHER-301: /chat aceita modo anonimo, mas se vier Authorization a identidade e validada
 # (antes /chat e /chat/status eram publicos e todos viravam "anonymous": um usuario lia a
 # resposta do outro). /hmac-status e /rotate-hmac sairam da lista publica (vazavam a chave HMAC).
@@ -134,6 +140,9 @@ class FastAPIAuthMiddleware(BaseHTTPMiddleware):
         if request.method == "OPTIONS":
             return await call_next(request)
         path = request.url.path
+        if (request.method == "GET" and path.rstrip("/") in _SPA_PAGES
+                and "text/html" in request.headers.get("accept", "") and _INDEX_HTML.exists()):
+            return FileResponse(_INDEX_HTML)
         # UI-1 public whitelist — FAIL-CLOSED exceto UI estatica (Axiom 5, CIPHER-019)
         if path in _PUBLIC_PATHS or path.startswith(_PUBLIC_PREFIXES):
             request.state.user_id = "system"

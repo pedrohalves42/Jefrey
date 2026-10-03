@@ -126,6 +126,18 @@ def sanitize_tool_output(content: str, source: str = "") -> str:
         r"(?i)output\s+(?:the\s+)?(?:system\s+)?(?:prompt|instructions?)",
         r"(?i)show\s+(?:me\s+)?(?:the\s+)?(?:system\s+)?(?:prompt|instructions?)",
     ]
+    # Portugues (com e sem acento) — o produto e em pt-BR
+    injection_patterns += [
+        r"(?i)ignor[ea]\s+(?:todas?\s+)?(?:as\s+)?(?:suas\s+)?(?:instru[cç][oõ]es|regras|diretrizes)(?:\s+anteriores)?",
+        r"(?i)desconsidere\s+(?:todas?\s+)?(?:as\s+)?(?:instru[cç][oõ]es|regras)",
+        r"(?i)esque[cç]a\s+(?:tudo|todas?\s+as\s+(?:regras|instru[cç][oõ]es))",
+        r"(?i)novas?\s+instru[cç][oõ]es\s*:",
+        r"(?i)(?:revele|mostre|exiba|imprima|vaze)\s+(?:o\s+|seu\s+|suas?\s+|as\s+|os\s+)*(?:system\s*prompt|prompt\s+do\s+sistema|prompt\s+interno|instru[cç][oõ]es\s+internas|chaves?|senhas?|segredos?|tokens?)",
+        r"(?i)a\s+partir\s+de\s+agora\s+voc[eê]\s+(?:[eé]|ser[aá]|vai\s+ser)",
+        r"(?i)finja\s+(?:que\s+)?(?:[eé]s|voc[eê]\s+[eé]|ser)",
+        r"(?i)(?:desative|desabilite|ignore|contorne)\s+(?:todas?\s+)?(?:as\s+)?(?:prote[cç][oõ]es|seguran[cç]a|filtros|restri[cç][oõ]es)",
+        r"(?i)modo\s+(?:desenvolvedor|deus|sem\s+restri[cç][oõ]es)",
+    ]
     for pattern in injection_patterns:
         sanitized = re.sub(pattern, "[BLOQUEADO]", sanitized)
 
