@@ -13,6 +13,7 @@ import hashlib
 import hmac
 from pathlib import Path
 import logging
+import os
 
 import time
 
@@ -38,6 +39,11 @@ _INDEX_HTML = Path(__file__).resolve().parent.parent / "static" / "index.html"
 # CIPHER-301: /chat aceita modo anonimo, mas se vier Authorization a identidade e validada
 # (antes /chat e /chat/status eram publicos e todos viravam "anonymous": um usuario lia a
 # resposta do outro). /hmac-status e /rotate-hmac sairam da lista publica (vazavam a chave HMAC).
+def _anonymous_chat_allowed() -> bool:
+    """Chat anonimo vem DESLIGADO: sem token -> 401. Opt-in so para demonstracao."""
+    return os.getenv("JEFREY_API__ALLOW_ANONYMOUS_CHAT", "").strip().lower() in ("1", "true", "yes")
+
+
 _OPTIONAL_AUTH_PATHS = {"/chat", "/chat/stream"}
 _OPTIONAL_AUTH_PREFIXES = ("/chat/status/",)
 
@@ -155,7 +161,7 @@ class FastAPIAuthMiddleware(BaseHTTPMiddleware):
 
         auth = request.headers.get("Authorization", "")
 
-        optional = path in _OPTIONAL_AUTH_PATHS or path.startswith(_OPTIONAL_AUTH_PREFIXES)
+        optional = _anonymous_chat_allowed() and (path in _OPTIONAL_AUTH_PATHS or path.startswith(_OPTIONAL_AUTH_PREFIXES))
         if not auth and optional:
             request.state.user_id = "anonymous"
             ip = request.client.host if request.client else "unknown"
