@@ -93,6 +93,8 @@ class GoogleCalendarSettings(BaseSettings):
     enabled: bool = False
     credentials_file: str = "config/credentials/google_calendar.json"
     token_file: str = "config/tokens/google_calendar_token.json"
+    client_id: str = ""
+    client_secret: str = ""
 
 class GmailSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="JEFREY_INTEGRATIONS__GMAIL__", extra="ignore")
@@ -100,6 +102,8 @@ class GmailSettings(BaseSettings):
     enabled: bool = False
     credentials_file: str = "config/credentials/gmail.json"
     token_file: str = "config/tokens/gmail_token.json"
+    client_id: str = ""
+    client_secret: str = ""
 
 class GoogleDriveSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="JEFREY_INTEGRATIONS__GOOGLE_DRIVE__", extra="ignore")
@@ -107,6 +111,8 @@ class GoogleDriveSettings(BaseSettings):
     enabled: bool = False
     credentials_file: str = "config/credentials/google_drive.json"
     token_file: str = "config/tokens/google_drive_token.json"
+    client_id: str = ""
+    client_secret: str = ""
 
 class NotionSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="JEFREY_INTEGRATIONS__NOTION__", extra="ignore")
@@ -147,6 +153,61 @@ class LoggingSettings(BaseSettings):
     level: str = "INFO"
     file: str = "logs/jefrey.log"
     format: str = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
+
+
+# =============================================================================
+# TELEMETRY SETTINGS (P6.2 Diff 5) — OpenTelemetry / Prometheus
+# =============================================================================
+class TelemetrySettings(BaseSettings):
+    """Configuração de observabilidade (tracing + metrics)."""
+
+    model_config = SettingsConfigDict(env_prefix="JEFREY_TELEMETRY__", extra="ignore")
+
+    # OpenTelemetry
+    enabled: bool = False
+    service_name: str = "jefrey-mcp"
+    otlp_endpoint: str = ""          # ex: http://jaeger:4318/v1/traces
+    otlp_headers: str = ""           # JSON string: '{"Authorization": "Bearer xxx"}'
+    sample_rate: float = 1.0         # 0.0 a 1.0
+    enable_console: bool = False     # export to console (dev)
+
+    # Prometheus /metrics endpoint
+    metrics_enabled: bool = True
+    metrics_path: str = "/metrics"
+
+
+# =============================================================================
+# ALERTING SETTINGS (P6.3) — Thresholds for alerting rules
+# =============================================================================
+class AlertingSettings(BaseSettings):
+    """Thresholds and config for Prometheus alerting rules."""
+
+    model_config = SettingsConfigDict(env_prefix="JEFREY_ALERTING__", extra="ignore")
+
+    # Health thresholds
+    health_check_interval_sec: int = 30
+    service_down_for_sec: int = 60
+
+    # Performance thresholds
+    tool_latency_p95_warn_sec: float = 10.0
+    tool_latency_p95_crit_sec: float = 30.0
+    tool_error_rate_warn: float = 0.1      # 10%
+    throughput_drop_ratio: float = 0.01    # 99% drop
+
+    # Security thresholds
+    oauth_invalid_rate_warn_per_min: float = 10.0
+    oauth_missing_rate_warn_per_min: float = 20.0
+    rate_limit_deny_rate_warn_per_min: float = 5.0
+    tools_blocked_rate_warn_per_min: float = 5.0
+    hitl_pending_accumulation_warn: int = 10
+
+    # Operations thresholds
+    cache_hit_rate_warn: float = 0.5       # 50%
+    bridge_error_rate_warn_per_min: float = 2.0
+    bridge_timeout_rate_warn_per_min: float = 1.0
+    bridge_hitl_reject_rate_warn_per_min: float = 0.5
+    llm_latency_p95_warn_sec: float = 30.0
+    memory_latency_p95_warn_sec: float = 5.0
 
 class DatabaseSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="JEFREY_DATABASE__", extra="ignore")
@@ -349,6 +410,8 @@ class AppSettings(BaseSettings):
     api: APISettings = APISettings()
     mcp: MCPServerSettings = MCPServerSettings()
     mcp_client: MCPClientSettings = MCPClientSettings()
+    telemetry: TelemetrySettings = TelemetrySettings()
+    alerting: AlertingSettings = AlertingSettings()
     avatar: AvatarSettings = AvatarSettings()
 
 # Instancia global (lazy) -- thread-safe

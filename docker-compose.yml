@@ -84,7 +84,7 @@ services:
       JEFREY_VOICE__STT__PROVIDER: ${JEFREY_VOICE__STT__PROVIDER:-whisper}
       JEFREY_VOICE__STT__MODEL: ${JEFREY_VOICE__STT__MODEL:-small}
       JEFREY_VOICE__TTS__PROVIDER: ${JEFREY_VOICE__TTS__PROVIDER:-piper}
-      JEFREY_DEBUG: "false"
+      JEFREY_DEBUG: ${JEFREY_DEBUG:-false}
       HF_HOME: /tmp/hf-cache
       XDG_CACHE_HOME: /tmp/hf-cache
       HF_HUB_CACHE: /tmp/hf-cache/hub
@@ -297,11 +297,10 @@ services:
       jefrey-api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget --spider -q http://localhost:8080/ || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/ || exit 1"]
       interval: 10s
       timeout: 3s
       retries: 10
-      start_period: 10s
     restart: unless-stopped
 
 volumes:

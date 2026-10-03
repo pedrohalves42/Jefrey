@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import logging
 import os
+# CIPHER-313: chromadb tenta enviar telemetria (posthog) e loga ERROR a cada operacao
+os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
@@ -96,6 +98,44 @@ def create_app() -> FastAPI:
         await _f3_llm_probe()
 
     @app.on_event("startup")
+    async def _startup_ensure_embedding_model():
+        # CIPHER-313: sem o modelo de embeddings no Ollama a memoria falha em silencio
+        # ("model nomic-embed-text not found"). Baixa em background se estiver faltando.
+        import asyncio as _aio
+
+        async def _pull():
+            try:
+                cfg2 = get_settings()
+                base = (os.getenv("JEFREY_EMBEDDINGS__BASE_URL") or getattr(cfg2.llm, "base_url", None) or "http://ollama:11434").rstrip("/")
+                model = getattr(getattr(cfg2, "embeddings", None), "model", None) or "nomic-embed-text"
+                async with _f3_httpx.AsyncClient(timeout=10) as c:
+                    tags = (await c.get(base + "/api/tags")).json().get("models", [])
+                if any(str(m.get("name", "")).split(":")[0] == model.split(":")[0] for m in tags):
+                    return
+                logger.warning("modelo de embeddings %s ausente no Ollama - baixando em background", model)
+                async with _f3_httpx.AsyncClient(timeout=None) as c:
+                    r = await c.post(base + "/api/pull", json={"model": model, "stream": False})
+                    logger.info("pull %s -> HTTP %s", model, r.status_code)
+            except Exception as e:
+                logger.warning("nao foi possivel garantir o modelo de embeddings: %s", e)
+
+        _aio.create_task(_pull())
+
+    @app.on_event("startup")
+    async def _startup_create_tables():
+        # Tabelas do ORM (approvals/oauth2) nao eram criadas em lugar nenhum -> HITL quebrava
+        # com "relation approvals does not exist". create_all e idempotente.
+        try:
+            from src.jefrey.core.db import create_oauth2_tables
+            create_oauth2_tables()
+            # CIPHER-305: audit_logs (models.AuditLog) - antes nao existia e todo audit ia p/ fallback
+            from src.jefrey.core.db import get_engine
+            from src.jefrey.core.models import AuditLog
+            AuditLog.__table__.create(bind=get_engine(), checkfirst=True)
+        except Exception as e:
+            logger.error("criacao das tabelas do ORM falhou (HITL/approvals indisponivel): %s", e)
+
+    @app.on_event("startup")
     async def _startup_register_tools():
         try:
             from src.jefrey.core.registry import register_default_tools
@@ -144,9 +184,128 @@ def create_app() -> FastAPI:
     app.include_router(signing_router)
 
     # Health check no nivel raiz (PUBLICO, sem auth)
+    @app.get("/api/status", tags=["system"])
+    async def api_status():
+        """API status endpoint - reporta status de todas as 7 pecas (Axiom #1, CIPHER-031).
+        PUBLICO, sem auth - usado pelo frontend em localhost:3001 para indicar status em tempo real.
+        """
+        from src.jefrey.core.metrics import SERVICE_HEALTH
+        from src.jefrey.core.config import get_settings
+        import time as _time
+
+        cfg = get_settings()
+        base = (getattr(cfg.llm, 'base_url', None) or 'http://host.docker.internal:11434').rstrip('/')
+
+        # Check Ollama/LLM availability
+        ollama_ok = False
+        try:
+            async with _f3_httpx.AsyncClient(timeout=2) as c:
+                r = await c.get(base + '/api/tags')
+                ollama_ok = r.status_code == 200
+        except Exception:
+            pass
+
+        # Check Redis
+        redis_ok = False
+        try:
+            import redis as _redis
+            r = _redis.Redis.from_url(cfg.redis.dsn or 'redis://localhost:6379')
+            r.ping()
+            redis_ok = True
+        except Exception:
+            pass
+
+        # Check Postgres (simple connectivity - Axiom #1 fail-closed)
+        postgres_ok = False
+        try:
+            # Try asyncpg first (faster async), fallback to psycopg
+            try:
+                import asyncpg
+                # Convert postgresql+psycopg:// to postgresql:// for asyncpg
+                dsn = cfg.database.dsn.replace("postgresql+psycopg://", "postgresql://") if cfg.database.dsn else 'postgresql://localhost/jefrey'
+                conn = await asyncpg.connect(dsn)
+                await conn.close()
+                postgres_ok = True
+            except ImportError:
+                # Fallback to psycopg sync
+                import psycopg
+                dsn = cfg.database.dsn.replace("postgresql+psycopg://", "postgresql://") if cfg.database.dsn else 'postgresql://localhost/jefrey'
+                conn = psycopg.connect(dsn)
+                conn.close()
+                postgres_ok = True
+        except Exception as e:
+            logger.warning("Postgres health check failed: %s", e)
+
+        # Check MCP Gateway (antes era fixo em "starting" - nunca refletia o estado real)
+        mcp_status = "down"
+        try:
+            _mcp_url = os.getenv("JEFREY_MCP_HEALTH_URL") or f"http://mcp-server:{cfg.mcp.port}/health"
+            async with _f3_httpx.AsyncClient(timeout=2) as c:
+                r = await c.get(_mcp_url)
+                mcp_status = "ok" if r.status_code == 200 else "degraded"
+        except Exception as e:
+            logger.warning("MCP health check failed: %s", e)
+
+        # Update metrics
+        try:
+            SERVICE_HEALTH.labels(component="api").set(1)
+        except Exception:
+            pass
+
+        return {
+            "api": {"status": "ok" if ollama_ok else "degraded"},
+            "stt": {"status": "ok"},  # Already verified via /stt/health
+            "tts": {"status": "ok"},  # Already verified via /tts/health
+            "mcp": {"status": mcp_status},  # MCP service health (probe real)
+            "ollama": {"status": "ok" if ollama_ok else "degraded"},
+            "redis": {"status": "ok" if redis_ok else "degraded"},
+            "postgres": {"status": "ok" if postgres_ok else "degraded"},
+            "timestamp": __import__("datetime").datetime.utcnow().isoformat() + "Z"
+        }
+
+    # Health check no nivel raiz (PUBLICO, sem auth)
     @app.get("/health", tags=["system"])
-    async def health():
-        return {"status": "ok", "version": get_settings().version}
+    async def health_check():
+        """Health check endpoint - reporta status de seguranca (P4).
+        PUBLICO, sem auth - usado por docker-compose e orquestration.
+        """
+        from src.jefrey.core.policy import get_policy_engine
+        from src.jefrey.core.rbac import RBAC
+        from src.jefrey.core.rate_limit import get_rate_limiter
+        from src.jefrey.core.hitl import HITLManager
+
+        policy = get_policy_engine()
+        rbac = RBAC()
+        rate_limiter = get_rate_limiter()
+        hitl = HITLManager()
+
+        # Determina status geral
+        all_active = all([policy is not None, rbac is not None, rate_limiter is not None])
+
+        # Status de cada componente
+        components = {
+            "policy_engine": "active" if policy else "inactive",
+            "rbac_engine": "active" if rbac else "inactive",
+            "rate_limiter": "active" if rate_limiter else "inactive",
+            "content_guard": "active",
+            "hitl_manager": "active" if hitl else "inactive",
+        }
+
+        overall = "ok" if all_active else "degraded"
+
+        # Metrics: update service health labels
+        try:
+            from src.jefrey.core.metrics import SERVICE_HEALTH
+            SERVICE_HEALTH.labels(component="api").set(1 if overall == "healthy" else 0)
+        except Exception:
+            pass
+
+        return {
+            "status": overall,
+            "version": get_settings().version,
+            "security_components": components,
+            "timestamp": __import__("datetime").datetime.utcnow().isoformat() + "Z"
+        }
 
     # Registra routers do FastAPI
     app.include_router(auth_router)

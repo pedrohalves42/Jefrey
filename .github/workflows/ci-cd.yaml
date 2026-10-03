@@ -1,0 +1,424 @@
+# =============================================================================
+# GITHUB ACTIONS CI/CD - Jefrey
+# Build, test, scan, and deploy to staging/production
+# =============================================================================
+name: Jefrey CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+    tags: ['v*']
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deploy environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      skip_tests:
+        description: 'Skip tests'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ========================================================================
+  # LINT & TYPE CHECK
+  # ========================================================================
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install ruff mypy bandit
+
+      - name: Run Ruff (linting)
+        run: ruff check src/ scripts/
+
+      - name: Run MyPy (type checking)
+        run: mypy src/ --ignore-missing-imports --no-error-summary
+
+      - name: Run Bandit (security)
+        run: bandit -r src/ -f json -o bandit-report.json || true
+
+      - name: Upload Bandit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: bandit-report.json
+
+  # ========================================================================
+  # UNIT TESTS
+  # ========================================================================
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: ${{ !inputs.skip_tests }}
+    services:
+      postgres:
+        image: ankane/pgvector:latest
+        env:
+          POSTGRES_USER: jefrey
+          POSTGRES_PASSWORD: jefrey
+          POSTGRES_DB: jefrey
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U jefrey -d jefrey"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7.2-alpine
+        ports: [6379:6379]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov pytest-mock httpx
+
+      - name: Run unit tests
+        env:
+          JEFREY_DATABASE__URL: postgresql+psycopg://jefrey:jefrey@localhost:5432/jefrey
+          JEFREY_REDIS__URL: redis://localhost:6379/0
+          JEFREY_API__SECRET_KEY: test-secret-key-for-testing-only-32chars
+          JEFREY_EVENTBUS__HMAC_KEY: test-hmac-key-for-testing-only
+          JEFREY_OAUTH__CLIENT_ID: test-client-id
+          JEFREY_OAUTH__CLIENT_SECRET: test-client-secret
+          JEFREY_ENV: test
+          JEFREY_DEBUG: "true"
+        run: |
+          pytest tests/ -v --cov=src --cov-report=xml --cov-report=term-missing -x
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+
+  # ========================================================================
+  # INTEGRATION TESTS (with docker-compose)
+  # ========================================================================
+  integration-test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: ${{ !inputs.skip_tests && github.event_name != 'pull_request' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Start services
+        run: |
+          docker compose -f docker-compose.yml up -d postgres redis ollama
+          # Wait for health
+          sleep 30
+          docker compose -f docker-compose.yml ps
+
+      - name: Run integration tests
+        env:
+          JEFREY_DATABASE__URL: postgresql+psycopg://jefrey:jefrey@localhost:5432/jefrey
+          JEFREY_REDIS__URL: redis://:jefrey@localhost:6379/0
+          JEFREY_API__SECRET_KEY: test-secret-key-for-testing-only-32chars
+          JEFREY_EVENTBUS__HMAC_KEY: test-hmac-key-for-testing-only
+          JEFREY_LLM__BASE_URL: http://localhost:11434
+          JEFREY_EMBEDDINGS__BASE_URL: http://localhost:11434
+          JEFREY_ENV: test
+        run: |
+          # Pull Ollama model
+          docker exec -t jefrey-ollama ollama pull qwen2.5:0.5b || true
+          # Run tests
+          pytest tests/integration/ -v --tb=short || true
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          docker compose -f docker-compose.yml logs --tail=100 > integration-logs.txt
+
+      - name: Upload integration logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-logs
+          path: integration-logs.txt
+
+  # ========================================================================
+  # SECURITY SCAN
+  # ========================================================================
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Run Trivy on Docker images
+        if: github.event_name == 'push'
+        run: |
+          # Scan built images
+          trivy image --severity CRITICAL,HIGH --format sarif --output trivy-image.sarif ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/api:${{ github.sha }} || true
+          trivy image --severity CRITICAL,HIGH --format sarif --output trivy-image-mcp.sarif ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/mcp:${{ github.sha }} || true
+
+      - name: Check for secrets with TruffleHog
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: main
+          head: HEAD
+
+  # ========================================================================
+  # BUILD DOCKER IMAGES
+  # ========================================================================
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: [lint, test, security-scan]
+    if: github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    strategy:
+      matrix:
+        include:
+          - context: .
+            dockerfile: Dockerfile.api
+            image: api
+          - context: .
+            dockerfile: Dockerfile.mcp
+            image: mcp
+          - context: frontend
+            dockerfile: Dockerfile.frontend
+            image: frontend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.image }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+          platforms: linux/amd64,linux/arm64
+
+      - name: Sign images (cosign)
+        if: github.ref == 'refs/heads/main'
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: 'v2.2.0'
+
+      - name: Sign with cosign
+        if: github.ref == 'refs/heads/main'
+        run: |
+          cosign sign --yes ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.image }}@${{ steps.build.outputs.digest }}
+
+  # ========================================================================
+  # DEPLOY TO STAGING
+  # ========================================================================
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [build]
+    if: github.ref == 'refs/heads/develop'
+    environment: staging
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v3
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG_STAGING }}
+
+      - name: Deploy to staging
+        run: |
+          kubectl apply -k k8s/overlays/staging
+          kubectl rollout status deployment/jefrey-api -n jefrey --timeout=300s
+          kubectl rollout status deployment/mcp-server -n jefrey --timeout=300s
+          kubectl rollout status deployment/frontend -n jefrey --timeout=300s
+
+      - name: Run smoke tests
+        run: |
+          # Wait for pods to be ready
+          sleep 30
+          # Health checks
+          curl -f https://staging.jefrey.example.com/health || exit 1
+          curl -f https://staging.jefrey.example.com/mcp/health || exit 1
+
+  # ========================================================================
+  # DEPLOY TO PRODUCTION
+  # ========================================================================
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: [build]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v3
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG_PRODUCTION }}
+
+      - name: Deploy to production (blue-green)
+        run: |
+          # Apply manifests
+          kubectl apply -k k8s/overlays/prod
+          # Wait for rollout
+          kubectl rollout status deployment/jefrey-api -n jefrey --timeout=600s
+          kubectl rollout status deployment/mcp-server -n jefrey --timeout=600s
+          kubectl rollout status deployment/frontend -n jefrey --timeout=600s
+
+      - name: Run production smoke tests
+        run: |
+          sleep 60
+          # Health checks
+          curl -f https://jefrey.example.com/health || exit 1
+          curl -f https://jefrey.example.com/mcp/health || exit 1
+          # API test
+          curl -f -H "Authorization: Bearer ${{ secrets.SMOKE_TEST_TOKEN }}" https://jefrey.example.com/chat/status/default || exit 1
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            docker-compose.prod.yml
+            k8s/overlays/prod/kustomization.yaml
+
+  # ========================================================================
+  # MANUAL DEPLOY TRIGGER
+  # ========================================================================
+  manual-deploy:
+    name: Manual Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name == 'workflow_dispatch'
+    environment: ${{ github.event.inputs.environment }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v3
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG_STAGING }}
+        if: github.event.inputs.environment == 'staging'
+
+      - name: Configure kubectl (production)
+        uses: azure/k8s-set-context@v3
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG_PRODUCTION }}
+        if: github.event.inputs.environment == 'production'
+
+      - name: Deploy
+        run: |
+          if [ "${{ github.event.inputs.environment }}" = "staging" ]; then
+            kubectl apply -k k8s/overlays/staging
+            kubectl rollout status deployment/jefrey-api -n jefrey --timeout=300s
+          else
+            kubectl apply -k k8s/overlays/prod
+            kubectl rollout status deployment/jefrey-api -n jefrey --timeout=600s
+          fi

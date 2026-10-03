@@ -1,0 +1,99 @@
+# =============================================================================
+# KUBERNETES OLLAMA DEPLOYMENT - Jefrey LLM Inference
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama
+  namespace: jefrey
+  labels:
+    app: jefrey
+    component: ollama
+spec:
+  type: ClusterIP
+  ports:
+    - port: 11434
+      targetPort: 11434
+      protocol: TCP
+      name: http
+  selector:
+    app: jefrey
+    component: ollama
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+  namespace: jefrey
+  labels:
+    app: jefrey
+    component: ollama
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jefrey
+      component: ollama
+  template:
+    metadata:
+      labels:
+        app: jefrey
+        component: ollama
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        runAsNonRoot: true
+      containers:
+        - name: ollama
+          image: ollama/ollama:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 11434
+              name: http
+              protocol: TCP
+          volumeMounts:
+            - name: ollama-data
+              mountPath: /root/.ollama
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "2Gi"
+            limits:
+              cpu: "4000m"
+              memory: "8Gi"
+          livenessProbe:
+            exec:
+              command:
+                - ollama
+                - list
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - ollama
+                - list
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 3
+      volumes:
+        - name: ollama-data
+          persistentVolumeClaim:
+            claimName: ollama-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-pvc
+  namespace: jefrey
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: fast-ssd
+  resources:
+    requests:
+      storage: 50Gi

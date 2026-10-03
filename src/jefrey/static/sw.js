@@ -1,4 +1,9 @@
+// Service Worker desabilitado temporariamente para evitar conflitos com proxy
+// Quando ativo, o SW intercepta requisições API e causa erros de conexão
+// Para reativar, descomente o código abaixo e garanta que o proxy Vite funcione corretamente
+
 // F6-4 PWA sw.js — cache-first assets, network-first api (DDIA cap3) — FIX J.A.R.V.I.S. v2
+/*
 const CACHE = "jefrey-v2";
 const ASSETS = ["/", "/vite.svg", "/manifest.json"];
 self.addEventListener("install", (e) => {
@@ -24,3 +29,4 @@ self.addEventListener("fetch", (e) => {
     return resp;
   }).catch(() => cached)));
 });
+*/

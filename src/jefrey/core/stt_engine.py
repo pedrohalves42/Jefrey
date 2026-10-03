@@ -1,68 +1,90 @@
-"""P1.1 — STT Engine (Axiom #1 FAIL-CLOSED, #3 SEM STUB, HPP cap1-4, Building LLM Apps fallback)."""
+"""P5 â€” STT Engine (Speech-to-Text).
+
+Suporta múltiplos providers: Whisper (local), Google Cloud Speech, Azure Speech.
+Fail-closed: se provider falha, erro explicativo (nunca mock silencioso).
+"""
 from __future__ import annotations
-import io
+
 import logging
-import tempfile
 import os
+from abc import ABC, abstractmethod
 from typing import Optional
-from functools import lru_cache
 
 logger = logging.getLogger(__name__)
 
-# Axiom #3: mock só em dev
-def _is_mock_enabled() -> bool:
-    try:
-        from src.jefrey.core.config import get_settings
-        cfg = get_settings()
-        return bool(cfg.debug) and os.getenv("JEFREY_STT__MOCK", "false").lower() in ("1","true","yes")
-    except Exception:
-        return False
 
-class STTEngine:
-    """STT via faster-whisper small int8 pt-BR; fallback mock fail-closed."""
-    def __init__(self, model: str = "small", language: str = "pt"):
-        self.model_name = model
-        self.language = language
+class STTEngine(ABC):
+    """Interface base para engines de STT."""
+
+    @property
+    @abstractmethod
+    def model_name(self) -> str:
+        pass
+
+    @property
+    @abstractmethod
+    def language(self) -> str:
+        pass
+
+    @abstractmethod
+    def transcribe(self, audio_bytes: bytes) -> str:
+        """Transcreve Ã¡udio para texto."""
+        pass
+
+
+class WhisperSTTEngine(STTEngine):
+    """Whisper local (faster-whisper ou openai-whisper)."""
+
+    def __init__(self, model: str = "base", language: str = "pt", device: str = "cpu"):
+        self._model_name = model
+        self._language = language
+        self._device = device
         self._model = None
-        self._load_error: Optional[str] = None
+        self._load_model()
 
-    def _ensure_model(self):
-        if self._model is not None or self._load_error is not None:
-            return
-        if _is_mock_enabled():
-            logger.info("STT mock enabled (dev)")
-            return
+    def _load_model(self):
         try:
-            from faster_whisper import WhisperModel
-            # HPP cap2: int8 cpu, lazy load
-            self._model = WhisperModel(self.model_name, device="cpu", compute_type="int8", download_root="/tmp/hf-cache")
-            logger.info("STT model loaded %s", self.model_name)
+            # Prefer faster-whisper (CTranslate2) for performance
+            try:
+                from faster_whisper import WhisperModel
+                self._model = WhisperModel(self._model_name, device=self._device, compute_type="int8")
+                logger.info("WhisperSTT: loaded faster-whisper model=%s device=%s", self._model_name, self._device)
+            except ImportError:
+                import whisper
+                self._model = whisper.load_model(self._model_name, device=self._device)
+                logger.info("WhisperSTT: loaded openai-whisper model=%s device=%s", self._model_name, self._device)
         except Exception as e:
-            self._load_error = str(e)
-            logger.warning("STT model load failed: %s", e)
+            logger.error("WhisperSTT: failed to load model: %s", e)
+            raise RuntimeError(f"Failed to load Whisper model '{self._model_name}': {e}")
 
-    def transcribe(self, audio_bytes: bytes, language: Optional[str] = None) -> str:
-        """Transcribe wav/webm bytes -> text. Fail-closed on error (Axiom #1)."""
-        if not audio_bytes or len(audio_bytes) < 100:
-            raise ValueError("audio vazio ou muito curto")
-        if _is_mock_enabled():
-            return "mock transcript: olá jefrey"
-        self._ensure_model()
-        if self._model is None:
-            # Building LLM Apps fallback: não inventa transcript, raise fail-closed
-            if self._load_error:
-                raise RuntimeError(f"STT indisponivel: {self._load_error}")
-            raise RuntimeError("STT modelo nao carregado")
-        # HPP cap1: write temp file for faster-whisper (prefere path)
-        lang = language or self.language
-        with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
+    @property
+    def model_name(self) -> str:
+        return self._model_name
+
+    @property
+    def language(self) -> str:
+        return self._language
+
+    def transcribe(self, audio_bytes: bytes) -> str:
+        if not audio_bytes:
+            raise ValueError("Audio data is empty")
+
+        # Write to temp file for whisper
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
             tmp.write(audio_bytes)
             tmp_path = tmp.name
+
         try:
-            segments, info = self._model.transcribe(tmp_path, language=lang, beam_size=5)
-            text = " ".join(s.text.strip() for s in segments).strip()
+            if hasattr(self._model, "transcribe"):  # faster-whisper
+                segments, info = self._model.transcribe(tmp_path, language=self._language, beam_size=5)
+                text = " ".join(seg.text for seg in segments).strip()
+            else:  # openai-whisper
+                result = self._model.transcribe(tmp_path, language=self._language)
+                text = result.get("text", "").strip()
+
             if not text:
-                raise RuntimeError("transcricao vazia")
+                raise ValueError("Transcription returned empty text")
             return text
         finally:
             try:
@@ -70,18 +92,148 @@ class STTEngine:
             except Exception:
                 pass
 
-# Singleton com WeakValueDictionary cache pattern (HPP)
-_STT_SINGLETON: Optional[STTEngine] = None
+
+class GoogleSTTEngine(STTEngine):
+    """Google Cloud Speech-to-Text (requires credentials)."""
+
+    def __init__(self, language: str = "pt-BR", credentials_path: Optional[str] = None):
+        self._language = language
+        self._credentials_path = credentials_path or os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        self._client = None
+        self._init_client()
+
+    def _init_client(self):
+        try:
+            from google.cloud import speech
+            if self._credentials_path and os.path.exists(self._credentials_path):
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = self._credentials_path
+            self._client = speech.SpeechClient()
+            logger.info("GoogleSTT: client initialized")
+        except ImportError:
+            raise RuntimeError("google-cloud-speech not installed. Run: pip install google-cloud-speech")
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize Google Speech client: {e}")
+
+    @property
+    def model_name(self) -> str:
+        return "google-cloud-speech"
+
+    @property
+    def language(self) -> str:
+        return self._language
+
+    def transcribe(self, audio_bytes: bytes) -> str:
+        if not audio_bytes:
+            raise ValueError("Audio data is empty")
+
+        from google.cloud import speech
+
+        audio = speech.RecognitionAudio(content=audio_bytes)
+        config = speech.RecognitionConfig(
+            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+            language_code=self._language,
+            enable_automatic_punctuation=True,
+        )
+
+        response = self._client.recognize(config=config, audio=audio)
+        if not response.results:
+            raise ValueError("No transcription results from Google")
+
+        transcript = " ".join(r.alternatives[0].transcript for r in response.results)
+        return transcript.strip()
+
+
+class AzureSTTEngine(STTEngine):
+    """Azure Speech Service (requires subscription)."""
+
+    def __init__(self, language: str = "pt-BR", region: Optional[str] = None, key: Optional[str] = None):
+        self._language = language
+        self._region = region or os.getenv("AZURE_SPEECH_REGION")
+        self._key = key or os.getenv("AZURE_SPEECH_KEY")
+        self._speech_config = None
+        self._init_config()
+
+    def _init_config(self):
+        try:
+            import azure.cognitiveservices.speech as speechsdk
+            if not self._key or not self._region:
+                raise ValueError("AZURE_SPEECH_KEY and AZURE_SPEECH_REGION required")
+            self._speech_config = speechsdk.SpeechConfig(subscription=self._key, region=self._region)
+            self._speech_config.speech_recognition_language = self._language
+            logger.info("AzureSTT: config initialized region=%s", self._region)
+        except ImportError:
+            raise RuntimeError("azure-cognitiveservices-speech not installed. Run: pip install azure-cognitiveservices-speech")
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize Azure Speech config: {e}")
+
+    @property
+    def model_name(self) -> str:
+        return "azure-speech"
+
+    @property
+    def language(self) -> str:
+        return self._language
+
+    def transcribe(self, audio_bytes: bytes) -> str:
+        if not audio_bytes:
+            raise ValueError("Audio data is empty")
+
+        import azure.cognitiveservices.speech as speechsdk
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            tmp.write(audio_bytes)
+            tmp_path = tmp.name
+
+        try:
+            audio_config = speechsdk.AudioConfig(filename=tmp_path)
+            recognizer = speechsdk.SpeechRecognizer(speech_config=self._speech_config, audio_config=audio_config)
+            result = recognizer.recognize_once_async().get()
+
+            if result.reason == speechsdk.ResultReason.RecognizedSpeech:
+                return result.text.strip()
+            elif result.reason == speechsdk.ResultReason.NoMatch:
+                raise ValueError("No speech could be recognized")
+            else:
+                raise RuntimeError(f"Azure STT failed: {result.reason} - {result.error_details}")
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+
+
+# Singleton factory
+_stt_engine: Optional[STTEngine] = None
+
 
 def get_stt_engine() -> STTEngine:
-    global _STT_SINGLETON
-    if _STT_SINGLETON is None:
-        try:
-            from src.jefrey.core.config import get_settings
-            cfg = get_settings()
-            model = getattr(cfg.voice.stt, "model", "small") or "small"
-            lang = getattr(cfg.voice.stt, "language", "pt") or "pt"
-        except Exception:
-            model, lang = "small", "pt"
-        _STT_SINGLETON = STTEngine(model=model, language=lang)
-    return _STT_SINGLETON
+    """Retorna engine STT configurada (singleton)."""
+    global _stt_engine
+    if _stt_engine is not None:
+        return _stt_engine
+
+    from src.jefrey.core.config import get_settings
+    cfg = get_settings()
+
+    provider = getattr(cfg.voice.stt, "provider", "whisper")
+    model = getattr(cfg.voice.stt, "model", "base")
+    language = getattr(cfg.voice.stt, "language", "pt")
+
+    if provider == "whisper":
+        _stt_engine = WhisperSTTEngine(model=model, language=language)
+    elif provider == "google":
+        _stt_engine = GoogleSTTEngine(language=language)
+    elif provider == "azure":
+        _stt_engine = AzureSTTEngine(language=language)
+    else:
+        raise ValueError(f"Unknown STT provider: {provider}")
+
+    logger.info("STT engine initialized: provider=%s model=%s", provider, model)
+    return _stt_engine
+
+
+def reset_stt_engine() -> None:
+    """Reseta engine (para testes)."""
+    global _stt_engine
+    _stt_engine = None

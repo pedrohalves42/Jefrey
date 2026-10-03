@@ -1,51 +1,122 @@
-# THREAT MODEL — Jefrey v1.0.0 (P8)
+# Threat Model - Jefrey v1.6
 
-**Status**: FINAL — P8 TAG v1.0.0 2026-09-03
-**Refs**: Livro3 Security Engineering Ross Anderson 3rd ed ch.4 + Axiom #1-7 (6 FAIL-CLOSED) + CIPHER 021/025/026/031/032/033/035 + DDIA cap6 + SWE cap14
-**Relacionado**: ADR-001 kid rotation, docs/JEFREY-AUDIT, audit_pessimista.py
+## Adversários Assumeidos
 
-## 1) Ativos
+1. **Usuário mal-intencionado** via interface (prompt injection, jailbreak, injeção de comandos)
+2. **MCP externo comprometido** - injeção de ferramentas via gateway MCP non-authenticated
+3. **Acesso não-autorizado** a ferramentas de alto risco (HIGH/CRITICAL) sem HITL
+4. **Vazamento de credenciais** via output do agente, logs ou respostas HTTP
+5. **Sessão hijacking** - token/cookie roubado entre requests
+6. **Privilege escalation** - guest/user acessar tools reservadas a admin
 
-| Ativo | Local | Protecao |
-|-------|-------|----------|
-| user_id isolamento | pg_memory _build_filter + PolicyContext + topic per-tenant + DLQ per-tenant | Axiom #2 |
-| HMAC EventBus | JEFREY_EVENTBUS__HMAC_KEYS_JSON v1/v2 + kid + dual-verify + compare_digest + canonical sort_keys | CIPHER-033, ADR-001 |
-| JWKS / Token | RS256 + kid + aud/iss/exp + urlsafe_b64encode sem padding + TTL 24h + sismember revoked | Axiom #5, CIPHER-031/035 |
-| Skill Risk | overwrite=False + load_skills() + PolicyEngine RBAC guest/user/admin + HITL UNKNOWN deny | CIPHER-032, Axiom #6 |
-| Observabilidade | 18 metrics <800 series sem user_id + 6 alerts + 8 panels editable:false | Livro4 cap5/6/10/11 |
+## Ativos Protegidos
 
-## 2) Superficies
+1. **Memória do usuário** - dados pessoais, histórico de conversa, preferências
+2. **Chaves de API** - OpenAI, Google Cloud, Gmail, Calendar, integrations externas
+3. **Dados corporativos** - notas, eventos, emails, arquivos, memory entries
+4. **Identidade do modelo** - não revelar nome de base model, parâmetros internos
+5. **Infraestrutura** - Docker containers, rede, portas, serviços conexos
 
-| Superficie | Vetor | Controle |
-|------------|-------|----------|
-| API :8000 /chat /memory /approvals /health | HTTP + JWT + rate_limit pipeline incr/expire fail-closed | CIPHER-026, Axiom #4 |
-| MCP :8001 streamable-http | MCP 2.x + PolicyEngine per-tool + RateLimiter deny | CIPHER-032 |
-| EventBus Redis Streams | XADD maxlen10000 approximate per-tenant + XREADGROUP + XACK + DLQ maxlen5000 | CIPHER-033 |
-| n8n :5678 | Workflow versionado + HMAC kid rotation | CIPHER-033 |
-| Prometheus :9090 / Grafana :3000 | Metrics sem PII + redact_pii 2 camadas | CIPHER-025 |
+## Vetores de Ataque
 
-## 3) Ameacas e Controles (STRIDE)
+| Vetor | Descrição | Mitigação |
+|-------|-----------|-----------|
+| **Prompt Injection** | Input/user content contendo instruções para ignorar system prompt ou tool output com comandos ocultos | Content guard com regex patterns (CIPHER-032); sanitization FIRST no pipeline |
+| **Tool Abuse** | Chamar ferramentas de risco HIGH/CRITICAL sem autorização adequada | RBAC enforcement; HITL approval para HIGH/CRITICAL; Policy Engine decide |
+| **Credential Exposure** | Chaves de API, tokens, secrets aparecendo em logs, responses ou memory | Fernet encryption (CIPHER-031); redact_pimi antes de logar; output sanitization |
+| **Session Hijacking** | Token de sessão/autenticação roubado entre requests | JWT com RS256; kid versioning; HTTPS only; HttpOnly cookies |
+| **Privilege Escalation** | guest/user contornar RBAC para acessar tools de admin | RBAC engine com check obrigatório; admin bypass apenas com validação explícita; fail-closed |
+| **MCP Gateway Attack** | Injeção via gateway MCP externo sem validação | OAuth 2.0 Resource Server; scopes validation; dynamic tool discovery; header authorization |
 
-| ID | Ameaca | Impacto | Controle | Prova |
-|----|--------|---------|----------|-------|
-| T1 | Tenant escape via memory | Alto | _build_filter user_id mandatory + topic jefrey.events.{user_id}.{tool} + DLQ jefrey:dlq:{user_id} + tests/test_p6_isolation 2/2 | Axiom #2 |
-| T2 | Replay EventBus | Alto | HMAC user_id.timestamp.canonical + kid v1/v2 dual-verify + DeprecationWarning v0 + EVENTBUS_KID_LEGACY_TOTAL [] | ADR-001 |
-| T3 | Token forjado | Alto | urlsafe_b64encode sem padding + RS256+kid + aud/iss/exp/kid/alg + compare_digest + JWKS TTL 24h + sismember revoked | Axiom #5 |
-| T4 | Credencial em prod | Alto | JEFREY_ENV Literal dev/prod + validate_for_production() 8 envs ?required fail-closed + env_prefix JEFREY_ | Axiom #6 |
-| T5 | Silent except oculta falha | Medio | guard_anti_patterns 6 greps (except: pass -> logger) + audit_pessimista RC1 | CIPHER-021 |
-| T6 | Cardinality OOM | Medio | labels [] e [tool_name,decision] <800 series, nunca user_id | Livro4 cap5 |
-| T7 | CORS wildcards | Medio | allow_credentials False + enumerated CORS origins/methods/headers | Axiom #6 |
+## Decisões de Segurança (Princípios Orientadores)
 
-## 4) Controles por Axiom
+1. **Fail-closed por padrão** - Toda decisão desconhecida, erro ou edge case = deny/block
+   - Tool desconhecida → deny (Anderson fail-closed, CIPHER-022)
+   - Risk level UNKNOWN → deny
+   - RBAC error → deny (não bypass)
+   - Redis indisponível → deny (rate limiter fail-closed)
+   - Qualquer exceção não prevista → deny/log/raise
 
-- **FAIL-CLOSED** deny/false/raise: PolicyEngine UNKNOWN deny + rate_limit fail-closed + signing RuntimeError prod
-- **ISOLAMENTO** user_id=None guest + _build_filter mandatory + per-tenant topic/DLQ + Redis Streams mkstream BUSYGROUP
-- **SEM STUB EM PROD** validate_for_production() 8 envs ?required + valid_ stub gated dev-only + TokenRefresh httpx real
-- **PERSISTENCIA REAL** setex pipeline incr/expire + pool_pre_ping 3600 + backup pg_dump RC0 + BGSAVE ok (DDIA cap3)
-- **CRIPTO** urlsafe_b64encode RS256+kid aud/iss/exp compare_digest sort_keys kid rotation v1->v2 dual-verify
-- **LEAST PRIVILEGE** overwrite=False :ro CORS explicit enumerated pool_pre_ping 3600 allow_credentials False
+2. **Princípio do Menor Privilégio** - Papel mínimo necessário para a operação
+   - guest: apenas tools LOW risk, leitura apenas
+   - user: tools LOW/MEDIUM de sua propriedade
+   - admin: tudo (com HITL para HIGH/CRITICAL)
 
-## 5) Validacao
+3. **Defesa em Profundidade** - Múltiplas camadas de segurança
+   - Layer 1: Content guard (sanitização de entrada/saída)
+   - Layer 2: RBAC check (controle de papel)
+   - Layer 3: Rate limiting (proteção de abuso)
+   - Layer 4: Policy Engine (avaliação de risco)
+   - Layer 5: HITL (aprovação humana para risco alto)
+   - Layer 6: Audit logging (rastreabilidade completa)
 
-- `python scripts/verify_p6_data.py` 21/21 2x + `_validate_deep.py` 162/162 + `guard_anti_patterns.sh` 6/6 + pytest 40 + promtool 6/6 + compose healthy 7/7
-- ADR-001 secao 4 rollout dual-verify -> publish v2 -> remove v1 sem downtime
+4. **Nunca confie em input externo** - Todo conteúdo de usuário, tool output, MCP messages
+   - Sanitize antes de passar ao LLM
+   - Validate antes de executar
+   - Sanitize antes de logar
+   - Mask credentials antes de qualquer transmissão
+
+5. **Audit tudo** - Toda decisão, erro, aprovação deve ser logada estruturadamente
+   - thread_id correlato
+   - tool_name, risk_level, decision, actor_role
+   - timestamps para forensics
+   - Integração com Prometheus metrics
+
+## Matriz de Risco por Tipo de Ferramenta
+
+| Ferramenta | Risk Level | Required Role | HITL Necessária |
+|------------|------------|---------------|-----------------|
+| web_search | LOW | GUEST | Não |
+| notes_read | LOW | GUEST | Não |
+| notes_write | MEDIUM | USER | Opcional (dependendo de dados) |
+| calendar | MEDIUM | USER | Opcional |
+| drive | MEDIUM | USER | Opcional |
+| email_send | HIGH | ADMIN | Sim (obrigatória) |
+| send_message | HIGH | ADMIN | Sim (obrigatória) |
+| stt_transcribe | LOW | GUEST | Não |
+| tts_synthesize | LOW | GUEST | Não |
+
+## Cenários de Ataque e Respostas
+
+### Cenário 1: Prompt Injection via Tool Output
+**Ataque:** Tool retorna texto contendo `ignore previous instructions` ou padrões de injection.
+**Resposta:** Content guard bloqueia e retorna `[CONTEUDO BLOQUEADO: output de 'tool_name' contem padrao suspeito]`. Tool não é executada ou resultado é limpo antes de ir ao LLM.
+
+### Cenário 2: Usuário Guest Tenta Acessar email_send
+**Ataque:** Usuário com role=guest tenta chamar ferramenta email_send.
+**Resposta:** RBAC engine nega (`deny`); policy engine registra `decision=deny_rbac`; audit log criado; user recebe PermissionError com mensagem apropriada.
+
+### Cenário 3: Admin Tenta Executar Ferramenta HIGH Sem HITL
+**Ataque:** Admin tenta chamar tool de risco HIGH sem aprovação humana.
+**Resposta:** Policy engine detecta HIGH + autonomous + não-admin → deny com reason "HIGH risk requires HITL". Admin deve passar por HITL flow ou desativar modo autonomous.
+
+### Cenário 4: Vazamento de Credencial via LLM Response
+**Ataque:** LLM responde com chave API exposta (ex.: `sk-....`).
+**Resposta:** Content guard detecta pattern `sk-[a-zA-Z0-9]{20,}` e mascara para `[REDACTED]` ou criptografa via Fernet antes de retornar ao usuário ou logar.
+
+### Cenário 5: MCP Gateway Sem OAuth
+**Ataque:** Chamada MCP sem token de autorização ou com token inválido.
+**Resposta:** Gateway rejeita com 401/403; policy engine não carrega ferramenta; user recebe erro de auth. OAuth 2.0 Resource Server valida scopes e resource identification.
+
+## Referências
+
+- **Security Engineering - Ross Anderson (3ª ed.)**: Capítulo 4 (Threat Modeling), Capítulo 8 (PII Handling)
+- **CIPHER-032**: Prompt Injection via Tool Output
+- **CIPHER-033**: HITL risk category decision matrix
+- **CIPHER-031**: Fernet-based encryption for secrets
+- **Axiom #1**: Fail-Closed
+- **Axiom #5**: Least Privilege
+- **Axiom #6**: Observability (log everything)
+
+## Próximos Passos após Esta Documentação
+
+1. Aplicar sanitization FIRST no pipeline agent._invoke (Diff 2)
+2. Implementar Fernet PII masking no content_guard (Diff 3)
+3. Fortalecer RBAC com fallbacks fail-closed (Diff 5)
+4. Integrar HITL corretamente no agent loop (Diff 6)
+5. Criar endpoint /health completo (Diff 7)
+6. Validar toda a suite de testes ainda passa
+
+---
+*Documento gerado em 2026-09-15 como parte da Fase 1 de endurecimento de segurança.*
+*Próxima revisão: após aplicação de todos diffs da Fase 1.*

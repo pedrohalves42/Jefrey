@@ -14,6 +14,7 @@ from __future__ import annotations
 # CIPHER-026: Rate limiting per user_id/tool_name using Redis token bucket
 import sys
 import os
+os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")  # CIPHER-313: silencia telemetria chromadb
 import types
 import typing
 import logging
@@ -23,6 +24,14 @@ import json
 from pathlib import Path
 
 from src.jefrey.core.rate_limit import RateLimiter
+from src.jefrey.core.metrics import (
+    record_mcp_tool_call,
+    record_cache_hit,
+    record_cache_miss,
+    record_oauth_validation,
+    record_rate_limit_decision,
+    record_bridge_execution,
+)
 
 # garante que o pacote 'src' seja importável independente de como o processo sobe
 _ROOT = Path(__file__).resolve().parents[3]
@@ -30,12 +39,198 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from mcp.server.mcpserver import MCPServer
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
 from pydantic import create_model
 from langchain_core.tools import StructuredTool
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# M1: OAuth 2.0 Resource Server (MCP Spec 2026-07-28, Book 5)
+# Valida Authorization header antes de qualquer operacao de tool.
+# Modo dev: tokens do env var JEFREY_MCP_OAUTH_TOKENS (comma-separated).
+# Modo prod: JWT verification / introspection endpoint (futuro).
+# Sem token valido = 401 Unauthorized (fail-closed, AXIOM #1).
+# ---------------------------------------------------------------------------
+import hmac
+
+def _load_valid_tokens() -> set:
+    """Carrega tokens validos do .env (JEFREY_MCP_OAUTH_TOKENS)."""
+    raw = os.getenv("JEFREY_MCP_OAUTH_TOKENS", "")
+    return {t.strip() for t in raw.split(",") if t.strip()}
+
+_OAUTH_ENABLED = os.getenv("JEFREY_MCP_OAUTH_ENABLED", "false").lower() == "true"
+_VALID_TOKENS: set = _load_valid_tokens()
+
+def _validate_oauth_token(token: str) -> bool:
+    """Valida access token contra tokens registrados.
+    Usa hmac.compare_digest para evitar timing attacks (CIPHER-033).
+    """
+    if not token:
+        return False
+    for valid in _VALID_TOKENS:
+        if hmac.compare_digest(token, valid):
+            return True
+    return False
+
+def _extract_bearer_token(auth_header: str) -> str | None:
+    """Extrai token do header Authorization: Bearer <token>."""
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return None
+    return auth_header[len("Bearer "):].strip()
+
+async def _oauth_guard(request) -> JSONResponse | None:
+    """Guard OAuth 2.0 para rotas MCP.
+    Retorna JSONResponse 401 se token invalido, None se OK.
+    Rotas /health sao publicas (sem auth).
+    """
+    if not _OAUTH_ENABLED:
+        return None  # OAuth desabilitado - permite acesso (dev mode)
+
+    # /health e publico (usado por docker-compose healthcheck)
+    path = getattr(request, "url", None)
+    if path and str(path).rstrip("/").endswith("/health"):
+        return None
+
+    auth_header = request.headers.get("Authorization", "")
+    token = _extract_bearer_token(auth_header)
+
+    if not token:
+        logger.warning("MCP OAuth: missing Authorization header")
+        record_oauth_validation("missing")
+        return JSONResponse(
+            {"error": "missing_auth", "message": "Authorization header com Bearer token e obrigatorio"},
+            status_code=401,
+        )
+
+    if not _validate_oauth_token(token):
+        logger.warning("MCP OAuth: invalid token (length=%d)", len(token))
+        record_oauth_validation("invalid")
+        return JSONResponse(
+            {"error": "invalid_token", "message": "Access token invalido ou expirado"},
+            status_code=401,
+        )
+
+    # Token valido - extrair role do header se presente
+    role_header = request.headers.get("X-Jefrey-Role", None)
+    if role_header:
+        _ROLE_CV.set(role_header)
+
+    record_oauth_validation("valid")
+    return None  # Autenticado com sucesso
+
+
+# ---------------------------------------------------------------------------
+# M2: Discovery Cache (BUG-P3a-01) — Stateless Mode Optimization
+# Em stateless_http=True cada request HTTP eh independente; sem cache, o
+# list_tools() causa introspeccao repetida do SkillRegistry a cada chamada.
+# Cache local com TTL configuravel evita overhead e fornece fallback se
+# o registry ficar temporariamente indisponivel.
+# ---------------------------------------------------------------------------
+import time as _time_mod
+
+_tool_discovery_cache: dict[str, "StructuredTool"] = {}
+_cache_ttl: float = float(os.getenv("JEFREY_MCP_CACHE_TTL", "300"))  # 5 min default
+_cached_at: float = 0.0
+_cache_hits: int = 0
+_cache_misses: int = 0
+
+
+# ---------------------------------------------------------------------------
+# P0-1: OAuth Middleware for MCP Tool Execution (Starlette Middleware)
+# Valida Authorization header em TODAS as rotas MCP exceto /health e /metrics.
+# Isso garante que chamadas de ferramenta via protocolo MCP tambem exigem auth.
+# ---------------------------------------------------------------------------
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+
+class _OAuthMiddleware(BaseHTTPMiddleware):
+    """Middleware que valida OAuth para rotas MCP (exceto publicas)."""
+    
+    PUBLIC_PATHS = {"/health", "/metrics"}
+    
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path.rstrip("/")
+        
+        # Rotas publicas passam direto
+        if path in self.PUBLIC_PATHS:
+            return await call_next(request)
+        
+        # Aplica guard OAuth
+        guard_response = await _oauth_guard(request)
+        if guard_response is not None:
+            return guard_response
+        
+        # Token valido - continua
+        return await call_next(request)
+
+
+def _clear_discovery_cache() -> None:
+    """Limpa o cache de discovery (usado em testes e hot-reload)."""
+    global _cached_at, _cache_hits, _cache_misses
+    _tool_discovery_cache.clear()
+    _cached_at = 0.0
+    _cache_hits = 0
+    _cache_misses = 0
+    logger.info("MCP discovery cache cleared")
+
+
+def _is_cache_valid() -> bool:
+    """Verifica se o cache ainda esta dentro do TTL."""
+    if not _tool_discovery_cache:
+        return False
+    return (_time_mod.time() - _cached_at) < _cache_ttl
+
+
+def _populate_cache(tools: list) -> None:
+    """Popula o cache com as ferramentas registradas."""
+    global _cached_at
+    _tool_discovery_cache.clear()
+    for tool in tools:
+        _tool_discovery_cache[tool.name] = tool
+    _cached_at = _time_mod.time()
+    logger.info("MCP discovery cache populated: %d tools, TTL=%.0fs", len(_tool_discovery_cache), _cache_ttl)
+
+
+def _get_tool_wrapper(tool_name: str) -> "StructuredTool | None":
+    """Busca ferramenta no cache com fallback ao registry.
+
+    1. Cache hit dentro do TTL -> retorna direto (O(1))
+    2. Cache expirado -> tenta re-popular do registry
+    3. Registry falha -> usa cache stale (melhor que nada)
+    4. Nenhum -> retorna None
+    """
+    global _cache_hits, _cache_misses
+
+    # Fast path: cache valido
+    if _is_cache_valid() and tool_name in _tool_discovery_cache:
+        _cache_hits += 1
+        record_cache_hit()
+        return _tool_discovery_cache[tool_name]
+
+    # Cache miss ou expirado
+    _cache_misses += 1
+    record_cache_miss()
+
+    # Tenta re-popular
+    if not _is_cache_valid():
+        try:
+            from src.jefrey.skills import skill_registry
+            all_tools = list(skill_registry.get_all_tools())
+            _populate_cache(all_tools + INTEGRATION_TOOLS)
+        except Exception as exc:
+            logger.warning("MCP discovery cache refresh failed: %s", exc)
+            # Fallback: usa cache stale se disponivel
+            if tool_name in _tool_discovery_cache:
+                logger.info("Using stale cache for tool %s", tool_name)
+                _cache_hits += 1
+                return _tool_discovery_cache[tool_name]
+            return None
+
+    return _tool_discovery_cache.get(tool_name)
 
 # ---------------------------------------------------------------------------
 # Guarda cada chamada de ferramenta pelo PolicyEngine
@@ -78,9 +273,13 @@ async def _run_guarded(tool: StructuredTool, args: dict, thread_id: str) -> str:
         _rl_dec = await RateLimiter().is_allowed(thread_id, tool.name)
     except RuntimeError as _e:
         logger.warning("rate limit check falhou (fail-closed deny): %s", _e)
+        record_rate_limit_decision(tool.name, "deny")
         return f"[RATE LIMITED] thread={thread_id} (rate limiter unavailable)"
     if _rl_dec == "deny":
+        record_rate_limit_decision(tool.name, "deny")
         return f"[RATE LIMITED] thread={thread_id}"
+    else:
+        record_rate_limit_decision(tool.name, "allow")
     res = policy.decide(tool.name, args, ctx)
     policy.audit(tool.name, res, ctx)
 
@@ -95,19 +294,27 @@ async def _run_guarded(tool: StructuredTool, args: dict, thread_id: str) -> str:
 
     # CIPHER-018: timeout em tool.ainvoke (protege contra ferramentas que travam).
     from src.jefrey.core.config import get_settings as _gs
+    import time as _time_mod
 
     timeout = _gs().mcp.tool_timeout
+    _start = _time_mod.monotonic()
     try:
         result = await asyncio.wait_for(tool.ainvoke(args), timeout=timeout)
+        _elapsed = _time_mod.monotonic() - _start
+        record_mcp_tool_call(tool.name, "success", _elapsed)
     except asyncio.TimeoutError:
+        _elapsed = _time_mod.monotonic() - _start
         logger.warning("timeout na ferramenta %s após %ss", tool.name, timeout)
+        record_mcp_tool_call(tool.name, "timeout", _elapsed)
         return json.dumps(
             {"error": "timeout", "tool": tool.name,
              "message": f"Ferramenta não respondeu em {timeout}s"},
             ensure_ascii=False,
         )
     except Exception as e:  # noqa: BLE001
+        _elapsed = _time_mod.monotonic() - _start
         logger.exception("erro ao executar ferramenta %s", tool.name)
+        record_mcp_tool_call(tool.name, "error", _elapsed)
         return f"[ERRO NA FERRAMENTA] {tool.name}: {e}"
     return _stringify(result)
 
@@ -148,6 +355,20 @@ def _type_name(ann) -> str:
     return "str"
 
 
+def _tool_params_schema(tool) -> dict:
+    """Schema JSON-serializavel dos parametros da ferramenta (model_fields contem
+    FieldInfo, que o JSONResponse nao serializa -> 500 em /tools)."""
+    schema = getattr(tool, "args_schema", None)
+    try:
+        if isinstance(schema, dict):
+            return schema.get("properties", {})
+        if schema is not None and hasattr(schema, "model_json_schema"):
+            return schema.model_json_schema().get("properties", {})
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("schema de parametros indisponivel para %s: %s", getattr(tool, "name", "?"), exc)
+    return {}
+
+
 def _make_wrapper(tool: StructuredTool) -> callable:
     """Cria uma função async cuja assinatura = (thread_id, *args_da_ferramenta).
 
@@ -157,42 +378,59 @@ def _make_wrapper(tool: StructuredTool) -> callable:
     CIPHER-001: o papel (role) FOI REMOVIDO da assinatura. O papel é resolvido
     server-side em _resolve_role() — um cliente jamais pode se autodeclarar "admin".
     """
+    import inspect
+    from functools import wraps
+
     schema = tool.args_schema
     fields = schema.model_fields
-    ns: dict = {"str": str, "int": int, "float": float, "bool": bool, "dict": dict, "list": list}
-    ns["_run_guarded"] = _run_guarded
-    ns["_TOOL"] = tool
 
-    # ordem: obrigatórios primeiro (thread_id + campos obrigatórios da ferramenta),
-    # depois opcionais (campos opcionais da ferramenta).
-    required_params = ["thread_id: str"]
-    optional_params: list[str] = []
+    # Build parameter list for signature inspection
+    params = [inspect.Parameter("thread_id", inspect.Parameter.POSITIONAL_ONLY, annotation=str)]
+    _renamed: dict[str, str] = {}
     for fname, finfo in fields.items():
         tn = _type_name(finfo.annotation)
+        ann = _get_annotation(tn)
+        pname = fname
+        if fname == "thread_id":
+            # colide com o thread_id de conversa injetado pelo MCP (ex.: email.send_message
+            # tem thread_id = thread do Gmail). Expoe como email_thread_id e remapeia na chamada.
+            pname = "email_thread_id"
+            _renamed[pname] = fname
         if finfo.is_required():
-            required_params.append(f"{fname}: {tn}")
+            params.append(inspect.Parameter(pname, inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=ann))
         elif finfo.default is None:
-            optional_params.append(f"{fname}: {tn} = None")
+            params.append(inspect.Parameter(pname, inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=ann, default=None))
         else:
-            optional_params.append(f"{fname}: {tn} = {repr(finfo.default)}")
-    params = required_params + optional_params
+            params.append(inspect.Parameter(pname, inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=ann, default=finfo.default))
 
-    src = (
-        f"async def _wrap({', '.join(params)}) -> str:\n"
-        f"    _args = {{k: v for k, v in locals().items() if k not in ('thread_id',)}}\n"
-        f"    # CIPHER-120: input size guard (DoS/context bloat) — valida antes do PolicyEngine\n"
-        f"    for _k, _v in _args.items():\n"
-        f"        if isinstance(_v, str) and len(_v) > 8000:\n"
-        f"            return '[INPUT TOO LARGE] campo ' + _k + ' excede 8000 chars'\n"
-        f"        if isinstance(_v, list) and len(_v) > 100:\n"
-        f"            return '[INPUT TOO LARGE] lista ' + _k + ' excede 100 itens'\n"
-        f"    return await _run_guarded(_TOOL, _args, thread_id)\n"
-    )
-    exec(src, ns)
-    wrapper = ns["_wrap"]
-    wrapper.__name__ = f"mcp_{tool.name}"
-    wrapper.__doc__ = tool.description
-    return wrapper
+    # inspect.Signature exige obrigatorios antes dos com default; o schema pode
+    # declarar campos opcionais antes de obrigatorios. Ordenacao estavel: thread_id
+    # continua primeiro e a chamada por keyword nao muda.
+    params.sort(key=lambda _p: _p.default is not inspect.Parameter.empty)
+
+    async def _wrap(thread_id: str, **kwargs) -> str:
+        _args = {_renamed.get(k, k): v for k, v in kwargs.items()}
+        # CIPHER-120: input size guard (DoS/context bloat) — valida antes do PolicyEngine
+        for _k, _v in _args.items():
+            if isinstance(_v, str) and len(_v) > 8000:
+                return f"[INPUT TOO LARGE] campo {_k} excede 8000 chars"
+            if isinstance(_v, list) and len(_v) > 100:
+                return f"[INPUT TOO LARGE] lista {_k} excede 100 itens"
+        return await _run_guarded(tool, _args, thread_id)
+
+    # Set proper signature for MCP introspection
+    _wrap.__signature__ = inspect.Signature(params)
+    _wrap.__name__ = f"mcp_{tool.name}"
+    _wrap.__doc__ = tool.description
+    return _wrap
+
+def _get_annotation(type_name: str):
+    """Convert type name string to annotation."""
+    mapping = {
+        "str": str, "int": int, "float": float, "bool": bool,
+        "dict": dict, "list": list,
+    }
+    return mapping.get(type_name, str)
 
 
 # ---------------------------------------------------------------------------
@@ -240,6 +478,15 @@ INTEGRATION_TOOLS: list[StructuredTool] = [
 # ---------------------------------------------------------------------------
 # Construção do servidor
 # ---------------------------------------------------------------------------
+def _get_bridge_health() -> dict:
+    """Info do n8n bridge para health endpoint (fail-safe)."""
+    try:
+        from src.jefrey.mcp.n8n_bridge import get_bridge
+        return get_bridge().health()
+    except Exception:
+        return {"status": "unavailable"}
+
+
 def build_server() -> MCPServer:
     from src.jefrey.core.registry import register_default_tools
     from src.jefrey.skills import skill_registry, load_skills
@@ -267,6 +514,10 @@ def build_server() -> MCPServer:
 
     logger.info("MCP: %d ferramentas registradas", registered)
 
+    # BUG-P3a-01: Popula discovery cache com todas as ferramentas registradas
+    all_registered_tools = list(skill_registry.get_all_tools()) + INTEGRATION_TOOLS
+    _populate_cache(all_registered_tools)
+
     @mcp_server.custom_route("/health", methods=["GET"])
     async def health(request):  # noqa: ANN001 - handler de rota Starlette
         from src.jefrey.core.memory import get_memory_manager
@@ -286,26 +537,200 @@ def build_server() -> MCPServer:
                 "redis": hm.get("redis"),
                 "policy": {"mode": pol.mode, "autonomous": pol.autonomous},
                 "tools": registered,
+                "cache": {
+                    "size": len(_tool_discovery_cache),
+                    "valid": _is_cache_valid(),
+                    "hits": _cache_hits,
+                    "misses": _cache_misses,
+                    "ttl": _cache_ttl,
+                },
+                "oauth_enabled": _OAUTH_ENABLED,
+                "oauth_tokens_configured": len(_VALID_TOKENS),
+                "bridge": _get_bridge_health(),
             }
         )
+
+
+    # M1: Rota OAuth-protegida para verificar autenticacao
+    @mcp_server.custom_route("/oauth/status", methods=["GET"])
+    async def oauth_status(request):
+        """Endpoint protegido por OAuth - retorna status do token."""
+        guard_response = await _oauth_guard(request)
+        if guard_response is not None:
+            return guard_response
+        return JSONResponse({
+            "authenticated": True,
+            "oauth_enabled": _OAUTH_ENABLED,
+            "tokens_configured": len(_VALID_TOKENS),
+            "role": _resolve_role(),
+        })
+
+
+    # M2: Rotas de gerenciamento do discovery cache (BUG-P3a-01)
+    @mcp_server.custom_route("/cache/status", methods=["GET"])
+    async def cache_status(request):
+        """Status do discovery cache (protegido por OAuth)."""
+        guard_response = await _oauth_guard(request)
+        if guard_response is not None:
+            return guard_response
+        return JSONResponse({
+            "cache_size": len(_tool_discovery_cache),
+            "cache_ttl": _cache_ttl,
+            "cached_at": _cached_at,
+            "cache_valid": _is_cache_valid(),
+            "cache_hits": _cache_hits,
+            "cache_misses": _cache_misses,
+            "tools": list(_tool_discovery_cache.keys()),
+        })
+
+    @mcp_server.custom_route("/cache/clear", methods=["POST"])
+    async def cache_clear(request):
+        """Limpa discovery cache (protegido por OAuth). Util para hot-reload."""
+        guard_response = await _oauth_guard(request)
+        if guard_response is not None:
+            return guard_response
+        _clear_discovery_cache()
+        return JSONResponse({"cleared": True, "message": "Discovery cache limpo"})
+
+
+    # M4: Rota de status do n8n Bridge (BUG-P3a Diff 4)
+    @mcp_server.custom_route("/bridge/status", methods=["GET"])
+    async def bridge_status(request):
+        """Status do n8n bridge (protegido por OAuth)."""
+        guard_response = await _oauth_guard(request)
+        if guard_response is not None:
+            return guard_response
+        from src.jefrey.mcp.n8n_bridge import get_bridge, list_workflows
+        bridge = get_bridge()
+        return JSONResponse({
+            "bridge": bridge.health(),
+            "workflows": list_workflows(),
+        })
+
+    # M4: Rota para executar workflow via bridge (protegido por OAuth)
+    @mcp_server.custom_route("/bridge/execute", methods=["POST"])
+    async def bridge_execute(request):
+        """Executa workflow n8n via bridge (protegido por OAuth + HITL)."""
+        guard_response = await _oauth_guard(request)
+        if guard_response is not None:
+            return guard_response
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({"error": "invalid_json"}, status_code=400)
+        workflow = body.get("workflow", "")
+        args = body.get("args", {})
+        user_id = body.get("user_id", "system")
+        thread_id = body.get("thread_id", "")
+        if not workflow:
+            return JSONResponse({"error": "workflow name required"}, status_code=400)
+        from src.jefrey.mcp.n8n_bridge import get_bridge
+        bridge = get_bridge()
+        result = await bridge.execute(workflow, args, user_id=user_id, thread_id=thread_id)
+        # Record bridge execution metric
+        mode = "mcp" if bridge._mode.value == "mcp" else "webhook"
+        status_map = {
+            "success": "success",
+            "failed": "error",
+            "timeout": "timeout",
+            "rejected": "hitl_rejected",
+        }
+        record_bridge_execution(workflow, mode, status_map.get(result.status.value, "error"))
+        status_code = 200 if result.status.value in ("success", "approved") else 422
+        return JSONResponse(result.to_dict(), status_code=status_code)
+
+
+    # M5: Prometheus /metrics endpoint (Diff 5 Enhanced Health)
+    @mcp_server.custom_route("/metrics", methods=["GET"])
+    async def metrics_endpoint(request):
+        """Endpoint Prometheus para scraping de métricas."""
+        # /metrics é público (sem OAuth) - padrão Prometheus
+        return Response(
+            content=generate_latest(),
+            media_type=CONTENT_TYPE_LATEST,
+        )
+
+    # Sprint 2 Task 1: Rota pública de descoberta de tools
+    @mcp_server.custom_route("/tools", methods=["GET"])
+    async def list_tools(request):
+        """Lista todas as ferramentas MCP disponíveis (público, sem OAuth).
+        
+        Used by clients (CLI, n8n, frontend) para discover available tools
+        before authentication. Rate-limited per IP for DoS protection.
+        """
+        all_tools = []
+        # Tools from skill registry
+        from src.jefrey.skills import skill_registry
+        for tool in skill_registry.get_all_tools():
+            all_tools.append({
+                "name": tool.name,
+                "description": tool.description or "",
+                "parameters": _tool_params_schema(tool),
+                "category": "skill",
+            })
+        # Integration tools
+        for tool in INTEGRATION_TOOLS:
+            all_tools.append({
+                "name": tool.name,
+                "description": tool.description or "",
+                "parameters": _tool_params_schema(tool),
+                "category": "integration",
+            })
+        # Cache info
+        return JSONResponse({
+            "tools": all_tools,
+            "total": len(all_tools),
+            "cache_size": len(_tool_discovery_cache),
+            "oauth_enabled": _OAUTH_ENABLED,
+        })
+
+    # P0-1: Add OAuth middleware to protect all MCP endpoints (including tool calls)
+    # O middleware OAuth e aplicado em main() sobre o app Starlette (mcp 2.x nao tem .app).
 
     return mcp_server
 
 
 def main() -> None:
     from src.jefrey.core.config import get_settings
+    from src.jefrey.core.telemetry import init_telemetry
+    import json
 
     cfg = get_settings().mcp
+    tel_cfg = get_settings().telemetry
+
+    # Initialize OpenTelemetry if enabled
+    if tel_cfg.enabled:
+        otlp_headers = {}
+        if tel_cfg.otlp_headers:
+            try:
+                otlp_headers = json.loads(tel_cfg.otlp_headers)
+            except Exception:
+                logger.warning("Invalid JEFREY_TELEMETRY__OTLP_HEADERS JSON")
+        init_telemetry(
+            service_name=tel_cfg.service_name,
+            otlp_endpoint=tel_cfg.otlp_endpoint or None,
+            otlp_headers=otlp_headers or None,
+            sample_rate=tel_cfg.sample_rate,
+            enable_console=tel_cfg.enable_console,
+        )
+        logger.info("OpenTelemetry initialized (endpoint=%s)", tel_cfg.otlp_endpoint or "none")
+
     mcp_server = build_server()
     logger.info("Iniciando Jefrey MCP Server em %s:%s (%s)", cfg.host, cfg.port, cfg.transport)
-    mcp_server.run(
-        transport=cfg.transport,
-        host=cfg.host,
-        port=cfg.port,
-        streamable_http_path=cfg.path,
-        json_response=cfg.json_response,
-        stateless_http=cfg.stateless_http,
-    )
+    if cfg.transport == "streamable-http":
+        # mcp 2.x: MCPServer nao expoe .app; gera o app Starlette, protege com OAuth
+        # (P0-1) e serve com uvicorn. Rotas custom (/health, /metrics, /tools) ja vem no app.
+        import uvicorn
+        app = mcp_server.streamable_http_app(
+            host=cfg.host,
+            streamable_http_path=cfg.path,
+            json_response=cfg.json_response,
+            stateless_http=cfg.stateless_http,
+        )
+        app.add_middleware(_OAuthMiddleware)
+        uvicorn.run(app, host=cfg.host, port=cfg.port, log_level="info")
+    else:
+        mcp_server.run(transport=cfg.transport)
 
 
 if __name__ == "__main__":

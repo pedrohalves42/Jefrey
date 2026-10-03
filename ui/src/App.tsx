@@ -10,16 +10,47 @@ import { ThemeWheel } from "@/components/ThemeWheel"
 import { ensureDevToken, getToken } from "@/lib/api"
 import { playChime } from "@/lib/audio"
 import Chat from "@/pages/Chat"
+import ChatStudio from "@/pages/ChatStudio"
+import MemoryStudio from "@/pages/MemoryStudio"
+import AutomationStudio from "@/pages/AutomationStudio"
 import Memory from "@/pages/Memory"
 import Approvals from "@/pages/Approvals"
 import Observability from "@/pages/Observability"
 import Settings from "@/pages/Settings"
 import Knowledge from "@/pages/KnowledgePage"
 import { Tour } from "@/components/Tour"
-import { SkillCard } from "@/components/SkillCard"
+import { SkillManager } from "@/components/SkillManager"
 import { AuthButton } from "@/components/AuthButton"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 
 const qc = new QueryClient()
+
+function StudioRouter() {
+  return (
+    <Tabs defaultValue="chat" className="w-full">
+      <TabsList className="grid w-full grid-cols-3 mb-4">
+        <TabsTrigger value="chat" className="data-[state=active]:bg-cyan-500/20 data-[state=active]:text-cyan-300">
+          Chat Studio
+        </TabsTrigger>
+        <TabsTrigger value="memory" className="data-[state=active]:bg-cyan-500/20 data-[state=active]:text-cyan-300">
+          Memory Studio
+        </TabsTrigger>
+        <TabsTrigger value="automation" className="data-[state=active]:bg-cyan-500/20 data-[state=active]:text-cyan-300">
+          Automation Studio
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value="chat">
+        <ChatStudio />
+      </TabsContent>
+      <TabsContent value="memory">
+        <MemoryStudio />
+      </TabsContent>
+      <TabsContent value="automation">
+        <AutomationStudio />
+      </TabsContent>
+    </Tabs>
+  )
+}
 
 export default function App() {
   const [ready, setReady] = useState(!!getToken())
@@ -55,13 +86,13 @@ export default function App() {
         <div className="min-h-screen bg-background">
           <header className="sticky top-0 z-40 border-b glass-strong backdrop-blur-xl">
             <div className="max-w-5xl mx-auto p-3 flex items-center gap-3">
-              <h1 className="font-bold text-lg tracking-tight">Jefrey</h1>
-              <span className="text-xs text-muted-foreground hidden sm:inline">1 programa, 7 pecas — 175/175 + 21/21</span>
+              <h1 className="font-bold text-lg tracking-tight text-cyan-100">Jefrey</h1>
+              <span className="text-xs text-muted-foreground hidden sm:inline text-cyan-200/60">1 programa, 7 pecas — 175/175 + 21/21</span>
               <div className="ml-auto flex items-center gap-3">
-                <button onClick={()=> setWakeEnabled(v=>!v)} title={wake.supported ? (wakeEnabled ? "Desativar wake Jefrey" : "Ativar wake Jefrey") : "Wake nao suportado neste browser"} className={`text-[10px] px-2 py-1 rounded-full font-mono ${wakeEnabled ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-white/5 text-white/50 border-white/10"}`}>{wakeEnabled ? "WAKE ON" : "WAKE OFF"}</button>
+                <button onClick={()=> setWakeEnabled(v=>!v)} title={wake.supported ? (wakeEnabled ? "Desativar wake Jefrey" : "Ativar wake Jefrey") : "Wake nao suportado neste browser"} className={`text-[10px] px-2 py-1 rounded-full font-mono border transition-all ${wakeEnabled ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30" : "bg-white/5 text-white/50 border-white/10 hover:bg-white/10"}`}>{wakeEnabled ? "WAKE ON" : "WAKE OFF"}</button>
                 <AuthButton />
                 <ThemeWheel />
-                {ready && <span className="text-xs text-emerald-600 font-medium hidden sm:inline">Pronto</span>}
+                {ready && <span className="text-xs text-emerald-400 font-medium hidden sm:inline">Pronto</span>}
               </div>
             </div>
           </header>
@@ -76,6 +107,7 @@ export default function App() {
               <SkillManager />
               <Routes>
                 <Route path="/" element={<Chat/>} />
+                <Route path="/studio" element={<StudioRouter />} />
                 <Route path="/memory" element={<Memory/>} />
                 <Route path="/approvals" element={<Approvals/>} />
                 <Route path="/observability" element={<Observability/>} />

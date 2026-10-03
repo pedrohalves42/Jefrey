@@ -10,7 +10,7 @@ Axiom #7: Skill base versioning - risk levels can vary by skill version.
 
 from typing import Optional, Dict, Any
 
-from src.jefrey.core.policy import PolicyResult, PolicyContext, RiskLevel
+from src.jefrey.core.policy import PolicyContext, RiskLevel  # CIPHER-312: PolicyResult nao existe
 
 
 def assess_skill_risk(

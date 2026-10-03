@@ -33,7 +33,7 @@ export function mapHttpError(status: number): string {
 }
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    "Content-Type": "application/json; charset=utf-8",
     ...authHeaders(),
     ...((init.headers as Record<string, string>) || {}),
   };

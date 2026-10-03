@@ -152,7 +152,12 @@ class ToolExecutor:
 
         # CIPHER-208: fallback user_id com WARNING log
         # Garante que user_id sempre esteja presente (Axiom #2)
-        user_id = args.get("user_id") or self._user_id or "system"
+        # CIPHER-309: o usuario autenticado (self._user_id) tem precedencia sobre o que vier nos
+        # args (que podem ter sido gerados pelo LLM) - evita escrever/ler dados de outro tenant.
+        if args.get("user_id") and self._user_id and args.get("user_id") != self._user_id:
+            logger.warning("CIPHER-309: user_id dos args (%s) ignorado; usando o autenticado (tool=%s)",
+                           args.get("user_id"), tool_name)
+        user_id = self._user_id or args.get("user_id") or "system"
         fallback_used = "user_id" not in args and self._user_id is not None
         if fallback_used:
             logger.warning(

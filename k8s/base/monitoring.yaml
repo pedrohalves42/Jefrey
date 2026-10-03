@@ -1,0 +1,1187 @@
+# =============================================================================
+# KUBERNETES MONITORING STACK - Prometheus, Alertmanager, Grafana, Blackbox
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# PROMETHEUS
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: jefrey
+  labels:
+    app: jefrey
+    component: prometheus
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9090
+      targetPort: 9090
+      protocol: TCP
+      name: http
+  selector:
+    app: jefrey
+    component: prometheus
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: jefrey
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        cluster: 'jefrey-prod'
+        environment: 'production'
+
+    rule_files:
+      - '/etc/prometheus/rules/*.yml'
+
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets: ['alertmanager:9093']
+
+    scrape_configs:
+      # Prometheus self-monitoring
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+
+      # Jefrey API
+      - job_name: 'jefrey-api'
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: ['jefrey']
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_component]
+            action: keep
+            regex: 'api'
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: pod
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: namespace
+        metrics_path: /metrics
+
+      # Jefrey MCP
+      - job_name: 'jefrey-mcp'
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: ['jefrey']
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_component]
+            action: keep
+            regex: 'mcp'
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: pod
+
+      # Ollama
+      - job_name: 'ollama'
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: ['jefrey']
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_component]
+            action: keep
+            regex: 'ollama'
+
+      # Node Exporter
+      - job_name: 'node-exporter'
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - source_labels: [__address__]
+            regex: '(.*):10250'
+            replacement: '${1}:9100'
+            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+
+      # Cadvisor
+      - job_name: 'cadvisor'
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - source_labels: [__address__]
+            regex: '(.*):10250'
+            replacement: '${1}:8080'
+            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+
+      # Blackbox (meta-monitoring)
+      - job_name: 'blackbox-http'
+        metrics_path: /probe
+        params:
+          module: [http_health_check]
+        kubernetes_sd_configs:
+          - role: service
+            namespaces:
+              names: ['jefrey']
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            action: keep
+            regex: 'jefrey-api|mcp-server|prometheus|alertmanager|grafana'
+          - source_labels: [__meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+            action: replace
+            target_label: __param_target
+            regex: (.+);(.+)
+            replacement: http://${1}.jefrey.svc.cluster.local:${2}/health
+          - source_labels: [__param_target]
+            action: replace
+            target_label: instance
+          - target_label: __address__
+            replacement: blackbox:9115
+
+      # Blackbox TCP (databases)
+      - job_name: 'blackbox-tcp'
+        metrics_path: /probe
+        params:
+          module: [tcp_connect]
+        static_configs:
+          - targets: ['postgres:5432', 'redis:6379', 'ollama:11434']
+        relabel_configs:
+          - target_label: __address__
+            replacement: blackbox:9115
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: jefrey
+  labels:
+    app: jefrey
+    component: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jefrey
+      component: prometheus
+  template:
+    metadata:
+      labels:
+        app: jefrey
+        component: prometheus
+    spec:
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        runAsNonRoot: true
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.53.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - '--config.file=/etc/prometheus/prometheus.yml'
+            - '--storage.tsdb.path=/prometheus'
+            - '--storage.tsdb.retention.time=90d'
+            - '--storage.tsdb.retention.size=50GB'
+            - '--web.enable-lifecycle'
+            - '--web.enable-admin-api'
+          ports:
+            - containerPort: 9090
+              name: http
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: rules
+              mountPath: /etc/prometheus/rules
+            - name: data
+              mountPath: /prometheus
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9090
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9090
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: rules
+          configMap:
+            name: prometheus-rules
+        - name: data
+          persistentVolumeClaim:
+            claimName: prometheus-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-pvc
+  namespace: jefrey
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: fast-ssd
+  resources:
+    requests:
+      storage: 100Gi
+
+# -----------------------------------------------------------------------------
+# PROMETHEUS RULES (Jefrey-specific)
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules
+  namespace: jefrey
+data:
+  jefrey-mcp.yml: |
+    groups:
+      - name: jefrey-mcp-health
+        interval: 30s
+        rules:
+          - alert: JefreyMCPAPIServiceDown
+            expr: up{job="jefrey-api"} == 0
+            for: 1m
+            labels:
+              severity: critical
+              slo: availability
+            annotations:
+              summary: "Jefrey API service down"
+              description: "API up==0 for 1m - check docker logs, health endpoint, postgres/redis"
+
+          - alert: JefreyMCPServerDown
+            expr: up{job="jefrey-mcp"} == 0
+            for: 1m
+            labels:
+              severity: critical
+              slo: availability
+            annotations:
+              summary: "Jefrey MCP server down"
+              description: "MCP up==0 for 1m - check docker logs, health endpoint"
+
+          - alert: JefreyConfigInvalid
+            expr: jefrey_config_valid == 0
+            for: 1m
+            labels:
+              severity: critical
+              slo: config
+            annotations:
+              summary: "Jefrey config invalid"
+              description: "CONFIG_VALID==0 for 1m - check env vars, HMAC, OAuth, Redis password"
+
+      - name: jefrey-mcp-performance
+        interval: 30s
+        rules:
+          - alert: JefreyMCPToolLatencyHigh
+            expr: histogram_quantile(0.95, sum(rate(jefrey_mcp_tool_latency_seconds_bucket[5m])) by (le, tool_name)) > 10
+            for: 5m
+            labels:
+              severity: warning
+              slo: latency
+            annotations:
+              summary: "MCP tool latency p95 > 10s"
+              description: "Tool {{ $labels.tool_name }} p95 latency > 10s for 5m"
+
+          - alert: JefreyMCPToolLatencyCritical
+            expr: histogram_quantile(0.95, sum(rate(jefrey_mcp_tool_latency_seconds_bucket[5m])) by (le, tool_name)) > 30
+            for: 2m
+            labels:
+              severity: critical
+              slo: latency
+            annotations:
+              summary: "MCP tool latency p95 > 30s"
+              description: "Tool {{ $labels.tool_name }} p95 latency > 30s for 2m"
+
+          - alert: JefreyMCPCacheHitRateLow
+            expr: (jefrey_mcp_cache_hits_total / (jefrey_mcp_cache_hits_total + jefrey_mcp_cache_misses_total)) < 0.5
+            for: 10m
+            labels:
+              severity: warning
+              slo: performance
+            annotations:
+              summary: "MCP discovery cache hit rate < 50%"
+              description: "Cache hit rate below 50% for 10m - check TTL, tool registration"
+
+      - name: jefrey-mcp-security
+        interval: 30s
+        rules:
+          - alert: JefreyMCPOAuthInvalidTokenSpike
+            expr: rate(jefrey_mcp_oauth_validations_total{result="invalid"}[5m]) > 10
+            for: 5m
+            labels:
+              severity: warning
+              slo: security
+            annotations:
+              summary: "MCP OAuth invalid token rate > 10/min"
+              description: "High rate of invalid OAuth tokens - possible attack or misconfiguration"
+
+          - alert: JefreyMCPOAuthMissingTokenSpike
+            expr: rate(jefrey_mcp_oauth_validations_total{result="missing"}[5m]) > 20
+            for: 5m
+            labels:
+              severity: warning
+              slo: security
+            annotations:
+              summary: "MCP OAuth missing token rate > 20/min"
+              description: "High rate of requests without OAuth tokens"
+
+          - alert: JefreyMCPRateLimitDenialsHigh
+            expr: rate(jefrey_mcp_rate_limit_decisions_total{decision="deny"}[5m]) > 5
+            for: 5m
+            labels:
+              severity: warning
+              slo: rate_limit
+            annotations:
+              summary: "MCP rate limit denials > 5/min"
+              description: "High rate of rate limit denials - possible abuse or limits too low"
+
+      - name: jefrey-mcp-operations
+        interval: 30s
+        rules:
+          - alert: JefreyMCPToolsBlockedHigh
+            expr: rate(jefrey_mcp_tools_blocked_total[5m]) > 5
+            for: 5m
+            labels:
+              severity: warning
+              slo: security
+            annotations:
+              summary: "MCP tools blocked rate > 5/min"
+              description: "High rate of tool blocks by PolicyEngine"
+
+          - alert: JefreyMCPBridgeErrorsHigh
+            expr: rate(jefrey_mcp_bridge_executions_total{status="error"}[5m]) > 2
+            for: 5m
+            labels:
+              severity: warning
+              slo: operations
+            annotations:
+              summary: "MCP bridge execution errors > 2/min"
+              description: "n8n bridge executions failing frequently"
+
+          - alert: JefreyMCPBridgeTimeoutHigh
+            expr: rate(jefrey_mcp_bridge_executions_total{status="timeout"}[5m]) > 1
+            for: 5m
+            labels:
+              severity: warning
+              slo: operations
+            annotations:
+              summary: "MCP bridge timeouts > 1/min"
+              description: "n8n bridge timeouts increasing"
+
+          - alert: JefreyMCPHITLPendingAccumulation
+            expr: jefrey_mcp_hitl_pending_total > 10
+            for: 10m
+            labels:
+              severity: warning
+              slo: operations
+            annotations:
+              summary: "MCP HITL pending approvals > 10"
+              description: "Many HITL approvals pending - check approval workflow"
+
+          - alert: JefreyMCPHITLRejectRateHigh
+            expr: rate(jefrey_mcp_hitl_decisions_total{decision="rejected"}[5m]) > 0.5
+            for: 5m
+            labels:
+              severity: warning
+              slo: security
+            annotations:
+              summary: "MCP HITL rejection rate > 0.5/min"
+              description: "High rate of HITL rejections - possible policy issues"
+
+# -----------------------------------------------------------------------------
+# ALERTMANAGER
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+  namespace: jefrey
+  labels:
+    app: jefrey
+    component: alertmanager
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9093
+      targetPort: 9093
+      protocol: TCP
+      name: http
+  selector:
+    app: jefrey
+    component: alertmanager
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: jefrey
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 5m
+      smtp_smarthost: '${SMTP_HOST:-smtp.example.com}:587'
+      smtp_from: 'alerts@jefrey.example.com'
+      smtp_auth_username: '${SMTP_USER:-alerts@jefrey.example.com}'
+      smtp_auth_password: '${SMTP_PASSWORD}'
+      smtp_require_tls: true
+
+    templates:
+      - '/etc/alertmanager/templates/*.tmpl'
+
+    route:
+      group_by: ['alertname', 'job', 'severity']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      receiver: 'default'
+      routes:
+        - match:
+            severity: critical
+          receiver: 'critical-alerts'
+          group_wait: 0s
+          group_interval: 1m
+          repeat_interval: 1h
+          continue: true
+        - match:
+            slo: security
+          receiver: 'security-alerts'
+          group_wait: 10s
+          group_interval: 5m
+          repeat_interval: 2h
+          continue: true
+        - match:
+            slo: latency
+          receiver: 'performance-alerts'
+          group_wait: 1m
+          group_interval: 10m
+          repeat_interval: 6h
+        - match:
+            slo: availability
+          receiver: 'critical-alerts'
+          group_wait: 0s
+          group_interval: 2m
+          repeat_interval: 30m
+
+    inhibit_rules:
+      - source_match:
+          alertname: 'JefreyMCPAPIServiceDown'
+        target_match_re:
+          alertname: 'JefreyMCP.*'
+        equal: ['job', 'instance']
+      - source_match:
+          alertname: 'JefreyConfigInvalid'
+        target_match_re:
+          alertname: 'JefreyConfig.*'
+        equal: ['job']
+
+    receivers:
+      - name: 'default'
+        email_configs:
+          - to: '${ALERT_EMAIL_DEFAULT:-ops@jefrey.example.com}'
+            send_resolved: true
+      - name: 'critical-alerts'
+        email_configs:
+          - to: '${ALERT_EMAIL_CRITICAL:-oncall@jefrey.example.com}'
+            send_resolved: true
+      - name: 'security-alerts'
+        email_configs:
+          - to: '${ALERT_EMAIL_SECURITY:-security@jefrey.example.com}'
+            send_resolved: true
+      - name: 'performance-alerts'
+        email_configs:
+          - to: '${ALERT_EMAIL_PERFORMANCE:-ops@jefrey.example.com}'
+            send_resolved: true
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: jefrey
+  labels:
+    app: jefrey
+    component: alertmanager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jefrey
+      component: alertmanager
+  template:
+    metadata:
+      labels:
+        app: jefrey
+        component: alertmanager
+    spec:
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        runAsNonRoot: true
+      containers:
+        - name: alertmanager
+          image: prom/alertmanager:v0.27.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - '--config.file=/etc/alertmanager/alertmanager.yml'
+            - '--storage.path=/alertmanager'
+            - '--data.retention=120d'
+          ports:
+            - containerPort: 9093
+              name: http
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alertmanager
+            - name: data
+              mountPath: /alertmanager
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9093
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9093
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+      volumes:
+        - name: config
+          configMap:
+            name: alertmanager-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: alertmanager-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: alertmanager-pvc
+  namespace: jefrey
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 10Gi
+
+# -----------------------------------------------------------------------------
+# GRAFANA
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: jefrey
+  labels:
+    app: jefrey
+    component: grafana
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP
+      name: http
+  selector:
+    app: jefrey
+    component: grafana
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: jefrey
+data:
+  datasource.yml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        orgId: 1
+        uid: PBFA97CFB590B2093
+        url: http://prometheus:9090
+        isDefault: true
+        editable: false
+        jsonData:
+          timeInterval: "15s"
+          httpMethod: "POST"
+          queryTimeout: "60s"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: jefrey
+data:
+  dashboard.yml: |
+    apiVersion: 1
+    providers:
+      - name: "Jefrey"
+        orgId: 1
+        folder: "Jefrey"
+        type: file
+        disableDeletion: false
+        editable: false
+        allowUiUpdates: false
+        updateIntervalSeconds: 10
+        options:
+          path: /var/lib/grafana/dashboards
+          foldersFromFilesStructure: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: jefrey
+  labels:
+    app: jefrey
+    component: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jefrey
+      component: grafana
+  template:
+    metadata:
+      labels:
+        app: jefrey
+        component: grafana
+    spec:
+      securityContext:
+        runAsUser: 472
+        runAsGroup: 472
+        fsGroup: 472
+        runAsNonRoot: true
+      containers:
+        - name: grafana
+          image: grafana/grafana:11.1.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: "admin"
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jefrey-secrets
+                  key: GRAFANA_PASSWORD
+            - name: GF_USERS_ALLOW_SIGN_UP
+              value: "false"
+            - name: GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH
+              value: "/var/lib/grafana/dashboards/jefrey.json"
+            - name: GF_SERVER_ROOT_URL
+              value: "https://jefrey.example.com/grafana/"
+            - name: GF_SERVER_SERVE_FROM_SUB_PATH
+              value: "true"
+          ports:
+            - containerPort: 3000
+              name: http
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboards
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboard-jefrey
+              mountPath: /var/lib/grafana/dashboards/jefrey.json
+              subPath: jefrey.json
+            - name: data
+              mountPath: /var/lib/grafana
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /app/.cache
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+      volumes:
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+        - name: dashboards
+          configMap:
+            name: grafana-dashboards
+        - name: dashboard-jefrey
+          configMap:
+            name: grafana-dashboard-jefrey
+        - name: data
+          persistentVolumeClaim:
+            claimName: grafana-pvc
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+        - name: cache
+          emptyDir:
+            sizeLimit: 128Mi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-pvc
+  namespace: jefrey
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 5Gi
+
+# Grafana Dashboard ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-jefrey
+  namespace: jefrey
+data:
+  jefrey.json: |
+    {
+      "annotations": {"list": []},
+      "editable": false,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "title": "API Health",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [
+                {"options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}, "type": "value"}
+              ],
+              "thresholds": {"steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+            }
+          },
+          "targets": [{"expr": "up{job=\"jefrey-api\"}", "legendFormat": "API", "refId": "A"}]
+        },
+        {
+          "title": "MCP Health",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [
+                {"options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}, "type": "value"}
+              ],
+              "thresholds": {"steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+            }
+          },
+          "targets": [{"expr": "up{job=\"jefrey-mcp\"}", "legendFormat": "MCP", "refId": "A"}]
+        },
+        {
+          "title": "Bridge Health",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [
+                {"options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}, "type": "value"}
+              ],
+              "thresholds": {"steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+            }
+          },
+          "targets": [{"expr": "up{job=\"jefrey-mcp\"} * on() jefrey_mcp_bridge_health", "legendFormat": "Bridge", "refId": "A"}]
+        },
+        {
+          "title": "MCP Tool Calls Rate (5m)",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+          "targets": [{"expr": "rate(jefrey_mcp_tool_calls_total[5m])", "legendFormat": "{{tool_name}} - {{status}}", "refId": "A"}]
+        },
+        {
+          "title": "MCP Tool Latency (p50/p95)",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+          "targets": [
+            {"expr": "histogram_quantile(0.50, sum(rate(jefrey_mcp_tool_latency_seconds_bucket[5m])) by (le, tool_name))", "legendFormat": "p50 - {{tool_name}}", "refId": "A"},
+            {"expr": "histogram_quantile(0.95, sum(rate(jefrey_mcp_tool_latency_seconds_bucket[5m])) by (le, tool_name))", "legendFormat": "p95 - {{tool_name}}", "refId": "B"}
+          ]
+        },
+        {
+          "title": "Discovery Cache Hit Rate",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 12},
+          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+          "targets": [{"expr": "jefrey_mcp_cache_hits_total / (jefrey_mcp_cache_hits_total + jefrey_mcp_cache_misses_total)", "legendFormat": "Hit Rate", "refId": "A"}]
+        },
+        {
+          "title": "OAuth Validation Failures",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 12},
+          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+          "targets": [{"expr": "rate(jefrey_mcp_oauth_validations_total{result=\"invalid\"}[5m])", "legendFormat": "Invalid", "refId": "A"}, {"expr": "rate(jefrey_mcp_oauth_validations_total{result=\"missing\"}[5m])", "legendFormat": "Missing", "refId": "B"}]
+        },
+        {
+          "title": "Rate Limit Decisions",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 12},
+          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+          "targets": [{"expr": "rate(jefrey_mcp_rate_limit_decisions_total[5m])", "legendFormat": "{{decision}}", "refId": "A"}]
+        },
+        {
+          "title": "n8n Bridge Executions",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
+          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+          "targets": [{"expr": "rate(jefrey_mcp_bridge_executions_total[5m])", "legendFormat": "{{workflow}} - {{mode}} - {{status}}", "refId": "A"}]
+        },
+        {
+          "title": "Policy Blocks & HITL Approvals",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20},
+          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+          "targets": [{"expr": "rate(jefrey_mcp_tools_blocked_total[5m])", "legendFormat": "Blocked - {{tool_name}}", "refId": "A"}, {"expr": "rate(jefrey_mcp_hitl_approvals_created_total[5m])", "legendFormat": "HITL Created - {{tool_name}}", "refId": "B"}, {"expr": "rate(jefrey_mcp_hitl_decisions_total[5m])", "legendFormat": "HITL Decided - {{decision}}", "refId": "C"}]
+        },
+        {
+          "title": "LLM Latency Distribution",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 28},
+          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+          "targets": [
+            {"expr": "histogram_quantile(0.50, sum(rate(jefrey_llm_latency_seconds_bucket[5m])) by (le))", "legendFormat": "p50", "refId": "A"},
+            {"expr": "histogram_quantile(0.95, sum(rate(jefrey_llm_latency_seconds_bucket[5m])) by (le))", "legendFormat": "p95", "refId": "B"},
+            {"expr": "histogram_quantile(0.99, sum(rate(jefrey_llm_latency_seconds_bucket[5m])) by (le))", "legendFormat": "p99", "refId": "C"}
+          ]
+        }
+      ],
+      "refresh": "10s",
+      "schemaVersion": 39,
+      "tags": ["jefrey", "observability"],
+      "templating": {"list": []},
+      "time": {"from": "now-1h", "to": "now"},
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Jefrey MCP - Observability Dashboard",
+      "uid": "jefrey-mcp",
+      "version": 1
+    }
+
+# -----------------------------------------------------------------------------
+# BLACKBOX EXPORTER (Meta-monitoring)
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: blackbox
+  namespace: jefrey
+  labels:
+    app: jefrey
+    component: blackbox
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9115
+      targetPort: 9115
+      protocol: TCP
+      name: http
+  selector:
+    app: jefrey
+    component: blackbox
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: blackbox-config
+  namespace: jefrey
+data:
+  blackbox.yml: |
+    modules:
+      http_health_check:
+        prober: http
+        timeout: 10s
+        http:
+          preferred_ip_protocol: "ip4"
+          method: GET
+          valid_status_codes: [200]
+          valid_http_versions: ["HTTP/1.1", "HTTP/2"]
+          no_follow_redirects: false
+          fail_if_ssl: false
+          fail_if_not_ssl: false
+          tls_config:
+            insecure_skip_verify: true
+          headers:
+            User-Agent: "Jefrey-Blackbox/1.0"
+      tcp_connect:
+        prober: tcp
+        timeout: 5s
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: blackbox
+  namespace: jefrey
+  labels:
+    app: jefrey
+    component: blackbox
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jefrey
+      component: blackbox
+  template:
+    metadata:
+      labels:
+        app: jefrey
+        component: blackbox
+    spec:
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        runAsNonRoot: true
+      containers:
+        - name: blackbox
+          image: prom/blackbox-exporter:v0.25.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - '--config.file=/etc/blackbox/blackbox.yml'
+          ports:
+            - containerPort: 9115
+              name: http
+          volumeMounts:
+            - name: config
+              mountPath: /etc/blackbox
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+            limits:
+              cpu: "250m"
+              memory: "128Mi"
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9115
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9115
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+      volumes:
+        - name: config
+          configMap:
+            name: blackbox-config
+
+# -----------------------------------------------------------------------------
+# NODE EXPORTER (DaemonSet)
+# -----------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-exporter
+  namespace: jefrey
+  labels:
+    app: jefrey
+    component: node-exporter
+spec:
+  selector:
+    matchLabels:
+      app: jefrey
+      component: node-exporter
+  template:
+    metadata:
+      labels:
+        app: jefrey
+        component: node-exporter
+    spec:
+      hostNetwork: true
+      hostPID: true
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+        runAsNonRoot: true
+      containers:
+        - name: node-exporter
+          image: prom/node-exporter:v1.8.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - '--path.rootfs=/host'
+            - '--collector.systemd'
+            - '--collector.processes'
+            - '--no-collector.wifi'
+          ports:
+            - containerPort: 9100
+              name: http
+              hostPort: 9100
+          volumeMounts:
+            - name: rootfs
+              mountPath: /host
+              readOnly: true
+            - name: proc
+              mountPath: /host/proc
+              readOnly: true
+            - name: sys
+              mountPath: /host/sys
+              readOnly: true
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+            limits:
+              cpu: "250m"
+              memory: "128Mi"
+      volumes:
+        - name: rootfs
+          hostPath:
+            path: /
+        - name: proc
+          hostPath:
+            path: /proc
+        - name: sys
+          hostPath:
+            path: /sys
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule
+        - operator: Exists
+          effect: NoExecute
+
+# -----------------------------------------------------------------------------
+# CADVISOR (DaemonSet)
+# -----------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cadvisor
+  namespace: jefrey
+  labels:
+    app: jefrey
+    component: cadvisor
+spec:
+  selector:
+    matchLabels:
+      app: jefrey
+      component: cadvisor
+  template:
+    metadata:
+      labels:
+        app: jefrey
+        component: cadvisor
+    spec:
+      containers:
+        - name: cadvisor
+          image: gcr.io/cadvisor/cadvisor:v0.49.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - '--housekeeping_interval=30s'
+            - '--docker_only=true'
+          ports:
+            - containerPort: 8080
+              name: http
+          volumeMounts:
+            - name: rootfs
+              mountPath: /rootfs
+              readOnly: true
+            - name: var-run
+              mountPath: /var/run
+              readOnly: true
+            - name: sys
+              mountPath: /sys
+              readOnly: true
+            - name: docker
+              mountPath: /var/lib/docker
+              readOnly: true
+            - name: disk
+              mountPath: /dev/disk
+              readOnly: true
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          devices:
+            - devicePath: /dev/kmsg
+              name: kmsg
+      volumes:
+        - name: rootfs
+          hostPath:
+            path: /
+        - name: var-run
+          hostPath:
+            path: /var/run
+        - name: sys
+          hostPath:
+            path: /sys
+        - name: docker
+          hostPath:
+            path: /var/lib/docker
+        - name: disk
+          hostPath:
+            path: /dev/disk
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule
+        - operator: Exists
+          effect: NoExecute

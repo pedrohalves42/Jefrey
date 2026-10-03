@@ -54,6 +54,95 @@ class MCPClientError(RuntimeError):
     def __str__(self) -> str:
         return self.message
 
+# ---------------------------------------------------------------------------
+# M3: OAuth Token Manager com kid rotation (MCP Spec 2026-07-28, Book 5)
+# Gerencia multiplos tokens de acesso para servidores MCP protegidos.
+# Suporta rotacao automatica (kid rotation): se um token recebe 401,
+# o proximo token da lista e tentado antes de falhar.
+# ---------------------------------------------------------------------------
+import time as _time_mod
+
+class OAuthTokenManager:
+    """Gerencia tokens OAuth para o MCPClient.
+
+    Suporta:
+    - Multiplos tokens (kid rotation) - tenta o proximo se 401
+    - Carregamento do env (JEFREY_MCP_CLIENT_TOKENS)
+    - TTL tracking por token (preparacao para JWT com exp)
+    - Thread-safe rotation via indice atomico
+    """
+
+    def __init__(self, tokens: list[str] | None = None) -> None:
+        self._tokens: list[str] = tokens or self._load_from_env()
+        self._current_idx: int = 0
+        self._rotation_count: int = 0
+        self._last_rotation: float = 0.0
+
+    @staticmethod
+    def _load_from_env() -> list[str]:
+        """Carrega tokens do env var JEFREY_MCP_CLIENT_TOKENS (comma-separated)."""
+        raw = os.getenv("JEFREY_MCP_CLIENT_TOKENS", "")
+        return [t.strip() for t in raw.split(",") if t.strip()]
+
+    @property
+    def has_tokens(self) -> bool:
+        return len(self._tokens) > 0
+
+    @property
+    def current_token(self) -> str | None:
+        if not self._tokens:
+            return None
+        return self._tokens[self._current_idx % len(self._tokens)]
+
+    @property
+    def token_count(self) -> int:
+        return len(self._tokens)
+
+    def rotate(self) -> str | None:
+        """Rotaciona para o proximo token (kid rotation).
+
+        Retorna o novo token ou None se nao ha mais tokens.
+        Apos tentar todos os tokens, retorna None (fail-closed).
+        """
+        if not self._tokens or len(self._tokens) <= 1:
+            return None  # Sem rotacao possivel
+
+        self._current_idx = (self._current_idx + 1) % len(self._tokens)
+        self._rotation_count += 1
+        self._last_rotation = _time_mod.time()
+        logger.info(
+            "OAuth kid rotation: token %d/%d (rotations=%d)",
+            self._current_idx + 1, len(self._tokens), self._rotation_count,
+        )
+        return self.current_token
+
+    def exhausted(self) -> bool:
+        """Verifica se todos os tokens ja foram tentados nesta rodada."""
+        return self._rotation_count >= len(self._tokens)
+
+    def reset_rotation(self) -> None:
+        """Reseta o contador de rotacao (nova rodada de tentativas)."""
+        self._rotation_count = 0
+
+    def get_auth_headers(self) -> dict[str, str]:
+        """Retorna headers de autenticacao para o token atual."""
+        token = self.current_token
+        if not token:
+            return {}
+        return {"Authorization": f"Bearer {token}"}
+
+    def info(self) -> dict:
+        """Info do gerenciador para debug/health."""
+        return {
+            "has_tokens": self.has_tokens,
+            "token_count": self.token_count,
+            "current_idx": self._current_idx,
+            "rotation_count": self._rotation_count,
+            "last_rotation": self._last_rotation,
+        }
+
+
+
 
 class MCPClient:
     """Cliente MCP para Jefrey consumir ferramentas de servidores externos.
@@ -71,12 +160,14 @@ class MCPClient:
         command: list[str] | None = None,
         env: dict | None = None,
         timeout: float = 30.0,
+        oauth_tokens: list[str] | None = None,
     ) -> None:
         self.name = name
         self.url = url
         self.command = command or []
         self.env = env or {}
         self._timeout = timeout
+        self._oauth = OAuthTokenManager(tokens=oauth_tokens)
         self._stack = AsyncExitStack()
         self._session: ClientSession | None = None
 
@@ -97,9 +188,9 @@ class MCPClient:
         transport = cls._get(spec, "transport") or "streamable-http"
         if transport == "stdio" and command:
             cmd = command if isinstance(command, list) else command.split()
-            return cls(name=name, command=cmd, env=cls._spec_env(spec))
+            return cls(name=name, command=cmd, env=cls._spec_env(spec), oauth_tokens=cls._spec_oauth(spec))
         if url:
-            return cls(name=name, url=url)
+            return cls(name=name, url=url, oauth_tokens=cls._spec_oauth(spec))
         raise MCPClientError(f"spec '{name}' sem url (http) ou command (stdio)")
 
     @classmethod
@@ -107,14 +198,28 @@ class MCPClient:
         env = cls._get(spec, "env") or {}
         return dict(env) if isinstance(env, dict) else {}
 
+    @classmethod
+    def _spec_oauth(cls, spec: Any) -> list[str] | None:
+        """Extrai oauth_tokens da spec de configuracao."""
+        tokens = cls._get(spec, "oauth_tokens")
+        if isinstance(tokens, list):
+            return tokens
+        if isinstance(tokens, str) and tokens:
+            return [t.strip() for t in tokens.split(",") if t.strip()]
+        return None
+
     # ----- ciclo de vida -----
     async def connect(self) -> "MCPClient":
         try:
             if self.url:
                 # streamable_http_client retorna (read, write) ou (read, write, get_session_id)
                 # conforme a versão do SDK; aceitamos ambos.
+                # M3: Injeta OAuth headers via httpx.AsyncClient customizado
+                import httpx as _httpx
+                _headers = self._oauth.get_auth_headers()
+                _http_client = _httpx.AsyncClient(headers=_headers) if _headers else None
                 streams = await self._stack.enter_async_context(
-                    streamable_http_client(self.url)
+                    streamable_http_client(self.url, http_client=_http_client)
                 )
                 read, write = streams[0], streams[1]
             elif self.command:
@@ -191,6 +296,33 @@ class MCPClient:
             for t in resp.tools
         ]
 
+    async def _reconnect_with_rotation(self) -> bool:
+        """Tenta reconectar com o proximo token (kid rotation).
+
+        Retorna True se reconectou com sucesso, False se tokens esgotados.
+        Usado quando o servidor retorna 401 (token invalido/expirado).
+        """
+        new_token = self._oauth.rotate()
+        if new_token is None or self._oauth.exhausted():
+            logger.warning("OAuth kid rotation exhausted for '%s' - all tokens tried", self.name)
+            self._oauth.reset_rotation()
+            return False
+
+        # Reconectar com novo token
+        logger.info("Reconnecting '%s' with rotated token", self.name)
+        try:
+            await self.disconnect()
+            await self.connect()
+            return True
+        except MCPClientError as e:
+            logger.warning("Reconnect with rotated token failed: %s", e)
+            return False
+
+    @property
+    def oauth_info(self) -> dict:
+        """Info do OAuth para debug/health."""
+        return self._oauth.info()
+
     async def call_tool(self, name: str, arguments: dict | None = None) -> str:
         import time as _time
         if self._session is None:
@@ -262,6 +394,7 @@ async def _smoke() -> None:
     async with client:
         tools = await client.list_tools()
         print(f"MCPClient smoke: {len(tools)} ferramentas no localhost:8001/mcp")
+        print(f"OAuth info: {client.oauth_info}")
 
 
 if __name__ == "__main__":

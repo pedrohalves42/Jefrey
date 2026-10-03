@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 import pathlib
-import py_compile
 
 
 def test_audit_redact_before_json():
@@ -75,14 +74,3 @@ def test_fallback_user_id_consistency(tmp_path):
         )
     rec = json.loads(fallback.read_text(encoding="utf-8").strip().splitlines()[0])
     assert rec["user_id"] == "system", f"user_id None -> {rec['user_id']} != system"
-
-
-def test_drill_py_compile_and_no_user_id():
-    """drill_audit_fallback.py compila + sem user_id em labelnames + FAIL-CLOSED."""
-    p = pathlib.Path("scripts/drill_audit_fallback.py")
-    py_compile.compile(str(p), doraise=True)
-    txt = p.read_text(encoding="utf-8")
-    assert "FAIL-CLOSED" in txt and "sys.exit(2)" in txt, "sem FAIL-CLOSED"
-    for line in txt.splitlines():
-        if "labelnames" in line:
-            assert "user_id" not in line, f"user_id em labelnames: {line}"

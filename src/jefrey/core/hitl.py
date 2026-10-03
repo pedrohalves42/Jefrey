@@ -128,16 +128,19 @@ class ApprovalManager:
         now = datetime.datetime.now(datetime.timezone.utc)
         count = 0
         with get_db() as s:
-            rows = s.query(Approval).filter(
-                Approval.status == "pending",
-                Approval.expires_at.isnot(None),
-                Approval.expires_at < now,
-            ).all()
-            for r in rows:
-                r.status = "expired"
-                r.decided_at = now
-                APPROVALS_DECIDED.labels(decision="expired", tool_name=r.tool_name).inc()
-                count += 1
+            try:
+                rows = s.query(Approval).filter(
+                    Approval.status == "pending",
+                    Approval.expires_at.isnot(None),
+                    Approval.expires_at < now,
+                ).all()
+                for r in rows:
+                    r.status = "expired"
+                    r.decided_at = now
+                    APPROVALS_DECIDED.labels(decision="expired", tool_name=r.tool_name).inc()
+                    count += 1
+            except Exception as e:
+                logger.warning("expire_due failed: %s", e)
         if count:
             logger.info("approval(s) expirada(s): %d", count)
         return count

@@ -355,9 +355,12 @@ class LongTermMemory:
         
         return memories
     
-    def get(self, memory_id: str) -> dict | None:
-        """Recupera memória por ID."""
-        result = self._collection.get(ids=[memory_id], include=["documents", "metadatas"])
+    def get(self, memory_id: str, user_id: str | None = None) -> dict | None:
+        """Recupera memória por ID com isolamento multi-tenant (user_id)."""
+        where = {}
+        if user_id:
+            where["user_id"] = user_id
+        result = self._collection.get(ids=[memory_id], include=["documents", "metadatas"], where=where if where else None)
         if result["ids"]:
             return {
                 "id": result["ids"][0],
@@ -387,18 +390,25 @@ class LongTermMemory:
         )
         return True
     
-    def delete(self, memory_id: str) -> bool:
-        """Remove memória."""
+    def delete(self, memory_id: str, user_id: str | None = None) -> bool:
+        """Remove memória com verificação de ownership (user_id)."""
+        # Primeiro verifica se a memória pertence ao usuário
+        existing = self.get(memory_id, user_id=user_id)
+        if not existing:
+            return False
         try:
             self._collection.delete(ids=[memory_id])
             return True
         except Exception:
             return False
     
-    def list_recent(self, limit: int = 20, filter_metadata: dict | None = None) -> list[dict]:
-        """Lista memórias recentes (por timestamp)."""
+    def list_recent(self, limit: int = 20, filter_metadata: dict | None = None, user_id: str | None = None) -> list[dict]:
+        """Lista memórias recentes (por timestamp) com isolamento multi-tenant."""
+        where = filter_metadata or {}
+        if user_id:
+            where["user_id"] = user_id
         results = self._collection.get(
-            where=filter_metadata,
+            where=where if where else None,
             include=["documents", "metadatas"],
             limit=limit,
         )
@@ -427,8 +437,19 @@ class LongTermMemory:
             log.error("health_check chromadb falhou: %s", e)
             return {"status": "error", "backend": "chromadb", "error": str(e)}
 
-    def count(self) -> int:
-        """Total de memórias armazenadas."""
+    def count(self, user_id: str | None = None) -> int:
+        """Total de memórias armazenadas com filtro opcional por user_id (CIPHER-004 fix)."""
+        if user_id:
+            # Filtra por user_id no metadata (CIPHER-004)
+            try:
+                results = self._collection.get(
+                    where={"user_id": user_id},
+                    include=["metadatas"],
+                )
+                return len(results.get("ids", []))
+            except Exception:
+                # Fallback: retorna contagem global em caso de erro
+                return self._collection.count()
         return self._collection.count()
 
 

@@ -1,0 +1,513 @@
+# =============================================================================
+# KUBERNETES NETWORK POLICIES - Jefrey Production
+# Zero-trust network segmentation
+# =============================================================================
+
+# Default deny all ingress (namespace isolation)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: jefrey
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+
+---
+# Default deny all egress (namespace isolation)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-egress
+  namespace: jefrey
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+
+---
+# Allow ingress to API from ingress controller
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-ingress
+  namespace: jefrey
+spec:
+  podSelector:
+    matchLabels:
+      component: api
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8000
+
+---
+# Allow ingress to MCP from ingress controller
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-mcp-ingress
+  namespace: jefrey
+spec:
+  podSelector:
+    matchLabels:
+      component: mcp
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8001
+
+---
+# Allow ingress to Frontend from ingress controller
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-ingress
+  namespace: jefrey
+spec:
+  podSelector:
+    matchLabels:
+      component: frontend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+
+---
+# Allow API -> Postgres
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-to-postgres
+  namespace: jefrey
+spec:
+  podSelector:
+    matchLabels:
+      component: postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              component: api
+        - podSelector:
+            matchLabels:
+              component: mcp
+        - podSelector:
+            matchLabels:
+              component: brain2
+      ports:
+        - protocol: TCP
+          port: 5432
+
+---
+# Allow API -> Redis
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-to-redis
+  namespace: jefrey
+spec:
+  podSelector:
+    matchLabels:
+      component: redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              component: api
+        - podSelector:
+            matchLabels:
+              component: mcp
+        - podSelector:
+            matchLabels:
+              component: brain2
+        - podSelector:
+            matchLabels:
+              component: n8n
+      ports:
+        - protocol: TCP
+          port: 6379
+
+---
+# Allow API/MCP -> Ollama
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-to-ollama
+  namespace: jefrey
+spec:
+  podSelector:
+    matchLabels:
+      component: ollama
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              component: api
+        - podSelector:
+            matchLabels:
+              component: mcp
+        - podSelector:
+            matchLabels:
+              component: brain2
+      ports:
+        - protocol: TCP
+          port: 11434
+
+---
+# Allow n8n -> MCP
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-n8n-to-mcp
+  namespace: jefrey
+spec:
+  podSelector:
+    matchLabels:
+      component: mcp
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              component: n8n
+      ports:
+        - protocol: TCP
+          port: 8001
+
+---
+# Allow Prometheus to scrape all
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-scrape
+  namespace: jefrey
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              component: prometheus
+      ports:
+        - protocol: TCP
+          port: 8000
+        - protocol: TCP
+          port: 8001
+        - protocol: TCP
+          port: 9090
+        - protocol: TCP
+          port: 9093
+        - protocol: TCP
+          port: 3000
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 9100
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 9115
+
+---
+# Allow Alertmanager to receive alerts
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-alertmanager
+  namespace: jefrey
+spec:
+  podSelector:
+    matchLabels:
+      component: alertmanager
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              component: prometheus
+      ports:
+        - protocol: TCP
+          port: 9093
+
+---
+# Allow Grafana to query Prometheus
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-grafana-to-prometheus
+  namespace: jefrey
+spec:
+  podSelector:
+    matchLabels:
+      component: prometheus
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              component: grafana
+      ports:
+        - protocol: TCP
+          port: 9090
+
+---
+# Allow Blackbox to probe services
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-blackbox-probe
+  namespace: jefrey
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              component: blackbox
+      ports:
+        - protocol: TCP
+          port: 8000
+        - protocol: TCP
+          port: 8001
+        - protocol: TCP
+          port: 9090
+        - protocol: TCP
+          port: 9093
+        - protocol: TCP
+          port: 3000
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+        - protocol: TCP
+          port: 11434
+
+---
+# Allow DNS egress for all pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: jefrey
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+---
+# Allow API/MCP/Brain2 egress to Postgres
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-db-egress
+  namespace: jefrey
+spec:
+  podSelector:
+    matchLabels:
+      component: api
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              component: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              component: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    - to:
+        - podSelector:
+            matchLabels:
+              component: ollama
+      ports:
+        - protocol: TCP
+          port: 11434
+
+---
+# Same egress for MCP
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-mcp-egress
+  namespace: jefrey
+spec:
+  podSelector:
+    matchLabels:
+      component: mcp
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              component: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              component: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    - to:
+        - podSelector:
+            matchLabels:
+              component: ollama
+      ports:
+        - protocol: TCP
+          port: 11434
+
+---
+# Same egress for Brain2
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-brain2-egress
+  namespace: jefrey
+spec:
+  podSelector:
+    matchLabels:
+      component: brain2
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              component: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    - to:
+        - podSelector:
+            matchLabels:
+              component: ollama
+      ports:
+        - protocol: TCP
+          port: 11434
+
+---
+# Allow n8n egress
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-n8n-egress
+  namespace: jefrey
+spec:
+  podSelector:
+    matchLabels:
+      component: n8n
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              component: mcp
+      ports:
+        - protocol: TCP
+          port: 8001
+    - to:
+        - podSelector:
+            matchLabels:
+              component: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+
+---
+# Allow Prometheus egress to Alertmanager
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-egress
+  namespace: jefrey
+spec:
+  podSelector:
+    matchLabels:
+      component: prometheus
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              component: alertmanager
+      ports:
+        - protocol: TCP
+          port: 9093
+
+---
+# Allow Alertmanager egress (email, webhooks)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-alertmanager-egress
+  namespace: jefrey
+spec:
+  podSelector:
+    matchLabels:
+      component: alertmanager
+  policyTypes:
+    - Egress
+  egress:
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 25
+        - protocol: TCP
+          port: 587
+        - protocol: TCP
+          port: 443

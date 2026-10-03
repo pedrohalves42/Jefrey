@@ -41,45 +41,38 @@ def _ensure_cache_bound():
 
 
 def get_jwks() -> dict:
-    """Return JWKS endpoint data — never includes alg:none."""
+    """Return JWKS (RFC 7517) used to validate RS256 OAuth tokens - never includes alg:none.
+
+    CIPHER-312: antes importava eventbus.signing.get_signing_key, que nao existe -> toda
+    chamada caia no except, logava ERROR com traceback e devolvia {"keys": []} (todo token
+    RS256 virava "unknown_kid"). Agora busca o JWKS do IdP em JEFREY_OAUTH__JWKS_URI
+    (cache 300s) e filtra chaves inseguras.
+    """
+    import os
+    import time
+
     _ensure_cache_bound()
+    uri = os.getenv("JEFREY_OAUTH__JWKS_URI", "").strip()
+    if not uri:
+        return {"keys": []}
+    now = time.time()
+    with _cache_lock:
+        cached = _jwks_cache.get("__remote__")
+        if cached and cached[1] > now:
+            return cached[0]
     try:
-        from src.jefrey.eventbus.signing import get_signing_key
+        import httpx
 
-        key = get_signing_key()
-        if not key:
-            logger.warning("JWKS: no signing key available")
-            return {"keys": []}
-
-        # Use urlsafe_b64encode (G5 fix) — RFC 7517 compliant
-        # Never include alg:none (A1 fix)
-        from cryptography.hazmat.primitives import serialization
-
-        # Export public key in JWK format
-        numbers = key.public_key().public_numbers()
-        kid = key.id or "default"
-
-        # Build JWK with urlsafe_b64encode for base64url encoding
-        n_b64 = _b64url(numbers.n.to_bytes(int(key.key_size / 8), "big"))
-        e_b64 = _b64url(numbers.e.to_bytes(int(key.key_size / 16), "big"))
-
-        jwk = {
-            "kty": "RSA",
-            "alg": "RS256",  # Never "none" — A1 fix
-            "use": "sig",
-            "kid": kid,
-            "n": n_b64,
-            "e": e_b64,
-        }
-
-        # Cache the JWK with TTL (A5)
+        r = httpx.get(uri, timeout=5)
+        r.raise_for_status()
+        keys = [k for k in (r.json().get("keys") or [])
+                if isinstance(k, dict) and str(k.get("alg", "RS256")).lower() != "none" and k.get("kty") == "RSA"]
+        data = {"keys": keys}
         with _cache_lock:
-            _jwks_cache[kid] = (jwk, __import__("time").time() + 60)
-
-        return {"keys": [jwk]}
-
+            _jwks_cache["__remote__"] = (data, now + 300)
+        return data
     except Exception as e:
-        logger.error("JWKS endpoint error: %s", e, exc_info=True)
+        logger.warning("JWKS: falha ao buscar %s: %s", uri, type(e).__name__)
         return {"keys": []}
 
 
@@ -130,6 +123,5 @@ def clear_jwk_cache(kid: str | None = None):
 # Alias for backward compatibility (CIPHER-031)
 # Maps generate_jwsk_keys -> generate_jwks_keys
 def generate_jwsk_keys(*args, **kwargs):
-    """Alias for generate_jwks_keys - maintains backward compatibility."""
-    from src.jefrey.oauth2.jwks import generate_jwks_keys
-    return generate_jwks_keys(*args, **kwargs)
+    """Alias de compatibilidade (CIPHER-031). Antes importava uma funcao inexistente."""
+    return get_jwks()

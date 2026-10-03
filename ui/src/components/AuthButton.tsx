@@ -43,11 +43,8 @@ export function AuthButton() {
                 className={opt.className}
                 onClick={() => {
                   setIsLoading(true)
-                  // Navigate to the auth route
-                  setTimeout(() => {
-                    navigate(opt.onClick?.to || opt.onClick())
-                    setIsLoading(false)
-                  }, 100)
+                  opt.onClick()
+                  setIsLoading(false)
                 }}
               >
                 {opt.label}

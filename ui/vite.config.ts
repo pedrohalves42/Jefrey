@@ -10,8 +10,9 @@ export default defineConfig({
   plugins: [react()],
   resolve: { alias: { '@': path.resolve(__dirname, './src') } },
   server: {
-    port: 3001,
+    port: 5173,
     host: true,
+    strictPort: true,
     proxy: {
       '/health': 'http://localhost:8000',
       '/auth': 'http://localhost:8000',
@@ -26,7 +27,7 @@ export default defineConfig({
     }
   },
   build: {
-    outDir: '../src/jefrey/static',
+    outDir: 'dist',
     emptyOutDir: true,
     chunkSizeWarningLimit: 600,
     rollupOptions: {

@@ -24,11 +24,64 @@ from src.jefrey.oauth2.introspect import introspect_token, IntrospectionResult
 
 logger = logging.getLogger(__name__)
 
-_PUBLIC_PATHS = {"/ws", "/health", "/docs", "/openapi.json", "/redoc", "/metrics", "/", "/vite.svg", "/favicon.ico", "/auth/dev-token", "/auth/google/login", "/auth/google/callback", "/manifest.json", "/sw.js", "/stt/health", "/tts/health", "/stt/status", "/tts/status", "/auth/stt/health", "/auth/tts/health", "/auth/stt/status", "/auth/tts/status", "/hmac-status", "/rotate-hmac"}
+_PUBLIC_PATHS = {"/ws", "/health", "/docs", "/openapi.json", "/redoc", "/metrics", "/", "/vite.svg", "/favicon.ico", "/api/status", "/auth/dev-token", "/auth/google/login", "/auth/google/callback", "/manifest.json", "/sw.js", "/stt/health", "/tts/health", "/stt/status", "/tts/status", "/auth/stt/health", "/auth/tts/health", "/auth/stt/status", "/auth/tts/status"}
 # UI-1 Shell public — Axiom 5 least privilege (Livro 3 Security Eng cap8, CIPHER-019)
 # /chat|/memory|/approvals continuam protegidos; /assets/* sao build Vite hashados sem user data
 # /auth/dev-token e publico mas fail-closed em prod (CIPHER-021, auth.py is_prod 403)
 _PUBLIC_PREFIXES = ("/assets/", "/ws")
+# CIPHER-301: /chat aceita modo anonimo, mas se vier Authorization a identidade e validada
+# (antes /chat e /chat/status eram publicos e todos viravam "anonymous": um usuario lia a
+# resposta do outro). /hmac-status e /rotate-hmac sairam da lista publica (vazavam a chave HMAC).
+_OPTIONAL_AUTH_PATHS = {"/chat", "/chat/stream"}
+_OPTIONAL_AUTH_PREFIXES = ("/chat/status/",)
+
+# CIPHER-302: dev-token agora e um JWT HS256 assinado com JEFREY_API__SECRET_KEY (sub = user_id).
+# A secret_key em si continua aceita como "token de servico" (n8n/CLI) e so nesse caso
+# o header X-User-Id e respeitado.
+_DEV_JWT_ISS = "jefrey-dev"
+
+
+def _decode_dev_jwt(token: str, secret: str) -> str | None:
+    """Retorna o user_id (sub) de um dev-token valido, ou None."""
+    if token.count(".") != 2:
+        return None
+    try:
+        import jwt  # PyJWT
+        claims = jwt.decode(token, secret, algorithms=["HS256"], issuer=_DEV_JWT_ISS,
+                            options={"require": ["exp", "sub", "iss"]})
+        sub = str(claims.get("sub") or "").strip()
+        return sub or None
+    except Exception as e:  # expirado, assinatura invalida, etc.
+        logger.warning("dev-token JWT invalido: %s", type(e).__name__)
+        return None
+
+
+# CIPHER-307: rate limit HTTP por identidade (antes 70 req seguidas = 70x 200).
+_RL_LIMIT_PER_MIN = 60
+_RL_BURST = 20
+_RL_EXEMPT_PREFIXES = ("/assets/", "/health", "/metrics", "/api/status", "/stt/health", "/tts/health",
+                       "/stt/status", "/tts/status", "/favicon.ico", "/manifest.json", "/sw.js", "/vite.svg")
+_rl_buckets: dict[str, tuple[float, float]] = {}
+
+
+def _rl_allow(key: str) -> tuple[bool, int]:
+    """Token bucket em memoria: 60/min sustentado + burst 20. Retorna (permitido, retry_after_s)."""
+    import os as _os
+    try:
+        rate = float(_os.getenv("JEFREY_HTTP_RATE_PER_MIN", _RL_LIMIT_PER_MIN)) / 60.0
+        cap = float(_os.getenv("JEFREY_HTTP_RATE_BURST", _RL_BURST))
+    except ValueError:
+        rate, cap = _RL_LIMIT_PER_MIN / 60.0, float(_RL_BURST)
+    now = time.monotonic()
+    tokens, last = _rl_buckets.get(key, (cap, now))
+    tokens = min(cap, tokens + (now - last) * rate)
+    if tokens < 1.0:
+        _rl_buckets[key] = (tokens, now)
+        return False, max(1, int((1.0 - tokens) / rate) + 1)
+    _rl_buckets[key] = (tokens - 1.0, now)
+    if len(_rl_buckets) > 10000:  # evita crescimento ilimitado
+        _rl_buckets.clear()
+    return True, 0
 
 # A5: cache com TTL 60s, max 1024, chave = hash(token) nunca token raw
 _CACHE_TTL = 60
@@ -84,9 +137,23 @@ class FastAPIAuthMiddleware(BaseHTTPMiddleware):
         # UI-1 public whitelist — FAIL-CLOSED exceto UI estatica (Axiom 5, CIPHER-019)
         if path in _PUBLIC_PATHS or path.startswith(_PUBLIC_PREFIXES):
             request.state.user_id = "system"
+            if not path.startswith(_RL_EXEMPT_PREFIXES) and path not in ("/", "/docs", "/redoc", "/openapi.json"):
+                ip = request.client.host if request.client else "unknown"
+                ok, retry = _rl_allow(f"ip:{ip}:{path}")
+                if not ok:
+                    return JSONResponse({"ok": False, "error": "muitas requisicoes"}, status_code=429, headers={"Retry-After": str(retry)})
             return await call_next(request)
 
         auth = request.headers.get("Authorization", "")
+
+        optional = path in _OPTIONAL_AUTH_PATHS or path.startswith(_OPTIONAL_AUTH_PREFIXES)
+        if not auth and optional:
+            request.state.user_id = "anonymous"
+            ip = request.client.host if request.client else "unknown"
+            ok, retry = _rl_allow(f"ip:{ip}")
+            if not ok:
+                return JSONResponse({"ok": False, "error": "muitas requisicoes"}, status_code=429, headers={"Retry-After": str(retry)})
+            return await call_next(request)
 
         if not auth:
             logger.warning("FastAPI: Authorization header missing (path=%s)", path)
@@ -100,10 +167,22 @@ class FastAPIAuthMiddleware(BaseHTTPMiddleware):
         secret = get_settings().api.secret_key
 
         if secret:
+            identity = None
+            client = None
             expected = f"Bearer {secret}"
             if hmac.compare_digest(auth, expected):
-                request.state.user_id = request.headers.get("X-User-Id", "anonymous")
-                request.state.oauth2_client = "configured-secret"
+                # token de servico (n8n/CLI/scripts): age em nome de X-User-Id
+                identity = request.headers.get("X-User-Id") or "service"
+                client = "configured-secret"
+            else:
+                identity = _decode_dev_jwt(token, secret)
+                client = "dev-token" if identity else None
+            if identity:
+                ok, retry = _rl_allow(f"user:{identity}")
+                if not ok:
+                    return JSONResponse({"ok": False, "error": "muitas requisicoes"}, status_code=429, headers={"Retry-After": str(retry)})
+                request.state.user_id = identity
+                request.state.oauth2_client = client
                 return await call_next(request)
 
         # A5: check cache por hash (nunca token raw) — CIPHER-121 revocation check antes do cache

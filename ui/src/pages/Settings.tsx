@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { getToken, getUserId, getThreadId, setToken, setUserId, setThreadId } from "@/lib/api"
-import { useWakeWord } from "@/hooks/useWakeWord"
 
 export default function Settings() {
   const [token, setTokenState] = useState("")
@@ -24,6 +23,10 @@ export default function Settings() {
     setUserId(userId.trim() || "demo")
     setThreadId(threadId.trim() || "demo-1")
     setTestResult("Salvo em localStorage. Chat/Memory ja usam este token + user_id (Axiom #2).")
+    // Update local state after saving
+    setTokenState(token.trim())
+    setUserIdState(userId.trim() || "demo")
+    setThreadIdLocal(threadId.trim() || "demo-1")
   }
 
   async function testAuth() {
@@ -96,11 +99,6 @@ export default function Settings() {
       return "pt_BR-faber-medium"
     }
   })
-  const wake = useWakeWord({ enabled: vozWake, keyword: "jefrey", onWake: () => {
-    try {
-      document.querySelector<HTMLButtonElement>('[aria-label="Falar com Jefrey"]')?.click()
-    } catch {}
-  }})
   useEffect(() => {
     try {
       localStorage.setItem("jefrey_wake_enabled", vozWake ? "1" : "0")
@@ -199,9 +197,9 @@ export default function Settings() {
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={vozWake} onChange={(e) => setVozWake(e.target.checked)} />
-              Wake &quot;jarvis&quot; {wake.listening ? "(ouvindo...)" : "(off)"} {!wake.supported && <span className="text-xs text-muted-foreground"> â€” navegador sem SpeechRecognition</span>}
+              Wake &quot;jarvis&quot; {vozWake ? "(ouvindo...)" : "(off)"}
             </label>
-            <Badge variant={wake.listening ? "default" : "outline"}>{wake.listening ? "wake ativo" : "wake off"}</Badge>
+            <Badge variant={vozWake ? "default" : "outline"}>{vozWake ? "wake ativo" : "wake off"}</Badge>
           </div>
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium">Voz TTS (Mark-LII 5 vozes + Piper)</label>

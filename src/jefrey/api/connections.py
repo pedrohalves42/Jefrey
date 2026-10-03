@@ -10,17 +10,8 @@ from fastapi import APIRouter, Request, HTTPException
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/connections", tags=["connections"])
 
-_BLOCKED_HOSTS = ("127.", "10.", "172.", "192.168.", "169.254.", "::1", "localhost", "postgres", "jefrey-", "host.docker.internal")
-
-def _is_blocked_url(url: str) -> bool:
-    try:
-        # CIPHER-118b: http://::1/ sem [] tem hostname None, mas eh SSRF local -> bloqueia pelo raw
-        if "::1" in url.lower():
-            return True
-        host = (urlparse(url).hostname or "").lower()
-        return any(host == b.rstrip(".") or host.startswith(b) or b in host for b in _BLOCKED_HOSTS)
-    except Exception:
-        return True
+# CIPHER-306: implementacao unica (por IP resolvido) em core/connections.py
+from src.jefrey.core.connections import _is_blocked_url  # noqa: E402
 
 _URL_RE = re.compile(r"^https?://[^\s]+$", re.IGNORECASE)
 

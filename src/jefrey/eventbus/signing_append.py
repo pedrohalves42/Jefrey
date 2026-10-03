@@ -1,5 +1,9 @@
 # Module-level _rotate_hmac_key_internal for signing_routes.py
 # Rotates HMAC key and updates kids dict for dual-verify support
+# CIPHER-312: faltavam imports (NameError: Tuple). Modulo legado; a rota usa signing.rotate_hmac_key.
+import json
+from typing import Tuple
+
 def _rotate_hmac_key_internal() -> Tuple[str, str]:
     """Rotate HMAC key and update kids dict for dual-verify support.
 

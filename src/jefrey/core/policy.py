@@ -23,6 +23,7 @@ class RiskLevel(Enum):
 class Role(Enum):
     GUEST = "guest"
     USER = "user"
+    MANAGER = "manager"
     ADMIN = "admin"
 
 @dataclass
@@ -150,7 +151,12 @@ class PolicyEngine:
     def decide(self, tool_name: str, user_role: str = "guest", risk: str = "LOW", ctx=None) -> Decision:
         """RBAC -> UNKNOWN deny -> admin bypass -> HITL for HIGH (P07-014); CIPHER-021 RBAC antes do off."""
         from src.jefrey.core.rbac import RBACEngine
-        rbac_res = RBACEngine().check(user_role, "guest", tool_name=tool_name)  # RBAC first
+        from src.jefrey.core.registry import TOOL_REGISTRY
+        
+        # CIPHER-011 fix: usar required_role real do ToolRegistry em vez de hardcoded "guest"
+        required_role = TOOL_REGISTRY.required_role_of(tool_name) or "guest"
+        
+        rbac_res = RBACEngine().check(user_role, required_role, tool_name=tool_name)  # RBAC first
         if self._mode == "off" and rbac_res.decision == "deny":
             pass  # modo off nao bypassa RBAC deny (Anderson fail-closed)
         _unknown = RiskLevel.UNKNOWN  # Unknown = deny

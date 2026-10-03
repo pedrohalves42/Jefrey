@@ -79,7 +79,7 @@ class AuditLogger:
                     risk=risk,
                     decision=decision,
                     reason=reason,
-                    approval_id=approval_id,
+                    approval_id=str(approval_id) if approval_id else None,
                     approval_decision=approval_decision,
                     source=source,
                     detail_json=dict(detail_redacted),
@@ -106,8 +106,12 @@ class AuditLogger:
         approval_decision: str | None, source: str, detail: dict | None, error: str,
         user_id: str | None = None,
     ) -> None:
-        """CIPHER-025: grava o evento de auditoria em arquivo local quando o Postgres falha.""" 
+        """CIPHER-025: grava o evento de auditoria em arquivo local quando o Postgres falha.
+        
+        CIPHER-015: Verifica sucesso da escrita e WARNING se falhar.
+        """ 
         path = ""
+        write_success = False
         try:
             from src.jefrey.core.config import get_settings
 
@@ -134,9 +138,12 @@ class AuditLogger:
                 raw = redact_pii(raw)
             with open(path, "a", encoding="utf-8") as f:
                 f.write(raw + "\n")
+            write_success = True
             logger.warning("audit: fallback local gravado em %s (Postgres indisponivel)", path)
         except Exception as fe:  # noqa: BLE001
             logger.error("audit: FALHA tambem no fallback local (%s): %s", path, type(fe).__name__)
+            # CIPHER-015: WARNING explícito se ambas falharem
+            logger.error("CIPHER-015: CRITICO - Postgres e fallback falharam - audit log perdido para thread=%s tool=%s", thread_id, tool_name)
 
 
 _logger = AuditLogger()

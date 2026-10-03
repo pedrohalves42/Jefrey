@@ -38,10 +38,10 @@ from src.jefrey.core.events import event_bus, SystemEvents
 from src.jefrey.core.policy import (
     PolicyEngine,
     PolicyContext,
-    RunContext,
     Decision,
     get_policy_engine,
 )
+RunContext = PolicyContext  # CIPHER-312: policy.RunContext nao existe; mesmos campos
 
 # Ativa logging estruturado (JSON) no runtime do agente.
 import src.jefrey.core.logging  # noqa: F401

@@ -1,0 +1,65 @@
+# =============================================================================
+# BLACKBOX EXPORTER CONFIGURATION - Jefrey Production
+# Meta-monitoring: health check of health checks
+# Probes HTTP/TCP endpoints to verify they respond correctly
+# =============================================================================
+
+modules:
+  # HTTP probe for health endpoints
+  http_health_check:
+    prober: http
+    timeout: 10s
+    http:
+      preferred_ip_protocol: "ip4"
+      method: GET
+      valid_status_codes: [200]
+      valid_http_versions: ["HTTP/1.1", "HTTP/2"]
+      no_follow_redirects: false
+      fail_if_ssl: false
+      fail_if_not_ssl: false
+      tls_config:
+        insecure_skip_verify: true
+      headers:
+        User-Agent: "Jefrey-Blackbox/1.0"
+
+  # HTTP probe with authentication (for protected endpoints)
+  http_health_check_auth:
+    prober: http
+    timeout: 10s
+    http:
+      preferred_ip_protocol: "ip4"
+      method: GET
+      valid_status_codes: [200]
+      headers:
+        User-Agent: "Jefrey-Blackbox/1.0"
+        Authorization: "Bearer ${BLACKBOX_PROBE_TOKEN}"
+
+  # TCP probe for databases
+  tcp_connect:
+    prober: tcp
+    timeout: 5s
+
+  # DNS probe
+  dns_resolve:
+    prober: dns
+    timeout: 5s
+    dns:
+      transport_protocol: "udp"
+      preferred_ip_protocol: "ip4"
+      query_type: "A"
+
+  # gRPC health check
+  grpc_health:
+    prober: grpc
+    timeout: 10s
+    grpc:
+      service: ""
+
+  # ICMP ping
+  icmp_ping:
+    prober: icmp
+    timeout: 5s
+    icmp:
+      preferred_ip_protocol: "ip4"
+      payload_size: 64
+      dont_fragment: false
