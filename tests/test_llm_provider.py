@@ -158,3 +158,34 @@ def test_health_ollama_modelo_presente():
     assert run(c.health())["ok"] is True
     c2 = client(cfg, lambda req: httpx.Response(200, json={"models": [{"name": "outro:1b"}]}))
     assert run(c2.health())["ok"] is False
+
+
+# ---------------- metricas ----------------
+def _sample(name, **labels):
+    from prometheus_client import REGISTRY
+    return REGISTRY.get_sample_value(name, labels)
+
+
+def test_chat_e_stream_registram_latencia_e_tokens():
+    cfg = LLMConfig("ollama", "modelo-metrica", "http://ollama:11434")
+
+    def h(req):
+        body = json.loads(req.content)
+        if body["stream"]:
+            return httpx.Response(200, text='{"message":{"content":"abcdefgh"}}\n{"done":true}')
+        return httpx.Response(200, json={"message": {"content": "abcdefgh"}})
+
+    c = client(cfg, h)
+    run(c.chat(MSGS))
+    collect(c)
+    assert _sample("jefrey_llm_latency_seconds_count", provider="ollama", model="modelo-metrica") == 2
+    assert _sample("jefrey_llm_tokens_total", type="output", provider="ollama", model="modelo-metrica") == 4  # 2 x (8//4)
+    assert _sample("jefrey_llm_tokens_total", type="input", provider="ollama", model="modelo-metrica") > 0
+
+
+def test_falha_de_http_nao_registra_latencia():
+    cfg = LLMConfig("ollama", "modelo-falha", "http://ollama:11434")
+    c = client(cfg, lambda req: httpx.Response(500))
+    with pytest.raises(httpx.HTTPStatusError):
+        run(c.chat(MSGS))
+    assert _sample("jefrey_llm_latency_seconds_count", provider="ollama", model="modelo-falha") is None

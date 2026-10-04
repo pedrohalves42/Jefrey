@@ -142,6 +142,11 @@ def create_app() -> FastAPI:
             register_default_tools()
         except Exception as e:
             logger.warning("register_default_tools falhou: %s", e)
+        try:
+            from src.jefrey.skills import load_skills
+            load_skills()
+        except Exception as e:
+            logger.warning("load_skills falhou: %s", e)
 
     # CIPHER-104: fecha pool do checkpointer em shutdown (evita leak de conexoes AsyncPG)
     @app.on_event("shutdown")
@@ -312,6 +317,8 @@ def create_app() -> FastAPI:
     app.include_router(chat_router)
     from src.jefrey.api.llm_settings import router as llm_settings_router
     app.include_router(llm_settings_router)
+    from src.jefrey.api.skills_routes import router as skills_router
+    app.include_router(skills_router)
     app.include_router(memory_router)
     app.include_router(stt_router)
     app.include_router(tts_router)

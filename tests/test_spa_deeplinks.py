@@ -12,7 +12,8 @@ def client():
     return TestClient(app)
 
 
-@pytest.mark.parametrize("path", ["/settings", "/memory", "/approvals", "/observability", "/knowledge", "/studio"])
+@pytest.mark.parametrize("path", ["/settings", "/memory", "/approvals", "/observability", "/knowledge", "/studio",
+                                  "/memoria", "/skills", "/configuracoes", "/avancado"])
 def test_navegacao_de_navegador_serve_o_app(client, path):
     r = client.get(path, headers=HTML)
     assert r.status_code == 200 and "<div id=\"root\"" in r.text

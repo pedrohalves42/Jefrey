@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Optional
@@ -158,8 +159,25 @@ def _split_system(messages: list[Message]) -> tuple[str, list[Message]]:
     return system, rest
 
 
+def _approx_tokens(text: str) -> int:
+    """Estimativa (~4 caracteres por token); suficiente para acompanhar uso, nao para cobrar."""
+    return max(1, len(text) // 4) if text else 0
+
+
 class LLMClient:
     """Cliente unico para chat completo e em streaming."""
+
+    def _record(self, started: float, messages: list[Message], output: str) -> None:
+        """Registra latencia e tokens (estimados) no Prometheus. Nunca derruba a chamada."""
+        try:
+            from src.jefrey.core.metrics import LLM_LATENCY, LLM_TOKENS
+            c = self.config
+            LLM_LATENCY.labels(provider=c.provider, model=c.model).observe(time.monotonic() - started)
+            LLM_TOKENS.labels(type="input", provider=c.provider, model=c.model).inc(
+                _approx_tokens(" ".join(m.get("content", "") for m in messages)))
+            LLM_TOKENS.labels(type="output", provider=c.provider, model=c.model).inc(_approx_tokens(output))
+        except Exception:
+            pass
 
     def __init__(self, config: LLMConfig, transport: Optional[httpx.AsyncBaseTransport] = None):
         if config.provider not in PROVIDERS:
@@ -221,12 +239,15 @@ class LLMClient:
 
     # ---- chat completo ----------------------------------------------------------
     async def chat(self, messages: list[Message]) -> str:
+        started = time.monotonic()
         url, headers, body = self._request(messages, stream=False)
         async with self._client() as client:
             resp = await client.post(url, headers=headers, json=body)
             resp.raise_for_status()
             data = resp.json()
-        return self._extract_full(data)
+        text = self._extract_full(data)
+        self._record(started, messages, text)
+        return text
 
     def _extract_full(self, data: dict) -> str:
         p = self.config.provider
@@ -240,6 +261,8 @@ class LLMClient:
 
     # ---- streaming --------------------------------------------------------------
     async def stream(self, messages: list[Message]) -> AsyncIterator[str]:
+        started = time.monotonic()
+        out: list[str] = []
         url, headers, body = self._request(messages, stream=True)
         async with self._client() as client:
             async with client.stream("POST", url, headers=headers, json=body) as resp:
@@ -247,9 +270,11 @@ class LLMClient:
                 async for line in resp.aiter_lines():
                     chunk, done = self._parse_stream_line(line)
                     if chunk:
+                        out.append(chunk)
                         yield chunk
                     if done:
                         break
+        self._record(started, messages, "".join(out))
 
     def _parse_stream_line(self, line: str) -> tuple[str, bool]:
         """Retorna (texto, terminou). Linhas invalidas/vazias sao ignoradas."""
