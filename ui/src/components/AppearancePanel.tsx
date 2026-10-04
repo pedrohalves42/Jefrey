@@ -1,11 +1,13 @@
 import { useState } from "react"
 import { BrainStage } from "@/components/brain/BrainStage"
 import { PRESETS, useAppearance, type BrainShape } from "@/lib/appearance"
+import { clearAvatarImage, loadAvatarImage, processImageFile, saveAvatarImage } from "@/lib/avatarImage"
 
 const SHAPES: { id: BrainShape; label: string; hint: string }[] = [
   { id: "brain", label: "Cérebro", hint: "dois hemisférios com neurônios e sinapses" },
   { id: "orb", label: "Orbe", hint: "esfera de neurônios" },
   { id: "reactor", label: "Reator", hint: "anéis concêntricos estilo Homem de Ferro" },
+  { id: "hologram", label: "Holograma", hint: "qualquer imagem sua, em estilo holograma animado" },
 ]
 
 function Slider(props: { label: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void; display?: string; style?: React.CSSProperties }) {
@@ -45,6 +47,8 @@ export function AppearancePanel() {
   const { appearance: a, set, reset, exportJson, importJson } = useAppearance()
   const [msg, setMsg] = useState<string | null>(null)
   const [pasted, setPasted] = useState("")
+  const [imgMsg, setImgMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [hasImg, setHasImg] = useState(() => loadAvatarImage() !== null)
 
   async function copy() {
     try {
@@ -82,7 +86,7 @@ export function AppearancePanel() {
 
           <fieldset>
             <legend className="mb-1 text-sm text-white/80">Forma</legend>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {SHAPES.map(s => (
                 <label
                   key={s.id}
@@ -97,6 +101,60 @@ export function AppearancePanel() {
               ))}
             </div>
           </fieldset>
+
+          {a.shape === "hologram" && (
+            <div className="space-y-3 rounded-lg border border-white/10 p-3">
+              <div className="text-sm text-white/80">Sua imagem</div>
+              <p className="text-xs text-white/50">
+                Escolha qualquer foto, desenho ou personagem. Fundo escuro funciona melhor; ela fica só neste computador e o Jefrey a
+                transforma em holograma na cor do tema.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <label className="jf-btn jf-focus cursor-pointer px-3 py-1.5 text-sm">
+                  Escolher imagem
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    className="sr-only"
+                    onChange={e => {
+                      const f = e.target.files?.[0]
+                      e.target.value = ""
+                      if (!f) return
+                      void processImageFile(f)
+                        .then(url => {
+                          const ok = saveAvatarImage(url)
+                          setHasImg(ok)
+                          setImgMsg(ok ? { ok: true, text: "Imagem aplicada." } : { ok: false, text: "Não consegui guardar essa imagem (sem espaço no navegador)." })
+                        })
+                        .catch((err: unknown) => setImgMsg({ ok: false, text: err instanceof Error ? err.message : "Não consegui usar essa imagem." }))
+                    }}
+                  />
+                </label>
+                {hasImg && (
+                  <button
+                    type="button"
+                    className="jf-focus rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white/80 hover:bg-white/5"
+                    onClick={() => {
+                      clearAvatarImage()
+                      setHasImg(false)
+                      setImgMsg({ ok: true, text: "Voltou para a silhueta padrão." })
+                    }}
+                  >
+                    Voltar à silhueta
+                  </button>
+                )}
+              </div>
+              {imgMsg && (
+                <p role={imgMsg.ok ? "status" : "alert"} className={`text-xs ${imgMsg.ok ? "text-emerald-300" : "text-red-300"}`}>
+                  {imgMsg.text}
+                </p>
+              )}
+              <Slider label="Linhas de varredura" value={a.holoScan} min={0} max={1} step={0.05} onChange={v => set({ holoScan: v })} />
+              <Slider label="Falhas e cor dividida" value={a.holoGlitch} min={0} max={1} step={0.05} onChange={v => set({ holoGlitch: v })} />
+              <Slider label="Apagar fundo escuro" value={a.holoCut} min={0} max={0.9} step={0.02} onChange={v => set({ holoCut: v })} />
+              <Toggle label="Imagem de fundo claro" hint="Inverte o brilho para fotos com fundo branco." checked={a.holoInvert} onChange={v => set({ holoInvert: v })} />
+            </div>
+          )}
 
           <Slider
             label="Cor"

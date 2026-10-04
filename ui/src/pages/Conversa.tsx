@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { BrainStage, type BrainState } from "@/components/brain/BrainStage"
 import { MessageText } from "@/components/MessageText"
 import { useSpeaker } from "@/hooks/useSpeaker"
+import { greeting } from "@/lib/greeting"
+import { getProfile } from "@/lib/llm"
 import { useListener } from "@/hooks/useListener"
 import { SentenceBuffer } from "@/lib/voice/sentences"
 import { authedFetch, ensureSession } from "@/lib/session"
@@ -11,10 +13,10 @@ import {
 } from "@/lib/chat"
 
 const SUGGESTIONS = [
-  "O que você consegue fazer por mim?",
   "Me ajude a organizar meu dia",
-  "Explique o que é RAM em duas frases",
-  "Guarde isto: meu café favorito é sem açúcar",
+  "Me lembra de beber água daqui a 30 minutos",
+  "Quais são meus lembretes?",
+  "O que você consegue fazer por mim?",
 ]
 
 function readFlag(key: string): boolean {
@@ -59,6 +61,13 @@ export default function Conversa() {
   const [micOn, setMicOn] = useState(false)
   const [micLevel, setMicLevel] = useState(0)
   const speaker = useSpeaker()
+  const [myName, setMyName] = useState<string | null>(null)
+  const [clock, setClock] = useState(() => new Date())
+  useEffect(() => {
+    void getProfile().then(r => setMyName(r.data?.display_name ?? null))
+    const t = window.setInterval(() => setClock(new Date()), 30_000)
+    return () => window.clearInterval(t)
+  }, [])
   const voiceReplyRef = useRef(voiceReply)
   voiceReplyRef.current = voiceReply
   const continuousRef = useRef(continuous)
@@ -326,13 +335,20 @@ export default function Conversa() {
           </button>
         </div>
 
-        <BrainStage state={brainState} level={micLevel} className={empty ? "h-[34vh] min-h-[200px]" : "h-[22vh] min-h-[130px]"} />
+        <div className="jf-hud">
+          <span className="pointer-events-none absolute right-3 top-2 z-10 text-xs tabular-nums tracking-widest text-[hsl(var(--hue)_80%_75%)] opacity-70">
+            {clock.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+          </span>
+          <BrainStage state={brainState} level={micLevel} className={empty ? "h-[34vh] min-h-[200px]" : "h-[22vh] min-h-[130px]"} />
+        </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-1" role="log" aria-live="polite" aria-label="Mensagens">
           {empty && (
             <div className="mx-auto mt-2 max-w-xl text-center">
-              <h2 className="text-xl font-semibold text-white">Oi, eu sou o Jefrey.</h2>
-              <p className="mt-1 text-sm text-white/60">Pergunte qualquer coisa. Roda no seu computador, e seus dados ficam com você.</p>
+              <h2 className="text-xl font-semibold text-white">{greeting(clock.getHours(), myName)}</h2>
+              <p className="mt-1 text-sm text-white/60">
+                {myName ? "O que vamos resolver agora?" : "Eu sou o Jefrey. Como posso te chamar?"} Seus dados ficam no seu computador.
+              </p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">
                 {SUGGESTIONS.map(s => (
                   <button key={s} type="button" onClick={() => void send(s)} className="jf-btn jf-focus px-3 py-1.5 text-sm">

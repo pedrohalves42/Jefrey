@@ -222,3 +222,13 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 @media (prefers-reduced-motion: reduce) {
   html *, html *::before, html *::after { animation: none !important; transition: none !important; }
 }
+
+
+/* Moldura estilo HUD (cantos) ao redor do avatar */
+.jf-hud { position: relative; }
+.jf-hud::before, .jf-hud::after {
+  content: ""; position: absolute; width: 22px; height: 22px; pointer-events: none; z-index: 10;
+  border: 2px solid hsl(var(--hue) 90% 60% / 0.55);
+}
+.jf-hud::before { top: 4px; left: 4px; border-right: 0; border-bottom: 0; }
+.jf-hud::after { bottom: 4px; right: 4px; border-left: 0; border-top: 0; }

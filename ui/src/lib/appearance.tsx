@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
 
-export type BrainShape = "brain" | "orb" | "reactor"
+export type BrainShape = "brain" | "orb" | "reactor" | "hologram"
 
 export type Appearance = {
   hue: number // 0-360, cor principal
@@ -9,6 +9,10 @@ export type Appearance = {
   particles: number // 0-1, densidade de neuronios/particulas
   motion: boolean // animacoes ligadas
   visual: boolean // visualizacao 3D ligada (desligar = so chat, mais leve)
+  holoScan: number // 0-1, linhas de varredura do holograma
+  holoGlitch: number // 0-1, falhas e aberracao de cor do holograma
+  holoCut: number // 0-1, quanto do fundo escuro some
+  holoInvert: boolean // imagem de fundo claro
 }
 
 export const DEFAULT_APPEARANCE: Appearance = {
@@ -18,10 +22,15 @@ export const DEFAULT_APPEARANCE: Appearance = {
   particles: 0.6,
   motion: true,
   visual: true,
+  holoScan: 0.5,
+  holoGlitch: 0.25,
+  holoCut: 0.12,
+  holoInvert: false,
 }
 
 export const PRESETS: { id: string; label: string; value: Partial<Appearance> }[] = [
   { id: "stark", label: "Stark (ciano)", value: { hue: 191, shape: "reactor", intensity: 0.8 } },
+  { id: "holo", label: "Holograma", value: { hue: 191, shape: "hologram", intensity: 0.85, holoScan: 0.55, holoGlitch: 0.3 } },
   { id: "neural", label: "Neural (violeta)", value: { hue: 268, shape: "brain", intensity: 0.7 } },
   { id: "matrix", label: "Matrix (verde)", value: { hue: 140, shape: "brain", intensity: 0.6 } },
   { id: "ambar", label: "Ambar (JARVIS)", value: { hue: 38, shape: "orb", intensity: 0.75 } },
@@ -38,7 +47,7 @@ function clamp(n: unknown, lo: number, hi: number, fallback: number): number {
 /** Valida qualquer objeto vindo do localStorage/importacao; nunca confia no formato. */
 export function sanitizeAppearance(raw: unknown): Appearance {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>
-  const shape: BrainShape = r.shape === "orb" || r.shape === "reactor" || r.shape === "brain" ? r.shape : DEFAULT_APPEARANCE.shape
+  const shape: BrainShape = r.shape === "orb" || r.shape === "reactor" || r.shape === "brain" || r.shape === "hologram" ? r.shape : DEFAULT_APPEARANCE.shape
   return {
     hue: Math.round(clamp(r.hue, 0, 360, DEFAULT_APPEARANCE.hue)),
     shape,
@@ -46,6 +55,10 @@ export function sanitizeAppearance(raw: unknown): Appearance {
     particles: clamp(r.particles, 0, 1, DEFAULT_APPEARANCE.particles),
     motion: typeof r.motion === "boolean" ? r.motion : DEFAULT_APPEARANCE.motion,
     visual: typeof r.visual === "boolean" ? r.visual : DEFAULT_APPEARANCE.visual,
+    holoScan: clamp(r.holoScan, 0, 1, DEFAULT_APPEARANCE.holoScan),
+    holoGlitch: clamp(r.holoGlitch, 0, 1, DEFAULT_APPEARANCE.holoGlitch),
+    holoCut: clamp(r.holoCut, 0, 0.9, DEFAULT_APPEARANCE.holoCut),
+    holoInvert: typeof r.holoInvert === "boolean" ? r.holoInvert : DEFAULT_APPEARANCE.holoInvert,
   }
 }
 
