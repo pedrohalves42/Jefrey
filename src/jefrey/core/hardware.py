@@ -14,6 +14,7 @@ class ModelTier:
     model: str
     size_gb: float
     quality: str  # descricao curta para o usuario
+    tools: str = "basico"  # "completo": usa todas as ferramentas | "basico": hora, contas, notas | "nenhum"
 
     @property
     def needs_gb(self) -> float:
@@ -21,12 +22,13 @@ class ModelTier:
 
 
 # do mais capaz ao mais leve
+# Medido em CPU comum (i7 8a geracao), 12 casos de ferramentas+conversa: ver docs/MODELOS.md
 TIERS: tuple[ModelTier, ...] = (
-    ModelTier("qwen2.5:14b", 9.0, "muito boa"),
-    ModelTier("qwen2.5:7b", 4.7, "muito boa"),
-    ModelTier("qwen2.5:3b", 1.9, "boa"),
-    ModelTier("qwen2.5:1.5b", 1.0, "razoavel (padrao)"),
-    ModelTier("qwen2.5:0.5b", 0.4, "basica (so para maquinas muito limitadas)"),
+    ModelTier("qwen2.5:14b", 9.0, "muito boa", "completo"),
+    ModelTier("qwen2.5:7b", 4.7, "muito boa", "completo"),
+    ModelTier("qwen2.5:3b", 1.9, "boa", "completo"),
+    ModelTier("qwen3:1.7b", 1.4, "razoavel (padrao leve)", "basico"),
+    ModelTier("qwen2.5:0.5b", 0.4, "basica (so para maquinas muito limitadas)", "nenhum"),
 )
 
 

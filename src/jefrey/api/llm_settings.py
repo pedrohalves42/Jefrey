@@ -15,7 +15,7 @@ router = APIRouter(prefix="/settings/llm", tags=["settings"])
 
 PRESETS = [
     {"id": "ollama-local", "label": "Local (Ollama)", "provider": "ollama",
-     "base_url": "http://ollama:11434", "models": ["qwen2.5:3b", "qwen2.5:0.5b", "llama3.1:8b", "gemma2:2b"],
+     "base_url": "http://ollama:11434", "models": ["qwen3:1.7b", "qwen2.5:3b", "qwen2.5:7b", "llama3.2:3b", "qwen2.5:0.5b"],
      "needs_key": False},
     {"id": "anthropic", "label": "Claude (Anthropic)", "provider": "anthropic",
      "base_url": "https://api.anthropic.com", "models": ["claude-sonnet-4-5", "claude-haiku-4-5-20251001"],
@@ -63,9 +63,9 @@ async def recommend():
     return {
         "memory_total_gb": round(total, 1), "memory_available_gb": round(avail, 1),
         "recommended": {"model": rec.model, "size_gb": rec.size_gb, "quality": rec.quality,
-                        "needs_gb": rec.needs_gb},
+                        "needs_gb": rec.needs_gb, "tools": rec.tools},
         "options": [{"model": t.model, "size_gb": t.size_gb, "needs_gb": t.needs_gb,
-                     "quality": t.quality, "fits": avail >= t.needs_gb} for t in TIERS],
+                     "quality": t.quality, "tools": t.tools, "fits": avail >= t.needs_gb} for t in TIERS],
         "note": "Cada modelo precisa de mais memoria que o seu tamanho (contexto + sistema). "
                 "Feche outros programas para liberar RAM ou use um provedor em nuvem.",
     }

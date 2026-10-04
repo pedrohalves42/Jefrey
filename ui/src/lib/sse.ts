@@ -3,6 +3,9 @@ export type ChatEvent =
   | { type: "done"; thread_id?: string }
   | { type: "error"; message: string }
   | { type: "pending_approval"; approval_id?: string; thread_id?: string }
+  | { type: "tool_start"; tool: string; label: string; risk: string }
+  | { type: "tool_end"; tool: string; ok: boolean; status: string; summary: string }
+  | { type: "approval_required"; approval_id: string; tool: string; label: string; risk?: string }
 
 /**
  * Parser incremental de Server-Sent Events. Aceita pedacos arbitrarios (um evento pode chegar
@@ -53,6 +56,18 @@ function parseBlock(block: string): ChatEvent | null {
         return { type: "error", message: typeof j.message === "string" ? j.message : "Erro desconhecido" }
       case "pending_approval":
         return { type: "pending_approval", approval_id: j.approval_id, thread_id: j.thread_id }
+      case "tool_start":
+        return typeof j.tool === "string"
+          ? { type: "tool_start", tool: j.tool, label: typeof j.label === "string" ? j.label : j.tool, risk: String(j.risk ?? "unknown") }
+          : null
+      case "tool_end":
+        return typeof j.tool === "string"
+          ? { type: "tool_end", tool: j.tool, ok: j.ok === true, status: String(j.status ?? ""), summary: String(j.summary ?? "") }
+          : null
+      case "approval_required":
+        return typeof j.approval_id === "string" && typeof j.tool === "string"
+          ? { type: "approval_required", approval_id: j.approval_id, tool: j.tool, label: typeof j.label === "string" ? j.label : j.tool, risk: j.risk }
+          : null
       default:
         return null
     }

@@ -802,7 +802,7 @@ services:
     environment:
       JEFREY_REDIS__URL: redis://:$${REDIS_PASSWORD}@redis:6379/0
       JEFREY_REDIS__HOST: redis
-      JEFREY_LLM__MODEL: ${JEFREY_LLM__MODEL:-qwen2.5:1.5b}
+      JEFREY_LLM__MODEL: ${JEFREY_LLM__MODEL:-qwen3:1.7b}
       JEFREY_LLM__BASE_URL: http://ollama:11434
       JEFREY_EMBEDDINGS__BASE_URL: http://ollama:11434
       JEFREY_ENV: production

@@ -373,46 +373,28 @@ async def chat_stream(request: Request, req: ChatRequest):
 
         raise HTTPException(status_code=400, detail="Mensagem bloqueada por regras de seguranca")
 
-    try:
-        pending = ApprovalManager().get_pending(thread_id, user_id=user_id)
-    except Exception as e:
-        logger.warning("get_pending failed: %s", e)
-        pending = []
-
-    if pending:
-
-        async def pending_gen():
-
-            yield f"data: {json.dumps({"type": "pending_approval", "approval_id": pending[0]["id"], "thread_id": thread_id}, ensure_ascii=False)}\n\n"
-
-        return StreamingResponse(pending_gen(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
-
     agent = JefreyAgent()
 
+    def _sse(obj: dict) -> str:
+        return "data: " + json.dumps(obj, ensure_ascii=False) + "\n\n"
+
     async def event_gen():
-
         full = ""
-
         try:
-
-            async for chunk in agent.run_stream(sanitized, user_id=user_id, thread_id=thread_id):
-
-                full += chunk
-
-                yield f"data: {json.dumps({"type": "token", "content": chunk}, ensure_ascii=False)}\n\n"
-
+            async for ev in agent.run_events(sanitized, user_id=user_id, thread_id=thread_id):
+                if ev.get("type") == "token":
+                    full += ev.get("content", "")
+                yield _sse(ev)
             _brain2_enqueue_fire_and_forget(user_id, thread_id, sanitized, full)
-
-            yield f"data: {json.dumps({"type": "done", "thread_id": thread_id}, ensure_ascii=False)}\n\n"
-
+            yield _sse({"type": "done", "thread_id": thread_id})
+        except asyncio.CancelledError:
+            raise  # cliente desconectou
         except Exception as e:
-
             logger.error("chat/stream event_gen error: %s", e, exc_info=True)
+            yield _sse({"type": "error", "message": "Algo deu errado ao responder. Tente de novo."})
 
-            yield f"data: {json.dumps({"type": "error", "message": str(e)[:200]}, ensure_ascii=False)}\n\n"
-
-    return StreamingResponse(event_gen(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"})
-
+    return StreamingResponse(event_gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"})
 
 
 @router.post("/resume/{thread_id}")

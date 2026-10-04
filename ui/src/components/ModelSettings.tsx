@@ -7,14 +7,16 @@ import { apiFetch, ensureDevToken, mapHttpError } from "@/lib/api"
 
 type Cfg = { provider: string; model: string; base_url: string; has_key: boolean; is_cloud: boolean; temperature: number }
 type Preset = { id: string; label: string; provider: string; base_url: string; models: string[]; needs_key: boolean }
-type Option = { model: string; size_gb: number; needs_gb: number; quality: string; fits: boolean }
+type Option = { model: string; size_gb: number; needs_gb: number; quality: string; tools: string; fits: boolean }
 type Rec = {
   memory_total_gb: number
   memory_available_gb: number
-  recommended: { model: string; quality: string; needs_gb: number }
+  recommended: { model: string; quality: string; needs_gb: number; tools: string }
   options: Option[]
   note: string
 }
+
+const TOOLS_LABEL: Record<string, string> = { completo: "completas", basico: "básicas (hora, contas, notas)", nenhum: "nenhuma" }
 
 const field = "w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
 
@@ -117,7 +119,7 @@ export default function ModelSettings() {
         method: "PUT",
         body: JSON.stringify({
           provider: "ollama",
-          model: rec?.recommended.model || "qwen2.5:1.5b",
+          model: rec?.recommended.model || "qwen3:1.7b",
           base_url: "http://ollama:11434",
           api_key: "",
         }),
@@ -164,10 +166,11 @@ export default function ModelSettings() {
                   className={`rounded-full border px-2 py-0.5 text-xs ${
                     o.fits ? "border-cyan-400/40 hover:bg-cyan-400/10" : "border-white/10 opacity-40"
                   }`}
-                  title={`${o.quality} - precisa de ${o.needs_gb} GB livres`}
+                  title={`${o.quality} - precisa de ${o.needs_gb} GB livres - ferramentas ${TOOLS_LABEL[o.tools] ?? o.tools}`}
                 >
                   {o.model}
                   {o.fits ? "" : " (nao cabe)"}
+                  <span className="ml-1 opacity-60">{o.tools === "completo" ? "· ferramentas completas" : o.tools === "basico" ? "· ferramentas básicas" : ""}</span>
                 </button>
               ))}
             </div>
@@ -188,7 +191,7 @@ export default function ModelSettings() {
 
         <label className="block text-sm">
           Modelo
-          <Input list="model-options" value={model} onChange={e => setModel(e.target.value)} placeholder="ex.: qwen2.5:1.5b" />
+          <Input list="model-options" value={model} onChange={e => setModel(e.target.value)} placeholder="ex.: qwen3:1.7b" />
           <datalist id="model-options">
             {preset?.models.map(m => (
               <option key={m} value={m} />

@@ -58,4 +58,30 @@ describe("SseParser", () => {
     const p = new SseParser()
     expect(p.push(ev({ type: "token", content: "ação\nnova" }))).toEqual([{ type: "token", content: "ação\nnova" }])
   })
+
+  it("entende eventos de ferramenta e de aprovacao", () => {
+    const p = new SseParser()
+    const out = p.push(
+      ev({ type: "tool_start", tool: "save_note", label: "Salvar nota", risk: "low" }) +
+        ev({ type: "approval_required", approval_id: "a1", tool: "delete_note", label: "Apagar nota", risk: "high" }) +
+        ev({ type: "tool_end", tool: "save_note", ok: true, status: "ok", summary: "salvo" }),
+    )
+    expect(out).toEqual([
+      { type: "tool_start", tool: "save_note", label: "Salvar nota", risk: "low" },
+      { type: "approval_required", approval_id: "a1", tool: "delete_note", label: "Apagar nota", risk: "high" },
+      { type: "tool_end", tool: "save_note", ok: true, status: "ok", summary: "salvo" },
+    ])
+  })
+
+  it("descarta eventos de ferramenta malformados", () => {
+    const p = new SseParser()
+    expect(p.push(ev({ type: "tool_start" }) + ev({ type: "approval_required", tool: "x" }) + ev({ type: "tool_end", ok: true }))).toEqual([])
+  })
+
+  it("tool_end so e ok quando ok === true (nao confia em valores truthy)", () => {
+    const p = new SseParser()
+    expect(p.push(ev({ type: "tool_end", tool: "x", ok: "true", status: "ok", summary: "" }))).toEqual([
+      { type: "tool_end", tool: "x", ok: false, status: "ok", summary: "" },
+    ])
+  })
 })

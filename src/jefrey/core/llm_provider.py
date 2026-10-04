@@ -19,6 +19,8 @@ from typing import Any, AsyncIterator, Optional
 
 import httpx
 
+from src.jefrey.core.llm_tools import StreamItem, StreamParser, ToolCall, tool_defs, to_provider_messages
+
 Message = dict[str, str]
 
 PROVIDERS = ("ollama", "openai", "anthropic")
@@ -149,6 +151,11 @@ class _Merged:
         return v if v not in (None, "") else getattr(self._b, name, None)
 
 
+def _has_thinking_mode(model: str) -> bool:
+    """Familias qwen3/qwen3.5 raciocinam por padrao (lento); no chat do Jefrey o raciocinio fica desligado."""
+    return model.lower().startswith("qwen3")
+
+
 def _timeout() -> float:
     return float(os.getenv("JEFREY_LLM_TIMEOUT", "90"))
 
@@ -190,44 +197,46 @@ class LLMClient:
         self._transport = transport
 
     # ---- montagem de requisicao -------------------------------------------------
-    def _request(self, messages: list[Message], stream: bool) -> tuple[str, dict, dict]:
+    def _request(self, messages: list[Message], stream: bool, tools: Optional[list[dict]] = None) -> tuple[str, dict, dict]:
         c = self.config
+        system, msgs = to_provider_messages(c.provider, messages)
+        defs = tool_defs(c.provider, tools) if tools else None
         if c.provider == "ollama":
-            return (
-                f"{c.base_url}/api/chat",
-                {},
-                {
-                    "model": c.model,
-                    "messages": messages,
-                    "stream": stream,
-                    "options": {"temperature": c.temperature, "num_predict": c.max_tokens},
-                },
-            )
+            body: dict[str, Any] = {
+                "model": c.model,
+                "messages": msgs,
+                "stream": stream,
+                "options": {"temperature": c.temperature, "num_predict": c.max_tokens},
+            }
+            if defs:
+                body["tools"] = defs
+            if _has_thinking_mode(c.model):
+                body["think"] = False
+            return f"{c.base_url}/api/chat", {}, body
+        base = c.base_url[:-3] if c.base_url.endswith("/v1") else c.base_url
         if c.provider == "openai":
             headers = {"Authorization": f"Bearer {c.api_key}"} if c.api_key else {}
-            base = c.base_url[:-3] if c.base_url.endswith("/v1") else c.base_url
-            return (
-                f"{base}/v1/chat/completions",
-                headers,
-                {
-                    "model": c.model,
-                    "messages": messages,
-                    "stream": stream,
-                    "temperature": c.temperature,
-                    "max_tokens": c.max_tokens,
-                },
-            )
-        system, rest = _split_system(messages)
-        body: dict[str, Any] = {
+            body = {
+                "model": c.model,
+                "messages": msgs,
+                "stream": stream,
+                "temperature": c.temperature,
+                "max_tokens": c.max_tokens,
+            }
+            if defs:
+                body["tools"] = defs
+            return f"{base}/v1/chat/completions", headers, body
+        body = {
             "model": c.model,
-            "messages": rest,
+            "messages": msgs,
             "stream": stream,
             "temperature": c.temperature,
             "max_tokens": c.max_tokens,
         }
         if system:
             body["system"] = system
-        base = c.base_url[:-3] if c.base_url.endswith("/v1") else c.base_url
+        if defs:
+            body["tools"] = defs
         return (
             f"{base}/v1/messages",
             {"x-api-key": c.api_key or "", "anthropic-version": ANTHROPIC_VERSION},
@@ -261,19 +270,29 @@ class LLMClient:
 
     # ---- streaming --------------------------------------------------------------
     async def stream(self, messages: list[Message]) -> AsyncIterator[str]:
+        """Somente texto (sem ferramentas)."""
+        async for item in self.stream_events(messages):
+            if isinstance(item, str):
+                yield item
+
+    async def stream_events(self, messages: list[Message], tools: Optional[list[dict]] = None) -> AsyncIterator[StreamItem]:
+        """Texto (str) e chamadas de ferramenta (ToolCall) conforme chegam."""
         started = time.monotonic()
         out: list[str] = []
-        url, headers, body = self._request(messages, stream=True)
+        parser = StreamParser(self.config.provider)
+        url, headers, body = self._request(messages, stream=True, tools=tools)
         async with self._client() as client:
             async with client.stream("POST", url, headers=headers, json=body) as resp:
                 resp.raise_for_status()
                 async for line in resp.aiter_lines():
-                    chunk, done = self._parse_stream_line(line)
-                    if chunk:
-                        out.append(chunk)
-                        yield chunk
-                    if done:
+                    for item in parser.feed(line):
+                        if isinstance(item, str):
+                            out.append(item)
+                        yield item
+                    if parser.done:
                         break
+                for item in parser.flush():
+                    yield item
         self._record(started, messages, "".join(out))
 
     def _parse_stream_line(self, line: str) -> tuple[str, bool]:

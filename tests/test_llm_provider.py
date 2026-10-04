@@ -189,3 +189,25 @@ def test_falha_de_http_nao_registra_latencia():
     with pytest.raises(httpx.HTTPStatusError):
         run(c.chat(MSGS))
     assert _sample("jefrey_llm_latency_seconds_count", provider="ollama", model="modelo-falha") is None
+
+
+# ---------------- modo de raciocinio (qwen3) ----------------
+def _body(model):
+    seen = {}
+
+    def h(req):
+        seen["body"] = json.loads(req.content)
+        return httpx.Response(200, json={"message": {"content": "ok"}})
+
+    run(client(LLMConfig("ollama", model, "http://ollama:11434"), h).chat(MSGS))
+    return seen["body"]
+
+
+def test_qwen3_desliga_o_raciocinio():
+    assert _body("qwen3:1.7b")["think"] is False
+    assert _body("qwen3.5:2b")["think"] is False
+
+
+def test_outros_modelos_nao_recebem_o_campo_think():
+    assert "think" not in _body("qwen2.5:3b")
+    assert "think" not in _body("llama3.2:3b")

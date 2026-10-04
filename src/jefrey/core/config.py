@@ -11,7 +11,7 @@ class LLMSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="JEFREY_LLM__", extra="ignore")
     
     provider: Literal["openai", "anthropic", "ollama"] = "ollama"
-    model: str = "qwen2.5:1.5b"
+    model: str = "qwen3:1.7b"
     temperature: float = 0.7
     max_tokens: int = 4000
     base_url: Optional[str] = "http://ollama:11434"

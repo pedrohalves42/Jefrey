@@ -2,7 +2,8 @@ import { authedFetch } from "@/lib/session"
 import { SseParser } from "@/lib/sse"
 
 export type Role = "user" | "assistant"
-export type Message = { id: string; role: Role; content: string; error?: boolean; at: number }
+export type ToolStep = { tool: string; label: string; risk: string; state: "running" | "waiting" | "ok" | "failed"; summary?: string }
+export type Message = { id: string; role: Role; content: string; error?: boolean; at: number; tools?: ToolStep[] }
 export type Thread = { id: string; title: string; updated: number; messages: Message[] }
 
 const KEY = "jefrey_threads_v1"
@@ -35,7 +36,15 @@ function sanitizeThreads(raw: unknown): Thread[] {
       messages: msgs
         .filter(m => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
         .slice(-MAX_MESSAGES)
-        .map(m => ({ id: String(m.id || uid()), role: m.role, content: m.content, error: !!m.error, at: Number(m.at) || 0 })),
+        .map(m => ({
+          id: String(m.id || uid()), role: m.role, content: m.content, error: !!m.error, at: Number(m.at) || 0,
+          tools: Array.isArray(m.tools)
+            ? m.tools.slice(0, 20).map(t => ({
+                tool: String(t.tool), label: String(t.label || t.tool), risk: String(t.risk || "unknown"),
+                state: t.state === "ok" || t.state === "failed" ? t.state : "failed", summary: t.summary ? String(t.summary).slice(0, 300) : undefined,
+              }))
+            : undefined,
+        })),
     })
   }
   return out.sort((a, b) => b.updated - a.updated).slice(0, MAX_THREADS)
@@ -93,6 +102,9 @@ export function chatErrorMessage(status: number, detail?: string): string {
 export type StreamHandlers = {
   onToken: (text: string) => void
   onPendingApproval?: (approvalId?: string) => void
+  onToolStart?: (tool: string, label: string, risk: string) => void
+  onToolEnd?: (tool: string, ok: boolean, summary: string) => void
+  onApprovalRequired?: (approvalId: string, tool: string, label: string) => void
 }
 
 export type StreamResult = { ok: boolean; error?: string; firstTokenMs?: number }
@@ -139,6 +151,9 @@ export async function streamChat(
         handlers.onToken(ev.content)
       } else if (ev.type === "error") failure = ev.message
       else if (ev.type === "pending_approval") handlers.onPendingApproval?.(ev.approval_id)
+      else if (ev.type === "tool_start") handlers.onToolStart?.(ev.tool, ev.label, ev.risk)
+      else if (ev.type === "tool_end") handlers.onToolEnd?.(ev.tool, ev.ok, ev.summary)
+      else if (ev.type === "approval_required") handlers.onApprovalRequired?.(ev.approval_id, ev.tool, ev.label)
     }
   }
   try {

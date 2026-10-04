@@ -4,7 +4,7 @@ import { MessageText } from "@/components/MessageText"
 import { authedFetch, ensureSession } from "@/lib/session"
 import {
   loadActiveId, loadThreads, newThread, saveActiveId, saveThreads, streamChat, titleFrom, uid,
-  type Message, type Thread,
+  type Message, type Thread, type ToolStep,
 } from "@/lib/chat"
 
 const SUGGESTIONS = [
@@ -31,7 +31,7 @@ export default function Conversa() {
   const [input, setInput] = useState("")
   const [streaming, setStreaming] = useState(false)
   const [gotToken, setGotToken] = useState(false)
-  const [pendingApproval, setPendingApproval] = useState<string | null | undefined>(undefined)
+  const [pendingApproval, setPendingApproval] = useState<{ id: string | null; label?: string } | undefined>(undefined)
   const [showList, setShowList] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
@@ -87,7 +87,43 @@ export default function Conversa() {
             messages: t.messages.map(m => (m.id === aiMsg.id ? { ...m, content: m.content + chunk } : m)),
           }))
         },
-        onPendingApproval: id => setPendingApproval(id ?? null),
+        onPendingApproval: id => setPendingApproval({ id: id ?? null }),
+        onToolStart: (tool, label, risk) =>
+          updateThread(tid, t => ({
+            ...t,
+            messages: t.messages.map(m =>
+              m.id === aiMsg.id ? { ...m, tools: [...(m.tools ?? []), { tool, label, risk, state: "running" } as ToolStep] } : m,
+            ),
+          })),
+        onApprovalRequired: (id, tool, label) => {
+          setPendingApproval({ id, label })
+          updateThread(tid, t => ({
+            ...t,
+            messages: t.messages.map(m =>
+              m.id === aiMsg.id
+                ? { ...m, tools: (m.tools ?? []).map(x => (x.tool === tool && x.state === "running" ? { ...x, state: "waiting" as const } : x)) }
+                : m,
+            ),
+          }))
+        },
+        onToolEnd: (tool, ok, summary) => {
+          setPendingApproval(undefined)
+          updateThread(tid, t => ({
+            ...t,
+            messages: t.messages.map(m => {
+              if (m.id !== aiMsg.id) return m
+              const tools = [...(m.tools ?? [])]
+              for (let i = tools.length - 1; i >= 0; i--) {
+                const x = tools[i] as ToolStep
+                if (x.tool === tool && (x.state === "running" || x.state === "waiting")) {
+                  tools[i] = { ...x, state: ok ? "ok" : "failed", summary }
+                  break
+                }
+              }
+              return { ...m, tools }
+            }),
+          }))
+        },
       },
       ctrl.signal,
     )
@@ -144,27 +180,23 @@ export default function Conversa() {
   }
 
   async function decide(decision: "approved" | "rejected") {
-    if (!pendingApproval) {
+    const pending = pendingApproval
+    if (!pending?.id) {
       setPendingApproval(undefined)
       return
     }
-    const r = await authedFetch(`/approvals/${pendingApproval}/decide`, {
+    const r = await authedFetch(`/approvals/${pending.id}/decide`, {
       method: "POST",
       body: JSON.stringify({ decision, decided_by: "usuario" }),
     })
-    setPendingApproval(undefined)
-    updateThread(active.id, t => ({
-      ...t,
-      messages: [
-        ...t.messages,
-        {
-          id: uid(), role: "assistant", at: Date.now(), error: !r.ok,
-          content: r.ok
-            ? decision === "approved" ? "Aprovado. Envie a mensagem de novo para eu continuar." : "Negado. Não vou executar essa ação."
-            : "Não consegui registrar sua decisão. Tente de novo.",
-        },
-      ],
-    }))
+    if (!r.ok) {
+      updateThread(active.id, t => ({
+        ...t,
+        messages: [...t.messages, { id: uid(), role: "assistant", at: Date.now(), error: true,
+          content: "Não consegui registrar sua decisão (pode ter expirado). Tente de novo." }],
+      }))
+    }
+    if (!streaming) setPendingApproval(undefined) // com resposta em andamento, o servidor segue sozinho
   }
 
   function onKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -247,7 +279,7 @@ export default function Conversa() {
           <ul className="mx-auto max-w-3xl space-y-3 py-2">
             {active.messages.map((m, idx) => {
               const isLast = idx === active.messages.length - 1
-              const typing = streaming && isLast && m.role === "assistant" && !m.content
+              const typing = streaming && isLast && m.role === "assistant" && !m.content && !(m.tools && m.tools.length)
               return (
                 <li key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                   <div
@@ -262,7 +294,28 @@ export default function Conversa() {
                         <span />
                       </span>
                     ) : (
-                      <MessageText text={m.content} />
+                      <>
+                        {m.tools && m.tools.length > 0 && (
+                          <div className="mb-1.5 flex flex-wrap gap-1.5">
+                            {m.tools.map((t, i) => (
+                              <span
+                                key={i}
+                                title={t.summary || t.label}
+                                className={`rounded-full border px-2 py-0.5 text-xs ${
+                                  t.state === "ok" ? "border-emerald-400/30 text-emerald-200"
+                                  : t.state === "failed" ? "border-red-400/30 text-red-200"
+                                  : t.state === "waiting" ? "border-amber-400/40 text-amber-200"
+                                  : "border-white/20 text-white/60"
+                                }`}
+                              >
+                                {t.state === "ok" ? "✓ " : t.state === "failed" ? "✗ " : t.state === "waiting" ? "⏳ " : "… "}
+                                {t.label}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <MessageText text={m.content} />
+                      </>
                     )}
                   </div>
                 </li>
@@ -273,7 +326,9 @@ export default function Conversa() {
           {pendingApproval !== undefined && (
             <div className="jf-panel mx-auto my-3 max-w-xl border-amber-400/40 p-4" role="alertdialog" aria-label="Aprovação necessária">
               <p className="font-medium text-amber-200">Preciso da sua aprovação</p>
-              <p className="mt-1 text-sm text-white/70">Esta ação pode ter efeitos reais. Você autoriza?</p>
+              <p className="mt-1 text-sm text-white/70">
+                {pendingApproval.label ? <>Ação: <b>{pendingApproval.label}</b>. </> : null}Pode ter efeitos reais. Você autoriza?
+              </p>
               <div className="mt-3 flex gap-2">
                 <button type="button" onClick={() => void decide("approved")} className="jf-btn jf-focus px-4 py-1.5 text-sm">
                   Aprovar

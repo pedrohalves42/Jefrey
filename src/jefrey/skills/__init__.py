@@ -201,6 +201,7 @@ def tool(name: str | None = None, description: str | None = None):
 def load_skills() -> int:
     """Importa modulos de skills para trigger dos decorators. Idempotente."""
     mods = [
+        "src.jefrey.skills.essentials",
         "src.jefrey.skills.notes",
         "src.jefrey.skills.automation",
         "src.jefrey.skills.calendar",
