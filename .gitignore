@@ -148,3 +148,7 @@ evals/reports/
 config/llm.runtime.json
 backups/
 *.antes-da-restauracao-*
+dist/
+build/
+packaging/Output/
+*.spec

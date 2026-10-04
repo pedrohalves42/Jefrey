@@ -302,13 +302,15 @@ def main(argv: Optional[list[str]] = None) -> int:
     home = Path(os.getenv("JEFREY_HOME") or default_home())
     env = build_env(home, port=port)
     os.environ.update(env)
-    logs_dir = home / "logs"
-    log_path = setup_logging(logs_dir)
-    logging.getLogger("jefrey.launcher").info("iniciando na porta %s (registros em %s)", port, log_path)
     root = Path(__file__).resolve().parents[3]
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
     os.chdir(home)  # caminhos relativos antigos ("data/...") caem dentro da pasta do usuario
+    import src.jefrey.core.logging  # noqa: F401,E402  (zera os handlers do logger raiz ao ser importado: tem que vir ANTES do arquivo)
+
+    logs_dir = home / "logs"
+    log_path = setup_logging(logs_dir)
+    logging.getLogger("jefrey.launcher").info("iniciando na porta %s (registros em %s)", port, log_path)
 
     if local_model_chosen():  # nuvem e o padrao: so prepara modelo local se a pessoa escolheu local
         ok, msg = ensure_ollama()

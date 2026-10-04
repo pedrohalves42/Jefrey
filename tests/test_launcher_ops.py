@@ -161,3 +161,23 @@ def test_sair_no_modo_nativo_chama_o_lancador_depois_de_responder(client):
 def test_control_sem_gancho_nao_faz_nada():
     control.set_quit_hook(None)
     assert control.can_quit() is False and control.request_quit() is False
+
+
+def test_registros_em_arquivo_sobrevivem_ao_modulo_de_log_do_app(tmp_path):
+    """O modulo de log do app zera os handlers ao ser importado; o arquivo tem que ser ligado depois dele."""
+    import importlib
+    import src.jefrey.core.logging as app_logging
+    root = logging.getLogger()
+    antes = list(root.handlers)
+    try:
+        importlib.reload(app_logging)  # simula a importacao: root.handlers = []
+        path = L.setup_logging(tmp_path / "logs")
+        logging.getLogger("src.jefrey.api.main").info("app subiu")
+        for h in root.handlers:
+            h.flush()
+        assert "app subiu" in path.read_text(encoding="utf-8")
+    finally:
+        for h in list(root.handlers):
+            if h not in antes:
+                root.removeHandler(h)
+                h.close()

@@ -10,10 +10,10 @@ pyyaml>=6.0,<7
 python-dotenv>=1.0,<2
 
 # LLM & Agent Framework
-langchain-core>=0.2,<1
+langchain-core>=1.2.22,<2
 
 # Memory & Embeddings
-chromadb>=0.5,<1
+chromadb>=1.0,<2
 tiktoken>=0.7,<1
 
 # Database & Vector Store (Fase P1)
