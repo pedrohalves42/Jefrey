@@ -264,8 +264,11 @@ class Agent:
             from src.jefrey.core.tool_runtime import ToolRuntime
             from src.jefrey.skills import load_skills, skill_registry
 
+            from src.jefrey.core.skill_prefs import enabled_tools
+
             load_skills()
-            tools = {t.name: t for t in skill_registry.get_all_tools() if t.name in CATALOG}
+            skills = [skill_registry.get_skill(m.name) for m in skill_registry.list_skills()]
+            tools = enabled_tools([sk for sk in skills if sk], CATALOG)
             runtime = ToolRuntime(user_id=user_id, thread_id=base_thread_id, resolver=tools.get)
             messages = [{"role": "system", "content": system_prompt}, *self._load_history(state),
                         {"role": "user", "content": user_input}]

@@ -298,10 +298,11 @@ class LongTermMemory:
     ) -> str:
         """Adiciona uma memória."""
         memory_id = memory_id or str(uuid.uuid4())
-        metadata = metadata or {}
-        # H2: Isolar por user_id no metadata para fallback ChromaDB
+        metadata = dict(metadata or {})  # nao muta o dict de quem chamou
+        # H2: isolamento multi-tenant. O user_id vem do servidor e SEMPRE sobrescreve o metadata:
+        # o modelo (ou um chamador) nao pode gravar na memoria de outro usuario.
         if user_id:
-            metadata.setdefault("user_id", user_id)
+            metadata["user_id"] = user_id
         metadata.setdefault("timestamp", datetime.now().isoformat())
         metadata.setdefault("type", "memory")
         metadata = _to_chroma_metadata(metadata)
@@ -369,14 +370,16 @@ class LongTermMemory:
             }
         return None
     
-    def update(self, memory_id: str, content: str | None = None, metadata: dict | None = None) -> bool:
-        """Atualiza memória."""
-        existing = self.get(memory_id)
+    def update(self, memory_id: str, content: str | None = None, metadata: dict | None = None,
+               user_id: str | None = None) -> bool:
+        """Atualiza memória. Com user_id, so o dono consegue; o dono nunca muda pelo metadata."""
+        existing = self.get(memory_id, user_id=user_id)
         if not existing:
             return False
-        
+
         new_content = content or existing["content"]
-        new_metadata = {**existing["metadata"], **(metadata or {})}
+        safe_meta = {k: v for k, v in (metadata or {}).items() if k != "user_id"}
+        new_metadata = {**existing["metadata"], **safe_meta}
         new_metadata["updated_at"] = datetime.now().isoformat()
         new_metadata = _to_chroma_metadata(new_metadata)
         
@@ -404,15 +407,16 @@ class LongTermMemory:
     
     def list_recent(self, limit: int = 20, filter_metadata: dict | None = None, user_id: str | None = None) -> list[dict]:
         """Lista memórias recentes (por timestamp) com isolamento multi-tenant."""
-        where = filter_metadata or {}
+        where = dict(filter_metadata or {})
         if user_id:
             where["user_id"] = user_id
+        # o Chroma devolve por ordem de insercao: busca ate 2000 do usuario e ordena por data
         results = self._collection.get(
             where=where if where else None,
             include=["documents", "metadatas"],
-            limit=limit,
+            limit=2000,
         )
-        
+
         memories = []
         if results["ids"]:
             for i, mem_id in enumerate(results["ids"]):
@@ -422,8 +426,8 @@ class LongTermMemory:
                     "metadata": _from_chroma_metadata(results["metadatas"][i]),
                 })
         
-        memories.sort(key=lambda m: m["metadata"].get("timestamp", ""), reverse=True)
-        return memories
+        memories.sort(key=lambda m: str(m["metadata"].get("timestamp", "")), reverse=True)
+        return memories[:max(0, int(limit))]
     
     def health_check(self) -> dict:
         """Verifica saúde do backend ChromaDB (contagem + captura de erro)."""

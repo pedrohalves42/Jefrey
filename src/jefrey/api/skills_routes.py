@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/skills", tags=["skills"])
@@ -21,7 +22,10 @@ def _risk_of(tool_name: str) -> str | None:
 def describe_skills() -> list[dict]:
     from src.jefrey.skills import load_skills, skill_registry
 
+    from src.jefrey.core.skill_prefs import load_disabled
+
     load_skills()  # idempotente
+    off = load_disabled()
     out: list[dict] = []
     for meta in skill_registry.list_skills():
         skill = skill_registry.get_skill(meta.name)
@@ -39,6 +43,7 @@ def describe_skills() -> list[dict]:
             "version": meta.version,
             "tags": list(meta.tags),
             "requires_auth": bool(meta.requires_auth),
+            "enabled": meta.name not in off,
             "tools": tools,
         })
     return out
@@ -48,3 +53,20 @@ def describe_skills() -> list[dict]:
 async def list_skills():
     skills = describe_skills()
     return {"skills": skills, "count": len(skills), "tool_count": sum(len(s["tools"]) for s in skills)}
+
+
+class SkillToggle(BaseModel):
+    enabled: bool
+
+
+@router.put("/{name}")
+async def toggle_skill(name: str, body: SkillToggle):
+    """Liga ou desliga uma skill. Desligada, o agente nao enxerga nenhuma ferramenta dela."""
+    from src.jefrey.core.skill_prefs import set_enabled
+    from src.jefrey.skills import load_skills, skill_registry
+
+    load_skills()
+    if not skill_registry.is_loaded(name):
+        raise HTTPException(status_code=404, detail="skill nao encontrada")
+    set_enabled(name, body.enabled)
+    return {"name": name, "enabled": body.enabled}

@@ -49,7 +49,7 @@ class MemoryLongTermSettings(BaseSettings):
     embedding_model: str = "nomic-embed-text"
     embedding_dim: int = 768  # nomic-embed-text via Ollama = 768 dims (1536 quebra pgvector)
     top_k: int = 5
-    similarity_threshold: float = 0.7
+    similarity_threshold: float = 0.6
 
 class MemorySettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="JEFREY_MEMORY__", extra="ignore")

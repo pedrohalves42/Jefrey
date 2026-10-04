@@ -1,7 +1,13 @@
-import { useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { authedFetch } from "@/lib/session"
 
-type Hit = { id?: string; content: string; similarity?: number }
+type Hit = { id?: string; content: string; similarity?: number; metadata?: { title?: string; timestamp?: string } }
+
+function when(ts?: string): string {
+  if (!ts) return ""
+  const d = new Date(ts)
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
+}
 
 export default function Memoria() {
   const [query, setQuery] = useState("")
@@ -10,7 +16,25 @@ export default function Memoria() {
   const [note, setNote] = useState("")
   const [title, setTitle] = useState("")
   const [saving, setSaving] = useState(false)
+  const [recent, setRecent] = useState<Hit[] | null>(null)
+  const [confirming, setConfirming] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  const loadRecent = useCallback(async () => {
+    try {
+      const r = await authedFetch("/memory/recent?limit=50")
+      if (!r.ok) throw new Error(String(r.status))
+      const j = await r.json()
+      setRecent(Array.isArray(j.memories) ? j.memories : [])
+    } catch {
+      setRecent(null)
+      setMsg({ ok: false, text: "Não consegui carregar suas memórias. Verifique se o Jefrey está rodando." })
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadRecent()
+  }, [loadRecent])
 
   async function search(e?: React.FormEvent) {
     e?.preventDefault()
@@ -46,11 +70,55 @@ export default function Memoria() {
       setNote("")
       setTitle("")
       setMsg({ ok: true, text: "Guardado. O Jefrey vai lembrar disso." })
+      await loadRecent()
     } catch {
       setMsg({ ok: false, text: "Não consegui guardar. Tente de novo." })
     } finally {
       setSaving(false)
     }
+  }
+
+  async function forget(id: string) {
+    setMsg(null)
+    try {
+      const r = await authedFetch(`/memory/${id}`, { method: "DELETE" })
+      if (!r.ok && r.status !== 404) throw new Error(String(r.status))
+      setConfirming(null)
+      setRecent(prev => (prev ? prev.filter(m => m.id !== id) : prev))
+      setHits(prev => (prev ? prev.filter(m => m.id !== id) : prev))
+      setMsg({ ok: true, text: "Esquecido de vez." })
+    } catch {
+      setMsg({ ok: false, text: "Não consegui apagar. Tente de novo." })
+    }
+  }
+
+  function Item({ m }: { m: Hit }) {
+    return (
+      <li className="rounded-lg border border-white/10 bg-black/20 p-3 text-sm">
+        {m.metadata?.title && <p className="font-medium text-white">{m.metadata.title}</p>}
+        <p className="whitespace-pre-wrap break-words text-white/85">{m.content}</p>
+        <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-white/40">
+          {typeof m.similarity === "number" && <span>parecido com a sua busca: {Math.round(m.similarity * 100)}%</span>}
+          {when(m.metadata?.timestamp) && <span>{when(m.metadata?.timestamp)}</span>}
+          {m.id &&
+            (confirming === m.id ? (
+              <span className="flex items-center gap-2">
+                <span className="text-amber-200">Apagar de vez?</span>
+                <button type="button" onClick={() => void forget(m.id as string)} className="jf-focus rounded border border-red-400/40 px-2 py-0.5 text-red-200 hover:bg-red-400/10">
+                  Sim, esquecer
+                </button>
+                <button type="button" onClick={() => setConfirming(null)} className="jf-focus rounded border border-white/15 px-2 py-0.5 hover:bg-white/5">
+                  Cancelar
+                </button>
+              </span>
+            ) : (
+              <button type="button" onClick={() => setConfirming(m.id as string)} aria-label="Esquecer esta memória" className="jf-focus rounded px-1 hover:text-red-300">
+                Esquecer
+              </button>
+            ))}
+        </div>
+      </li>
+    )
   }
 
   return (
@@ -103,21 +171,28 @@ export default function Memoria() {
             {searching ? "Buscando…" : "Buscar"}
           </button>
         </form>
-
-        {hits && hits.length === 0 && (
-          <p className="mt-3 text-sm text-white/60">
-            Nada parecido encontrado. A busca entende o sentido, então prefira frases completas a palavras soltas.
-          </p>
-        )}
+        {hits && hits.length === 0 && <p className="mt-3 text-sm text-white/60">Nada parecido encontrado. A busca entende o sentido: tente descrever com outras palavras.</p>}
         {hits && hits.length > 0 && (
           <ul className="mt-3 space-y-2">
             {hits.map((h, i) => (
-              <li key={h.id ?? i} className="rounded-lg border border-white/10 bg-black/20 p-3 text-sm">
-                <p className="whitespace-pre-wrap break-words text-white/90">{h.content}</p>
-                {typeof h.similarity === "number" && (
-                  <p className="mt-1 text-xs text-white/40">parecido com a sua busca: {Math.round(h.similarity * 100)}%</p>
-                )}
-              </li>
+              <Item key={h.id ?? i} m={h} />
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="jf-panel p-4" aria-labelledby="m-recent">
+        <h2 id="m-recent" className="mb-2 font-medium text-white">
+          Tudo que está guardado {recent ? <span className="text-sm font-normal text-white/40">({recent.length})</span> : null}
+        </h2>
+        {recent === null ? (
+          <p className="text-sm text-white/50">Carregando…</p>
+        ) : recent.length === 0 ? (
+          <p className="text-sm text-white/60">Ainda não há nada guardado. Peça ao Jefrey no chat ("guarde uma nota…") ou use o campo acima.</p>
+        ) : (
+          <ul className="space-y-2">
+            {recent.map(m => (
+              <Item key={m.id} m={m} />
             ))}
           </ul>
         )}

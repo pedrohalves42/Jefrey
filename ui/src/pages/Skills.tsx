@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { authedFetch } from "@/lib/session"
 
 type Tool = { name: string; description: string; risk: string | null }
-type Skill = { name: string; description: string; version: string; tags: string[]; requires_auth: boolean; tools: Tool[] }
+type Skill = { name: string; description: string; version: string; tags: string[]; requires_auth: boolean; enabled: boolean; tools: Tool[] }
 
 const RISK: Record<string, { label: string; cls: string }> = {
   low: { label: "baixo", cls: "text-emerald-300" },
@@ -25,6 +25,22 @@ export default function Skills() {
   const [skills, setSkills] = useState<Skill[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState<string | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+
+  async function toggle(name: string, enabled: boolean) {
+    setBusy(name)
+    setError(null)
+    setSkills(prev => (prev ? prev.map(s => (s.name === name ? { ...s, enabled } : s)) : prev)) // otimista
+    try {
+      const r = await authedFetch(`/skills/${name}`, { method: "PUT", body: JSON.stringify({ enabled }) })
+      if (!r.ok) throw new Error(String(r.status))
+    } catch {
+      setSkills(prev => (prev ? prev.map(s => (s.name === name ? { ...s, enabled: !enabled } : s)) : prev)) // desfaz
+      setError("Não consegui salvar essa escolha. Tente de novo.")
+    } finally {
+      setBusy(null)
+    }
+  }
 
   useEffect(() => {
     let alive = true
@@ -61,9 +77,22 @@ export default function Skills() {
 
       <ul className="space-y-3">
         {skills?.map(s => (
-          <li key={s.name} className="jf-panel p-4">
+          <li key={s.name} className={`jf-panel p-4 ${s.enabled ? "" : "opacity-60"}`}>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <h2 className="font-medium text-white">{NICE[s.name] ?? s.name}</h2>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={s.enabled}
+                aria-label={`${s.enabled ? "Desligar" : "Ligar"} ${NICE[s.name] ?? s.name}`}
+                disabled={busy === s.name}
+                onClick={() => void toggle(s.name, !s.enabled)}
+                className={`jf-focus ml-auto inline-flex h-6 w-11 items-center rounded-full border transition-colors ${
+                  s.enabled ? "border-emerald-400/50 bg-emerald-500/30" : "border-white/20 bg-white/5"
+                }`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${s.enabled ? "translate-x-6" : "translate-x-1"}`} />
+              </button>
               <span className="text-xs text-white/40">v{s.version}</span>
               {s.requires_auth && <span className="rounded-full border border-amber-400/30 px-2 text-xs text-amber-200">precisa de login Google</span>}
               <span className="text-xs text-white/40">{s.tools.length} ferramentas</span>
