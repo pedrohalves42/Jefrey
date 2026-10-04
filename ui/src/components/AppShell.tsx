@@ -1,4 +1,7 @@
-import { NavLink, Outlet } from "react-router-dom"
+import { useState } from "react"
+import { useQuery } from "@tanstack/react-query"
+import { Navigate, NavLink, Outlet, useLocation, useSearchParams } from "react-router-dom"
+import { getConfig, needsWelcome, welcomeSkipped } from "@/lib/llm"
 import { StatusPill } from "@/components/StatusPill"
 import { ReminderBanner } from "@/components/ReminderBanner"
 
@@ -18,10 +21,27 @@ function Icon({ d }: { d: string }) {
   )
 }
 
+function ConnectedNotice() {
+  const [params, setParams] = useSearchParams()
+  if (params.get("conectado") !== "openrouter") return null
+  return (
+    <div role="status" className="jf-panel fixed left-1/2 top-3 z-50 w-[min(92vw,26rem)] -translate-x-1/2 border border-emerald-400/40 p-3 text-sm text-emerald-100">
+      Conectado! O Jefrey já pode usar a nuvem. É só conversar.
+      <button type="button" className="jf-focus ml-3 underline" onClick={() => setParams({}, { replace: true })}>
+        Ok
+      </button>
+    </div>
+  )
+}
+
 export function AppShell() {
+  const loc = useLocation()
+  const cfg = useQuery({ queryKey: ["llm-config"], queryFn: async () => (await getConfig()).data, staleTime: 30_000, retry: 1 })
+  if (loc.pathname !== "/bem-vindo" && needsWelcome(cfg.data, welcomeSkipped())) return <Navigate to="/bem-vindo" replace />
   return (
     <div className="flex h-dvh flex-col md:flex-row">
       <ReminderBanner />
+      <ConnectedNotice />
       {/* barra lateral (desktop) */}
       <nav className="jf-panel m-3 mr-0 hidden w-56 shrink-0 flex-col p-3 md:flex" aria-label="Principal">
         <div className="mb-5 flex items-center gap-2 px-2 pt-1">

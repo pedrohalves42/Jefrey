@@ -9,6 +9,7 @@ import Memoria from "@/pages/Memoria"
 import Skills from "@/pages/Skills"
 import Configuracoes from "@/pages/Configuracoes"
 import Avancado from "@/pages/Avancado"
+import BemVindo from "@/pages/BemVindo"
 
 const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true } } })
 
@@ -27,6 +28,7 @@ export default function App() {
               <Route path="/skills" element={<Skills />} />
               <Route path="/configuracoes" element={<Configuracoes />} />
               <Route path="/avancado" element={<Avancado />} />
+              <Route path="/bem-vindo" element={<BemVindo />} />
               {/* enderecos antigos */}
               <Route path="/memory" element={<Navigate to="/memoria" replace />} />
               <Route path="/settings" element={<Navigate to="/configuracoes" replace />} />

@@ -64,3 +64,72 @@ def read_memory_gb() -> tuple[float, float]:
         ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(ms))
         return ms.total / 2**30, ms.avail / 2**30
     return 0.0, 0.0
+
+
+# ---------------------------------------------------------------- placa de video e sugestao de modelo local
+@dataclass(frozen=True)
+class GpuInfo:
+    name: str
+    vram_gb: float
+    kind: str  # "nvidia" | "apple"
+
+
+def _run_nvidia_smi() -> str:
+    import subprocess
+
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    r = subprocess.run(["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"],
+                       capture_output=True, text=True, timeout=6, creationflags=flags)
+    return r.stdout if r.returncode == 0 else ""
+
+
+def detect_gpu(run_smi=_run_nvidia_smi, system: "str | None" = None, machine: "str | None" = None,
+               total_ram_gb: "float | None" = None) -> "GpuInfo | None":
+    """NVIDIA (via nvidia-smi) ou Apple Silicon (memoria unificada). Outras placas: desconhecido (None)."""
+    import platform
+
+    system = system or platform.system()
+    machine = machine or platform.machine()
+    if system == "Darwin" and machine == "arm64":
+        total = total_ram_gb if total_ram_gb is not None else read_memory_gb()[0]
+        return GpuInfo("Apple Silicon", round(total * 0.65, 1), "apple")  # parte da memoria unificada que a GPU usa
+    try:
+        out = run_smi()
+    except (OSError, ValueError, Exception):  # nvidia-smi ausente ou travado
+        return None
+    best: "GpuInfo | None" = None
+    for line in out.strip().splitlines():
+        name, _, mem = line.rpartition(",")
+        try:
+            vram = float(mem.strip()) / 1024
+        except ValueError:
+            continue
+        if best is None or vram > best.vram_gb:
+            best = GpuInfo(name.strip() or "NVIDIA", round(vram, 1), "nvidia")
+    return best
+
+
+# limiares em GB de memoria de video, com folga; ESTIMATIVA (nao medida: sem GPU para testar)
+GPU_TIERS: tuple[tuple[float, str, str], ...] = (
+    (20.0, "gemma4:26b", "muito boa"),
+    (11.0, "gemma4:e4b", "muito boa"),
+    (8.0, "gemma4:e2b", "boa"),
+)
+
+
+def local_advice(gpu: "GpuInfo | None", ram_total_gb: float) -> dict:
+    """Sugere modelo local SO quando ha placa de video capaz; senao recomenda a nuvem e explica por que."""
+    if gpu is not None:
+        for need, model, quality in GPU_TIERS:
+            if gpu.vram_gb >= need:
+                return {"suggest_local": True, "model": model, "quality": quality, "measured": False,
+                        "reason": f"Seu computador tem {gpu.name} com cerca de {gpu.vram_gb:g} GB de memoria de video: "
+                                  f"o modelo {model} deve rodar bem (estimativa).",
+                        "gpu": {"name": gpu.name, "vram_gb": gpu.vram_gb, "kind": gpu.kind}}
+        why = f"A placa ({gpu.name}, {gpu.vram_gb:g} GB) e pequena para os modelos locais bons."
+    else:
+        why = ("Nao encontrei uma placa de video compativel. Em teste com processador comum (sem placa), "
+               "modelos locais bons levaram de 35 segundos a mais de 2 minutos por resposta.")
+    return {"suggest_local": False, "model": None, "quality": None, "measured": False,
+            "reason": why + " Recomendamos usar a nuvem.", "gpu": None if gpu is None else
+            {"name": gpu.name, "vram_gb": gpu.vram_gb, "kind": gpu.kind}}

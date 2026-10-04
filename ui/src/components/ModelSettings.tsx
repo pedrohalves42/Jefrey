@@ -142,8 +142,9 @@ export default function ModelSettings() {
       <CardContent className="space-y-4">
         {cfg && (
           <p className="text-sm text-muted-foreground">
-            Em uso: <b>{cfg.model}</b> via {cfg.provider}. Local por padrao: seus dados ficam no seu computador. Escolha
-            um provedor de nuvem (Claude, ChatGPT) apenas se quiser respostas mais fortes.
+            Em uso: <b>{cfg.model}</b> via {cfg.provider}. {cfg.is_cloud
+              ? "Nuvem: as respostas são mais fortes e rápidas; suas mensagens passam pelo provedor escolhido."
+              : "No seu computador: nada sai daqui, mas em computadores sem placa de vídeo as respostas são bem mais lentas e simples."}
           </p>
         )}
 

@@ -10,7 +10,7 @@ const SHELL = ["/", "/manifest.json", "/images/icon-192.png"]
 const STATIC_PREFIXES = ["/assets/", "/images/"]
 const STATIC_FILES = ["/manifest.json", "/favicon.ico", "/vite.svg"]
 // paginas do aplicativo (navegacao): rede primeiro, casca guardada se estiver offline
-const APP_PAGES = ["/", "/memoria", "/skills", "/configuracoes", "/avancado"]
+const APP_PAGES = ["/", "/memoria", "/skills", "/configuracoes", "/avancado", "/bem-vindo"]
 
 self.addEventListener("install", event => {
   event.waitUntil(

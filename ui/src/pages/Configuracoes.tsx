@@ -1,5 +1,6 @@
 import ModelSettings from "@/components/ModelSettings"
 import { AppearancePanel } from "@/components/AppearancePanel"
+import FallbackSettings from "@/components/FallbackSettings"
 
 export default function Configuracoes() {
   return (
@@ -9,6 +10,7 @@ export default function Configuracoes() {
         <p className="text-sm text-white/55">Escolha o modelo de IA e o visual do Jefrey.</p>
       </header>
       <ModelSettings />
+      <FallbackSettings />
       <AppearancePanel />
     </div>
   )

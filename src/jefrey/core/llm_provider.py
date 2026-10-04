@@ -83,10 +83,8 @@ def load_override() -> dict:
 
 
 def load_saved_key() -> Optional[str]:
-    try:
-        return _key_file().read_text(encoding="utf-8").strip() or None
-    except OSError:
-        return None
+    from src.jefrey.core.secret_store import read_secret
+    return read_secret(_key_file())
 
 
 def save_override(provider: str, model: str, base_url: Optional[str],
@@ -110,10 +108,10 @@ def save_override(provider: str, model: str, base_url: Optional[str],
         data["temperature"] = max(0.0, min(2.0, float(temperature)))
     _override_file().write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     if api_key is not None:
+        from src.jefrey.core.secret_store import write_secret
         kf = _key_file()
-        kf.parent.mkdir(parents=True, exist_ok=True)
         if api_key.strip():
-            kf.write_text(api_key.strip(), encoding="utf-8")
+            write_secret(kf, api_key)  # protegida pelo Windows (DPAPI)
         elif kf.exists():
             kf.unlink()
 
@@ -389,5 +387,129 @@ def friendly_error(e: Exception) -> str:
     return f"O modelo esta indisponivel ({type(e).__name__})."
 
 
-def get_llm_client() -> LLMClient:
-    return LLMClient(config_from_settings())
+# ---- reserva: se o provedor principal falhar, tenta o proximo ------------------------------
+MAX_FALLBACKS = 3
+COOLDOWN_S = 45.0
+_RETRY_STATUS = {401, 403, 404, 408, 409, 425, 429}
+
+
+def _fallback_key_file(key_id: str) -> Path:
+    return _config_dir() / "credentials" / f"llm_key_{key_id}"
+
+
+def is_retryable(e: Exception) -> bool:
+    """Falha que justifica tentar outro provedor (limite, queda, chave recusada, modelo ausente)."""
+    if isinstance(e, (httpx.TimeoutException, httpx.ConnectError, httpx.RemoteProtocolError)):
+        return True
+    if isinstance(e, httpx.HTTPStatusError):
+        return e.response.status_code in _RETRY_STATUS or e.response.status_code >= 500
+    return False
+
+
+def load_fallback_configs() -> list[LLMConfig]:
+    from src.jefrey.core.secret_store import read_secret
+
+    out: list[LLMConfig] = []
+    for item in (load_override().get("fallbacks") or [])[:MAX_FALLBACKS]:
+        if not isinstance(item, dict) or item.get("provider") not in PROVIDERS or not item.get("model"):
+            continue
+        provider = item["provider"]
+        out.append(LLMConfig(provider=provider, model=str(item["model"]),
+                             base_url=_normalize_base(provider, str(item.get("base_url") or "")),
+                             api_key=read_secret(_fallback_key_file(str(item.get("id", "")))) if item.get("id") else None))
+    return out
+
+
+def save_fallbacks(items: list[dict]) -> None:
+    """items: [{id, provider, model, base_url?, api_key?}]. api_key None mantem a atual; "" apaga."""
+    from src.jefrey.core.secret_store import read_secret, valid_id, write_secret
+
+    if len(items) > MAX_FALLBACKS:
+        raise LLMConfigError(f"no maximo {MAX_FALLBACKS} provedores de reserva")
+    clean: list[dict] = []
+    seen: set[str] = set()
+    for it in items:
+        kid, provider, model = str(it.get("id", "")), it.get("provider", ""), str(it.get("model", "")).strip()
+        if not valid_id(kid) or kid in seen:
+            raise LLMConfigError("identificador de reserva invalido ou repetido")
+        if provider not in PROVIDERS or not model:
+            raise LLMConfigError("reserva precisa de provedor valido e modelo")
+        seen.add(kid)
+        key = it.get("api_key")
+        effective = read_secret(_fallback_key_file(kid)) if key is None else (str(key).strip() or None)
+        LLMClient(LLMConfig(provider, model, _normalize_base(provider, str(it.get("base_url") or "")), api_key=effective))
+        clean.append({"id": kid, "provider": provider, "model": model, "base_url": (str(it.get("base_url") or "").strip().rstrip("/") or None)})
+    data = load_override()
+    data["fallbacks"] = clean
+    _config_dir().mkdir(parents=True, exist_ok=True)
+    _override_file().write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    for it in items:
+        kf = _fallback_key_file(str(it["id"]))
+        if it.get("api_key") is not None:
+            if str(it["api_key"]).strip():
+                from src.jefrey.core.secret_store import write_secret as _w
+                _w(kf, str(it["api_key"]))
+            elif kf.exists():
+                kf.unlink()
+    for old in (_config_dir() / "credentials").glob("llm_key_*"):  # apaga chaves de reservas removidas
+        if old.name[len("llm_key_"):] not in seen:
+            old.unlink(missing_ok=True)
+
+
+class RoutedLLM:
+    """Mesma interface do LLMClient, com reserva. So troca de provedor ANTES de a resposta comecar."""
+
+    def __init__(self, clients: list[LLMClient], clock=time.monotonic):
+        self.clients = clients
+        self._clock = clock
+        self._cool: dict[int, float] = {}
+        self.last_label = ""
+
+    @property
+    def config(self) -> LLMConfig:
+        return self.clients[0].config
+
+    def _order(self) -> list[int]:
+        now = self._clock()
+        ready = [i for i in range(len(self.clients)) if self._cool.get(i, 0) <= now]
+        return ready or [min(range(len(self.clients)), key=lambda i: self._cool.get(i, 0))]  # todos em espera: o que sai primeiro
+
+    async def stream_events(self, messages: list[Message], tools: Optional[list[dict]] = None) -> AsyncIterator[StreamItem]:
+        last: Optional[Exception] = None
+        for i in self._order():
+            client, started = self.clients[i], False
+            try:
+                async for item in client.stream_events(messages, tools=tools):
+                    started = True
+                    self.last_label = f"{client.config.provider}:{client.config.model}"
+                    yield item
+                return
+            except Exception as e:
+                if started or not is_retryable(e):
+                    raise  # ja respondeu algo (nao da para trocar) ou erro que outro provedor nao resolve
+                last = e
+                self._cool[i] = self._clock() + COOLDOWN_S
+        if last is not None:
+            raise last
+
+    async def stream(self, messages: list[Message]) -> AsyncIterator[str]:
+        async for item in self.stream_events(messages):
+            if isinstance(item, str):
+                yield item
+
+    async def chat(self, messages: list[Message]) -> str:
+        return "".join([t async for t in self.stream(messages)])
+
+    async def health(self) -> dict:
+        return await self.clients[0].health()
+
+
+def get_llm_client() -> "LLMClient | RoutedLLM":
+    primary = LLMClient(config_from_settings())
+    extra = []
+    for cfg in load_fallback_configs():
+        try:
+            extra.append(LLMClient(cfg))
+        except LLMConfigError:
+            continue  # reserva mal configurada nao derruba o principal
+    return RoutedLLM([primary, *extra]) if extra else primary
