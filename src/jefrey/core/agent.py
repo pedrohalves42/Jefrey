@@ -88,28 +88,18 @@ class Agent:
 
     def _load_history(self, state: "AgentState") -> list:
         try:
-            r = self.memory.short_term._redis  # type: ignore[attr-defined]
-            raw = r.lrange(self._hist_key(state), -self._HIST_MAX * 2, -1)
-            out = []
-            for item in raw:
-                m = json.loads(item)
-                if m.get("role") in ("user", "assistant") and isinstance(m.get("content"), str):
-                    out.append({"role": m["role"], "content": m["content"]})
-            return out
+            from src.jefrey.core.history import HistoryStore
+
+            return HistoryStore().load(state.user_id or "guest", state.thread_id, self._HIST_MAX * 2)
         except Exception as e:
             logger.warning("historico indisponivel (segue sem): %s", e)
             return []
 
     def _save_turn(self, state: "AgentState", user_input: str, answer: str) -> None:
         try:
-            r = self.memory.short_term._redis  # type: ignore[attr-defined]
-            k = self._hist_key(state)
-            pipe = r.pipeline()
-            pipe.rpush(k, json.dumps({"role": "user", "content": user_input[:4000]}, ensure_ascii=False))
-            pipe.rpush(k, json.dumps({"role": "assistant", "content": answer[:4000]}, ensure_ascii=False))
-            pipe.ltrim(k, -self._HIST_MAX * 2, -1)
-            pipe.expire(k, 86400)
-            pipe.execute()
+            from src.jefrey.core.history import HistoryStore
+
+            HistoryStore().add_turn(state.user_id or "guest", state.thread_id, user_input, answer)
         except Exception as e:
             logger.warning("falha ao salvar historico: %s", e)
 
@@ -252,13 +242,49 @@ class Agent:
         "Pedido para TRADUZIR: responda apenas com a traducao.\n\n"
     )
 
+    def _build_prompt(self, user_id: str, user_input: str, tools: dict, unavailable: dict, context) -> str:
+        """Persona informal + autoconhecimento (hora, nome, cerebro, ferramentas) + memorias. Nunca derruba a conversa."""
+        from datetime import datetime
+
+        from src.jefrey.core import persona
+        from src.jefrey.core.llm_provider import config_from_settings
+        from src.jefrey.core.reminders import local_tz
+        from src.jefrey.core.tool_catalog import policy_for
+
+        name = None
+        try:
+            from src.jefrey.core.profile import ProfileStore, detect_name
+
+            store = ProfileStore()
+            told = detect_name(user_input)
+            if told:  # a pessoa disse como quer ser chamada: guarda na hora
+                name = store.set_name(user_id, told)
+            else:
+                name = store.get_name(user_id)
+        except Exception as e:
+            logger.warning("perfil indisponivel (segue sem nome): %s", e)
+        try:
+            cfg = config_from_settings()
+            model, provider, cloud = cfg.model, cfg.provider, cfg.is_cloud
+        except Exception:
+            model, provider, cloud = "desconhecido", "desconhecido", False
+        try:
+            memory_ok = bool(self.memory.long_term.available)  # type: ignore[attr-defined]
+        except Exception:
+            memory_ok = False
+        tz = local_tz()
+        labels = [(policy_for(n).label if policy_for(n) else n) for n in tools]
+        info = persona.self_block(now=datetime.now(tz), tz_name=getattr(tz, "key", "") or str(tz), name=name, model=model,
+                                  provider=provider, is_cloud=cloud, memory_ok=memory_ok, tool_labels=labels,
+                                  unavailable=unavailable)
+        return persona.build_system_prompt(name=name, self_info=info, memory_context=self._format_context(context))
+
     async def run_events(self, user_input: str, user_id: str, user_role: str = "user", thread_id: str | None = None):
         """Gera eventos do agente: token | tool_start | approval_required | tool_end | error."""
         base_thread_id = thread_id or f"thread_{user_id}_{self._tool_executions}"
         namespaced_thread_id = _ns_thread_id(base_thread_id, user_id)
         state = AgentState(user_id=user_id, thread_id=namespaced_thread_id, user_role=user_role, user_input=user_input)
         state.context = self._load_context(state)
-        system_prompt = self.SYSTEM_PROMPT + "Contexto:\n" + self._format_context(state.context) + "\n"
         answer: list[str] = []
         try:
             from src.jefrey.core.agent_loop import run_agent
@@ -273,7 +299,9 @@ class Agent:
             skills = [skill_registry.get_skill(m.name) for m in skill_registry.list_skills()]
             from src.jefrey.core.availability import unavailable_skills
 
-            tools = enabled_tools([sk for sk in skills if sk], CATALOG, set(unavailable_skills(user_id)))
+            unavailable = unavailable_skills(user_id)
+            tools = enabled_tools([sk for sk in skills if sk], CATALOG, set(unavailable))
+            system_prompt = self._build_prompt(user_id, user_input, tools, unavailable, state.context)
             runtime = ToolRuntime(user_id=user_id, thread_id=base_thread_id, resolver=tools.get)
             messages = [{"role": "system", "content": system_prompt}, *self._load_history(state),
                         {"role": "user", "content": user_input}]

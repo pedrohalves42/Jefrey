@@ -109,3 +109,6 @@ export type SearchEngine = { current: string | null; best: string | null; can_up
 export const getSearchEngine = () => json<SearchEngine>("/memory/search-engine")
 export const upgradeSearchEngine = () => json<{ changed: boolean; moved: number }>("/memory/search-engine/upgrade", { method: "POST" })
 export const quitApp = () => json<{ ok: boolean }>("/system/quit", { method: "POST" })
+
+export const getProfile = () => json<{ display_name: string | null }>("/profile")
+export const putProfile = (display_name: string) => json<{ display_name: string }>("/profile", { method: "PUT", body: JSON.stringify({ display_name }) })

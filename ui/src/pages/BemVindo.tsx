@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query"
+import NameField from "@/components/NameField"
 import {
   getAdvice, getPresets, getPullStatus, overallPercent, saveConfig, skipWelcome, startOpenRouter, startPull, testConfig,
   testMessage, type Advice, type PullStatus, type Preset,
@@ -127,7 +128,11 @@ export default function BemVindo() {
         </p>
       )}
 
-      <section className={`${card} mt-5 border border-cyan-400/30`} aria-labelledby="w-1">
+      <div className="mt-5">
+        <NameField />
+      </div>
+
+      <section className={`${card} mt-4 border border-cyan-400/30`} aria-labelledby="w-1">
         <p className="text-xs uppercase tracking-wide text-cyan-300">Recomendado</p>
         <h2 id="w-1" className="mt-1 text-lg font-medium text-white">Conectar com 1 clique</h2>
         <p className="mt-1 text-sm text-white/65">
