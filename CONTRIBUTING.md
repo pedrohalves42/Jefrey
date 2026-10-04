@@ -37,7 +37,7 @@ grep -rn ":-jefrey" docker-compose.yml  # 0 (usar ${VAR:?required})
 grep -rn ".:/app" docker-compose.yml | grep -v ":ro"  # 0 (volume :ro)
 ```
 
-**Script único:** `bash scripts/guard_anti_patterns.sh` roda os 6 greps acima e falha (exit 1) se qualquer hit >0. Rodar antes de commit e no pre-commit hook.
+**Checagens automáticas:** o CI (`.github/workflows/ci.yml`) e o `pre-commit` (`.pre-commit-config.yaml`) rodam compilação, a regra de métricas sem `user_id` e os testes. Rode `python -m pytest tests -q` e, em `ui/`, `npm test` e `npx tsc --noEmit -p .` antes de commitar.
 
 ---
 

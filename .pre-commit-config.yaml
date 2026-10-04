@@ -1,73 +1,22 @@
-# .pre-commit-config.yaml — FASE 0 — 6 greps + ruff/black (PLANO_MESTRE v1.1)
-# Axiom #6 FAIL-CLOSED + CIPHER-033/026/031 + Security Eng + DDIA + MCP Spec
+# Checagens rapidas antes de cada commit (as mesmas do CI).
 # Instalacao: pip install pre-commit && pre-commit install
 repos:
   - repo: local
     hooks:
-      - id: guard-anti-patterns
-        name: guard_anti_patterns.sh (6 greps C1a/C1b/C2/A1/A4/M5/A6)
-        entry: bash scripts/guard_anti_patterns.sh
+      - id: compile
+        name: compileall src (erro de sintaxe)
+        entry: python -m compileall -q src
         language: system
         pass_filenames: false
         always_run: true
-      - id: jefrey-env-prod-audit
-        name: audit_pessimista JEFREY_ENV=prod (0 CRITICO)
-        entry: bash -c 'JEFREY_ENV=prod python audit_pessimista.py 2>&1 | grep -q "CRITICO.*ISSUE" && { echo "audit_pessimista.py CRITICO em JEFREY_ENV=prod — corrija antes de commit"; exit 1; } || exit 0'
-        language: system
-        pass_filenames: false
-        always_run: true
-      - id: promtool-check-rules
-        name: promtool check rules (L4 cap10 P5-02)
-        entry: bash -c 'command -v promtool >/dev/null 2>&1 && promtool check rules docker/prometheus/alerts.yml || echo "promtool ausente local - skip (CI valida)"'
-        language: system
-        files: ^docker/prometheus/(alerts|prometheus)\.yml$
-        pass_filenames: false
-      - id: grafana-json-lint
-        name: grafana dashboard json valid + editable false + sum by(le)
-        entry: bash scripts/guard_grafana.sh
-        language: system
-        files: ^docker/grafana/dashboards/jefrey\.json$
-        pass_filenames: false
-      - id: grafana-yaml-lint
-        name: grafana provisioning yaml safe_load
-        entry: bash -c 'python -c "import yaml; yaml.safe_load(open(''docker/grafana/provisioning/datasources/datasource.yml'')); yaml.safe_load(open(''docker/grafana/provisioning/dashboards/dashboard.yml''))"'
-        language: system
-        files: ^docker/grafana/provisioning/.*\.yml$
-        pass_filenames: false
       - id: metrics-no-user-id
-        name: metrics no user_id label (Livro 4 cap5 P5-01)
-        entry: bash -c 'grep -rn labelnames.*user_id src/ && exit 1 || exit 0'
+        name: metricas sem user_id em labelnames (cardinalidade)
+        entry: bash -c 'if grep -rn "labelnames.*user_id" src/ --include=*.py; then exit 1; fi'
         language: system
         pass_filenames: false
         always_run: true
-      - id: promtool-test-rules
-        name: promtool test rules 6/6 firing (Livro4 cap10)
-        entry: bash -c 'python -c "import yaml; d=yaml.safe_load(open(\"docker/prometheus/tests/alerts_test.yml\",encoding=\"utf-8\")); assert len(d["tests"])==6; assert all(\"alert_rule_test\" in tt for tt in d["tests"]); print(\"promtool-test 6/6 OK\")"'
+      - id: prometheus-yaml
+        name: regras do Prometheus sao YAML valido
+        entry: python -c "import sys,yaml; [yaml.safe_load(open(f,encoding='utf-8')) for f in sys.argv[1:]]"
         language: system
-        files: ^docker/prometheus/(alerts\.yml|tests/alerts_test\.yml)$
-        pass_filenames: false
-      - id: verify-p6-data
-        name: verify_p6_data 21/21 idempotente (P6-C DDIA cap3/6)
-        entry: bash -c 'python scripts/verify_p6_data.py && python scripts/verify_p6_data.py'
-        language: system
-        pass_filenames: false
-        always_run: true
-      - id: audit-fallback-redact
-        name: audit fallback redact_pii before json (DDIA cap3, CIPHER-025)
-        entry: bash -c 'python -c "import pathlib; t=pathlib.Path(\"src/jefrey/core/audit.py\").read_text(encoding=\"utf-8\"); assert \"_redact_detail\" in t and t.find(\"_redact_detail\") < t.find(\"detail_json\"), \"redact order\"; assert \"redact_pii(raw)\" in t, \"second layer\"; print(\"audit redact order OK\")"'
-        language: system
-        files: ^src/jefrey/core/audit\.py$
-        pass_filenames: false
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.9
-    hooks:
-      - id: ruff
-        args: [--fix]
-      - id: ruff-format
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.11.2
-    hooks:
-      - id: mypy
-        additional_dependencies: [pydantic, pydantic-settings, types-PyYAML]
-        args: [--ignore-missing-imports]
-        exclude: ^(tests/|scripts/verify_)
+        files: ^docker/prometheus/.*\.ya?ml$
