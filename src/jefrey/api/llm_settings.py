@@ -196,3 +196,27 @@ async def openrouter_callback(request: Request, code: str = "", state: str = "")
         logger.warning("openrouter callback falhou: %s", type(e).__name__)
         return RedirectResponse("/bem-vindo?erro=openrouter", status_code=303)
     return RedirectResponse("/?conectado=openrouter", status_code=303)
+
+
+# ---------------------------------------------------------------- baixar modelo local (com progresso)
+class PullBody(BaseModel):
+    models: list[str] = Field(min_length=1, max_length=3)
+
+
+@router.post("/pull")
+async def pull(body: PullBody):
+    """Baixa modelos locais em segundo plano. 409 com mensagem clara se o Ollama nao esta instalado/rodando."""
+    import asyncio
+    from src.jefrey.core import model_pull
+
+    try:
+        return await asyncio.to_thread(model_pull.start, body.models)
+    except model_pull.PullError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@router.get("/pull-status")
+async def pull_status():
+    from src.jefrey.core import model_pull
+
+    return model_pull.status()

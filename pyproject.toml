@@ -10,6 +10,7 @@ authors = [
     {name = "Jefrey Team", email = "contato@jefrey.ai"}
 ]
 license = {text = "MIT"}
+requires-python = ">=3.12,<3.13"
 readme = "README.md"
 keywords = ["AI", "LLM", "assistant", "memory", "agent", "skills"]
 classifiers = [
@@ -24,8 +25,6 @@ classifiers = [
 ]
 
 dependencies = [
-    "langchain-openai>=0.2.0",
-    "langchain-ollama>=0.2.0",
     "pydantic>=2.8.0",
     "pydantic-settings>=2.8.0",
     "python-dotenv>=1.0.0",
@@ -143,8 +142,6 @@ test = ["pytest", "pytest-asyncio", "pytest-cov"]
 lint = ["ruff", "mypy", "black", "isort"]
 format = ["black", "isort"]
 all = [
-    "langchain-openai",
-    "langchain-ollama",
     "pydantic",
     "pydantic-settings",
     "python-dotenv",

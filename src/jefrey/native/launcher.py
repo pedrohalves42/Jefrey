@@ -9,7 +9,11 @@
 from __future__ import annotations
 
 import json
+import logging
+import logging.handlers
 import os
+import re
+import socket
 import secrets
 import shutil
 import subprocess
@@ -138,32 +142,124 @@ def installed_models() -> list[str]:
 
 
 def pull_models(progress_file: Path, models: list[str]) -> None:
-    """Baixa os modelos que faltam gravando o progresso (a tela mostra 'baixando...')."""
-    state = {"models": {m: {"status": "esperando", "percent": 0} for m in models}, "done": False}
+    """Baixa os modelos que faltam (a tela mostra 'baixando...'). Implementacao unica em core/model_pull."""
+    from src.jefrey.core import model_pull
 
-    def save():
-        progress_file.parent.mkdir(parents=True, exist_ok=True)
-        tmp = progress_file.with_suffix(".tmp")
-        tmp.write_text(json.dumps(state), encoding="utf-8")
-        os.replace(tmp, progress_file)
+    os.environ.setdefault("JEFREY_CONFIG_DIR", str(progress_file.parent))
+    model_pull._run(models, OLLAMA_URL)
 
-    save()
-    for m in models:
+
+# ---------------------------------------------------------------- registros, porta e bandeja
+_REDACT = [
+    (re.compile(r"(?i)(bearer\s+)[A-Za-z0-9._\-]{8,}"), r"\1***"),
+    (re.compile(r"\bsk-[A-Za-z0-9_\-]{8,}"), "sk-***"),
+    (re.compile(r"(?i)((?:api[_-]?key|token|secret|password|senha)[\"'=: ]+)[^\s\"',}]{6,}"), r"\1***"),
+]
+
+
+def redact(text: str) -> str:
+    for rx, rep in _REDACT:
+        text = rx.sub(rep, text)
+    return text
+
+
+class _RedactFilter(logging.Filter):
+    """Nenhuma chave ou token chega ao arquivo de registros, mesmo que algum modulo registre sem querer."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
         try:
-            with httpx.stream("POST", OLLAMA_URL + "/api/pull", json={"name": m, "stream": True}, timeout=None) as r:
-                for line in r.iter_lines():
-                    if not line:
-                        continue
-                    ev = json.loads(line)
-                    total, done = ev.get("total") or 0, ev.get("completed") or 0
-                    state["models"][m] = {"status": ev.get("status", ""), "percent": int(done * 100 / total) if total else state["models"][m]["percent"]}
-                    save()
-            state["models"][m] = {"status": "pronto", "percent": 100}
-        except Exception as e:
-            state["models"][m] = {"status": f"falhou: {type(e).__name__}", "percent": 0}
-        save()
-    state["done"] = True
-    save()
+            record.msg = redact(record.getMessage())
+            record.args = ()
+        except Exception:
+            pass
+        return True
+
+
+def setup_logging(logs_dir: Path) -> Path:
+    """Registros em arquivo com rodizio (3 x 1 MB). Sem console no programa instalado, e o que o suporte le."""
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    path = logs_dir / "jefrey.log"
+    handler = logging.handlers.RotatingFileHandler(path, maxBytes=1_000_000, backupCount=3, encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    handler.addFilter(_RedactFilter())
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    root.addHandler(handler)
+    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        lg = logging.getLogger(name)
+        lg.handlers = [handler]
+        lg.propagate = False
+        lg.setLevel(logging.INFO)
+    return path
+
+
+def ensure_std_streams() -> None:
+    """Programa sem console (janela oculta): stdout/stderr vem como None e quebraria print e logging."""
+    for name in ("stdout", "stderr"):
+        if getattr(sys, name, None) is None:
+            setattr(sys, name, open(os.devnull, "w", encoding="utf-8"))
+
+
+def port_free(port: int, host: str = "127.0.0.1") -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1) if hasattr(socket, "SO_EXCLUSIVEADDRUSE") else None
+        try:
+            s.bind((host, port))
+            return True
+        except OSError:
+            return False
+
+
+def find_free_port(start: int = DEFAULT_PORT, tries: int = 20) -> int:
+    """Primeira porta livre a partir de `start` (outro programa pode estar usando a 8000)."""
+    for p in range(start, start + tries):
+        if port_free(p):
+            return p
+    raise OSError(f"nenhuma porta livre entre {start} e {start + tries - 1}")
+
+
+def start_tray(url: str, logs_dir: Path, on_quit) -> "object | None":
+    """Icone na bandeja com Abrir / Ver registros / Sair. Sem pystray ou sem bandeja, segue sem (nunca derruba)."""
+    try:
+        import pystray
+        from PIL import Image
+    except Exception:
+        return None
+    icon_path = Path(__file__).resolve().parents[1] / "static" / "images" / "icon-192.png"
+    try:
+        image = Image.open(icon_path) if icon_path.is_file() else Image.new("RGB", (64, 64), (6, 182, 212))
+
+        def open_app(_icon=None, _item=None):
+            webbrowser.open(url)
+
+        def open_logs(_icon=None, _item=None):
+            try:
+                os.startfile(str(logs_dir))  # type: ignore[attr-defined]
+            except Exception:
+                pass
+
+        def quit_(icon=None, _item=None):
+            on_quit()
+
+        menu = pystray.Menu(
+            pystray.MenuItem("Abrir o Jefrey", open_app, default=True),
+            pystray.MenuItem("Ver registros (para suporte)", open_logs),
+            pystray.MenuItem("Sair", quit_),
+        )
+        icon = pystray.Icon("Jefrey", image, "Jefrey", menu)
+        icon.run_detached()
+        return icon
+    except Exception:
+        return None
+
+
+def local_model_chosen() -> bool:
+    """So baixa modelo local se a pessoa escolheu o modo local (nuvem e o padrao recomendado)."""
+    try:
+        from src.jefrey.core.llm_provider import load_override
+        return (load_override().get("provider") or "") == "ollama"
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------- execucao
@@ -185,39 +281,71 @@ def wait_ready(port: int, timeout: float = 120.0) -> bool:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
+    ensure_std_streams()
     args = argv if argv is not None else sys.argv[1:]
     no_browser = "--no-browser" in args or bool(os.getenv("JEFREY_NO_BROWSER"))
-    port = int(os.getenv("JEFREY_API_PORT", str(DEFAULT_PORT)))
-    url = f"http://127.0.0.1:{port}"
-    if jefrey_running(port):
+    no_tray = "--no-tray" in args or bool(os.getenv("JEFREY_NO_TRAY"))
+    desired = int(os.getenv("JEFREY_API_PORT", str(DEFAULT_PORT)))
+    if jefrey_running(desired):
+        url = f"http://127.0.0.1:{desired}"
         print(f"O Jefrey ja esta aberto em {url}")
         if not no_browser:
             webbrowser.open(url)
         return 0
+    try:
+        port = find_free_port(desired)  # outro programa pode estar usando a porta
+    except OSError as e:
+        print(f"[erro] {e}")
+        return 1
+    url = f"http://127.0.0.1:{port}"
 
     home = Path(os.getenv("JEFREY_HOME") or default_home())
     env = build_env(home, port=port)
     os.environ.update(env)
+    logs_dir = home / "logs"
+    log_path = setup_logging(logs_dir)
+    logging.getLogger("jefrey.launcher").info("iniciando na porta %s (registros em %s)", port, log_path)
     root = Path(__file__).resolve().parents[3]
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
     os.chdir(home)  # caminhos relativos antigos ("data/...") caem dentro da pasta do usuario
 
-    ok, msg = ensure_ollama()
-    print(("[ok] " if ok else "[aviso] ") + msg)
-    if ok:
-        need = missing_models(installed_models())
-        if need:
-            print("Baixando modelos que faltam (so na primeira vez):", ", ".join(need))
-            threading.Thread(target=pull_models, args=(home / "data" / "models_progress.json", need), daemon=True).start()
+    if local_model_chosen():  # nuvem e o padrao: so prepara modelo local se a pessoa escolheu local
+        ok, msg = ensure_ollama()
+        print(("[ok] " if ok else "[aviso] ") + msg)
+        if ok:
+            need = missing_models(installed_models())
+            if need:
+                print("Baixando modelos que faltam (so na primeira vez):", ", ".join(need))
+                threading.Thread(target=pull_models, args=(home / "data" / "models_progress.json", need), daemon=True).start()
 
     def open_when_ready():
         if wait_ready(port) and not no_browser:
             webbrowser.open(url)
 
     threading.Thread(target=open_when_ready, daemon=True).start()
-    from src.jefrey.api.main import main as run_server
-    run_server()
+
+    import uvicorn
+
+    from src.jefrey.native import control
+
+    server = uvicorn.Server(uvicorn.Config("src.jefrey.api.main:app", host="127.0.0.1", port=port, log_config=None, reload=False))
+
+    def quit_now() -> None:
+        logging.getLogger("jefrey.launcher").info("pedido para sair")
+        server.should_exit = True
+
+    control.set_quit_hook(quit_now)
+    tray = None if no_tray else start_tray(url, logs_dir, quit_now)
+    try:
+        server.run()
+    finally:
+        control.set_quit_hook(None)
+        if tray is not None:
+            try:
+                tray.stop()
+            except Exception:
+                pass
     return 0
 
 

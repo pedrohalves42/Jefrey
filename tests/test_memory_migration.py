@@ -150,4 +150,5 @@ def test_embeddings_seguem_local_mesmo_com_chat_na_nuvem(monkeypatch):
     s = get_settings()
     monkeypatch.setattr(s.llm, "provider", "anthropic")
     obj = mem._create_embeddings()
-    assert type(obj).__name__ == "OllamaEmbeddings"
+    # embeddings tem escolha propria (Ollama -> nuvem do usuario -> motor local), independente do provedor do chat
+    assert type(obj).__name__ == "AutoEmbeddings"

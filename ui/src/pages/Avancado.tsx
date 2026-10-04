@@ -3,6 +3,7 @@ import Saude from "@/pages/Saude"
 import Aprovacoes from "@/pages/Aprovacoes"
 import { getUserId } from "@/lib/api"
 import { refreshToken } from "@/lib/session"
+import { quitApp } from "@/lib/llm"
 
 const TABS = [
   { id: "saude", label: "Saúde" },
@@ -26,6 +27,17 @@ function Conta() {
         Usuário atual: <b>{getUserId()}</b>
       </p>
       <p className="text-xs text-white/45">A sessão é renovada sozinha quando expira. Use o botão se algo parecer travado.</p>
+      <button
+        type="button"
+        onClick={() => {
+          void quitApp().then(r =>
+            setMsg(r.ok ? "O Jefrey foi fechado. Você já pode fechar esta aba." : r.status === 404 ? "Esse botão só funciona no programa instalado." : "Não consegui fechar agora."),
+          )
+        }}
+        className="jf-focus ml-2 rounded-lg border border-red-400/40 px-4 py-1.5 text-sm text-red-200 hover:bg-red-500/10"
+      >
+        Fechar o Jefrey
+      </button>
       <button type="button" onClick={() => void renew()} className="jf-btn jf-focus px-4 py-1.5 text-sm">
         Renovar sessão
       </button>

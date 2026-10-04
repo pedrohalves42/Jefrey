@@ -197,6 +197,9 @@ class ToolRuntime:
             return ToolOutcome(name, "error", f"A ferramenta {name} demorou demais e foi interrompida.",
                                approval_id, policy.risk)
         except Exception as e:
+            from src.jefrey.core.embeddings import EmbeddingsUnavailable
+            if isinstance(e, EmbeddingsUnavailable):  # mensagem ja e clara e segura para o usuario
+                return ToolOutcome(name, "error", str(e), approval_id, policy.risk)
             logger.warning("ferramenta %s falhou: %s: %s", name, type(e).__name__, e)
             return ToolOutcome(name, "error", f"A ferramenta {name} falhou ({type(e).__name__}). "
                                "Pode ser falta de login ou configuracao.", approval_id, policy.risk)

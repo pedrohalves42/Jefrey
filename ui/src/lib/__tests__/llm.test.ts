@@ -52,3 +52,19 @@ describe("testMessage", () => {
     expect(testMessage({ ok: false, status: 500, data: null }).ok).toBe(false)
   })
 })
+
+import { overallPercent, type PullStatus } from "../llm"
+
+describe("overallPercent", () => {
+  const st = (models: PullStatus["models"]): PullStatus => ({ running: true, done: false, error: null, models })
+
+  it("media dos modelos", () => {
+    expect(overallPercent(st({ a: { status: "x", percent: 100 }, b: { status: "x", percent: 0 } }))).toBe(50)
+    expect(overallPercent(st({ a: { status: "x", percent: 33 } }))).toBe(33)
+  })
+
+  it("sem dados vale zero", () => {
+    expect(overallPercent(null)).toBe(0)
+    expect(overallPercent(st({}))).toBe(0)
+  })
+})

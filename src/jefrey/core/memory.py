@@ -1,5 +1,6 @@
 """Sistema de Memória Otimizado - Curto e Longo Prazo."""
 from __future__ import annotations
+import functools
 import json
 import logging
 import re
@@ -11,8 +12,7 @@ from collections import deque
 
 import chromadb
 from chromadb.config import Settings as ChromaSettings
-from langchain_openai import OpenAIEmbeddings
-from langchain_ollama import OllamaEmbeddings
+from src.jefrey.core.embeddings import AutoEmbeddings, EmbeddingsUnavailable, default_candidates
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage, ToolMessage
 
 from src.jefrey.core.config import get_settings
@@ -50,24 +50,10 @@ _embedding_cache = _EmbeddingCache()
 
 
 def _create_embeddings():
-    """Cria instância de embeddings baseada na configuração."""
-    s = get_settings()
-    emb_settings = s.embeddings
-    llm_settings = s.llm
-    
-    # Embeddings tem provedor PROPRIO (local por padrao): trocar o chat para Claude/ChatGPT nao pode
-    # mexer na memoria, e Claude nem oferece embeddings.
-    if getattr(emb_settings, "provider", "ollama") == "ollama":
-        return OllamaEmbeddings(
-            model=emb_settings.model,
-            base_url=emb_settings.base_url,
-        )
-    # Senão usa OpenAI
-    return OpenAIEmbeddings(
-        model=emb_settings.model,
-        api_key=emb_settings.api_key or llm_settings.api_key,
-        base_url=emb_settings.base_url,
-    )
+    """Embeddings com escolha automatica no modo nativo (Ollama -> nuvem do usuario -> motor local embutido)."""
+    from src.jefrey.core.redis_factory import is_native
+
+    return AutoEmbeddings(default_candidates, auto=is_native())
 
 
 class CachedEmbeddings:
@@ -76,34 +62,43 @@ class CachedEmbeddings:
     def __init__(self, base_embeddings):
         self._base = base_embeddings
     
+    def _mid(self) -> str:
+        return str(getattr(self._base, "model_id", "") or "")
+
+    @property
+    def model_id(self) -> str:
+        return self._base.model_id
+
     def embed_query(self, text: str) -> list[float]:
-        cached = _embedding_cache.get(text)
+        key = f"{self._mid()}\x00{text}"  # vetores de modelos diferentes nunca se misturam no cache
+        cached = _embedding_cache.get(key)
         if cached is not None:
             return cached
         embedding = self._base.embed_query(text)
-        _embedding_cache.set(text, embedding)
+        _embedding_cache.set(key, embedding)
         return embedding
     
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        results = []
+        mid = self._mid()
+        results: list = []
         uncached_texts = []
         uncached_indices = []
-        
+
         for i, text in enumerate(texts):
-            cached = _embedding_cache.get(text)
+            cached = _embedding_cache.get(f"{mid}\x00{text}")
             if cached is not None:
                 results.append(cached)
             else:
                 results.append(None)
                 uncached_texts.append(text)
                 uncached_indices.append(i)
-        
+
         if uncached_texts:
             new_embeddings = self._base.embed_documents(uncached_texts)
-            for idx, emb in zip(uncached_indices, new_embeddings):
+            for idx, text, emb in zip(uncached_indices, uncached_texts, new_embeddings):
                 results[idx] = emb
-                _embedding_cache.set(uncached_texts[uncached_indices.index(idx)], emb)
-        
+                _embedding_cache.set(f"{mid}\x00{text}", emb)
+
         return results
 
 
@@ -295,7 +290,8 @@ class ChromaConnectionPool:
 class LongTermMemory:
     """Memória vetorial persistente com ChromaDB - Otimizada."""
     
-    __slots__ = ("_top_k", "_similarity_threshold", "_embeddings", "_collection", "_legacy", "_legacy_checked")
+    __slots__ = ("_top_k", "_similarity_threshold", "_embeddings", "_collection", "_legacy", "_legacy_checked",
+                 "_base_name", "_forced_model")
     
     def __init__(
         self,
@@ -312,17 +308,49 @@ class LongTermMemory:
         # Embeddings com cache (usando factory)
         self._embeddings = get_embeddings()
         
-        # Pool de conexões
+        self._base_name = collection_name or s.memory.long_term.collection_name
+        self._forced_model = embedding_model
+        self._collection = None
+        self._legacy = None
+        self._legacy_checked = True
+        try:
+            self._init_collection()
+        except EmbeddingsUnavailable as e:  # sem backend de embeddings: a memoria fica indisponivel, o resto do Jefrey nao
+            logger.warning("memoria indisponivel por enquanto: %s", e)
+
+    def _init_collection(self) -> None:
+        """Escolhe o espaco vetorial (modelo) e abre a colecao dele. Levanta EmbeddingsUnavailable se nao houver backend."""
+        model = self._forced_model or self._embeddings.model_id  # o espaco que de fato gera os vetores
+        base = self._base_name
         pool = ChromaConnectionPool()
-        s = get_settings()
-        base = collection_name or s.memory.long_term.collection_name
-        model = embedding_model or s.embeddings.model  # o modelo que de fato gera os vetores
         name = collection_name_for(base, model)
         self._collection = pool.get_collection(name)
         # colecao antiga (outro modelo de embedding) a migrar, se existir
         self._legacy = pool.get_collection(base) if name != base else None
         self._legacy_checked = False
         self.migrate_legacy()
+
+    def rebind(self) -> None:
+        """Reabre a colecao (apos trocar o backend de embeddings). Levanta EmbeddingsUnavailable se nao houver backend."""
+        self._collection = None
+        self._legacy = None
+        self._legacy_checked = True
+        self._init_collection()
+
+    def _ensure(self) -> None:
+        """Garante a colecao antes de usar; tenta de novo se antes nao havia backend (ex.: chave colada depois)."""
+        if self._collection is None and getattr(self, "_base_name", None):
+            self._init_collection()
+        if self._collection is None:
+            raise EmbeddingsUnavailable("A memória está indisponível.")
+
+    @property
+    def available(self) -> bool:
+        try:
+            self._ensure()
+            return True
+        except EmbeddingsUnavailable:
+            return False
     
     def migrate_legacy(self) -> int:
         """Reindexa memorias da colecao antiga com o modelo atual. Nunca derruba quem chama."""
@@ -510,6 +538,19 @@ class LongTermMemory:
         return self._collection.count()
 
 
+
+def _needs_collection(fn):
+    @functools.wraps(fn)
+    def wrapper(self, *a, **kw):
+        self._ensure()
+        return fn(self, *a, **kw)
+    return wrapper
+
+
+for _name in ("add", "search", "get", "update", "delete", "list_recent", "count"):
+    setattr(LongTermMemory, _name, _needs_collection(getattr(LongTermMemory, _name)))
+
+
 class MemoryManager:
     """Gerenciador unificado de memória - Facade principal."""
     
@@ -662,3 +703,68 @@ def _init_message_registry() -> None:
 
 
 
+
+
+# ---------------------------------------------------------------- trocar o motor da busca sem perder memorias
+def _probe(impl) -> bool:
+    try:
+        v = impl.embed_query("teste de conexao")
+        return bool(v) and len(v) >= 8
+    except EmbeddingsUnavailable:
+        return False
+
+
+def best_search_engine():
+    """(Choice, backend) do melhor motor funcionando agora, na ordem de preferencia; None se nenhum."""
+    from src.jefrey.core.embeddings import build_backend
+
+    for choice, key in default_candidates():
+        try:
+            impl = build_backend(choice, key)
+        except Exception:
+            continue
+        if _probe(impl):
+            return choice, impl
+    return None
+
+
+def search_engine_status() -> dict:
+    """Motor em uso, o melhor disponivel agora e se vale trocar. Nao altera nada."""
+    from src.jefrey.core.embeddings import load_choice
+
+    cur = load_choice()
+    best = best_search_engine()
+    return {"current": cur.model_id if cur else None, "best": best[0].model_id if best else None,
+            "can_upgrade": bool(best and (cur is None or cur.model_id != best[0].model_id))}
+
+
+def upgrade_search_engine() -> dict:
+    """Troca para o melhor motor disponivel e REINDEXA as memorias existentes no novo (nada se perde)."""
+    from src.jefrey.core.embeddings import load_choice, save_choice
+
+    cur = load_choice()
+    best = best_search_engine()
+    if best is None:
+        raise EmbeddingsUnavailable(UNAVAILABLE_MSG_UPGRADE)
+    choice, impl = best
+    if cur is not None and cur.model_id == choice.model_id:
+        return {"changed": False, "to": choice.model_id, "moved": 0}
+    base = get_settings().memory.long_term.collection_name
+    pool = ChromaConnectionPool()
+    new_col = pool.get_collection(collection_name_for(base, choice.model_id))
+    moved = 0
+    if cur is not None:
+        old_col = pool.get_collection(collection_name_for(base, cur.model_id))
+        moved = reindex_collection(old_col, new_col, impl.embed_documents)  # copia; a colecao antiga fica intacta
+    save_choice(choice)
+    emb = get_embeddings()
+    inner = getattr(emb, "_base", None)
+    if hasattr(inner, "reset"):
+        inner.reset()  # o AutoEmbeddings le a escolha gravada de novo
+    lt = get_memory_manager().long_term
+    if hasattr(lt, "rebind"):
+        lt.rebind()
+    return {"changed": True, "from": cur.model_id if cur else None, "to": choice.model_id, "moved": moved}
+
+
+UNAVAILABLE_MSG_UPGRADE = "Não há nenhum motor de busca disponível para trocar agora."

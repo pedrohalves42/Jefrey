@@ -92,3 +92,20 @@ export async function startOpenRouter(): Promise<string | null> {
   window.location.assign(url)
   return null
 }
+
+export type PullStatus = { running: boolean; done: boolean; error: string | null; models: Record<string, { status: string; percent: number }> }
+
+export const startPull = (models: string[]) => json<PullStatus>("/settings/llm/pull", { method: "POST", body: JSON.stringify({ models }) })
+export const getPullStatus = () => json<PullStatus>("/settings/llm/pull-status")
+
+/** Porcentagem geral de um download com varios modelos (0 a 100). */
+export function overallPercent(st: PullStatus | null): number {
+  const v = Object.values(st?.models ?? {})
+  if (!v.length) return 0
+  return Math.round(v.reduce((a, m) => a + (m.percent || 0), 0) / v.length)
+}
+
+export type SearchEngine = { current: string | null; best: string | null; can_upgrade: boolean }
+export const getSearchEngine = () => json<SearchEngine>("/memory/search-engine")
+export const upgradeSearchEngine = () => json<{ changed: boolean; moved: number }>("/memory/search-engine/upgrade", { method: "POST" })
+export const quitApp = () => json<{ ok: boolean }>("/system/quit", { method: "POST" })

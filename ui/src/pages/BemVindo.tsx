@@ -2,8 +2,8 @@ import { useEffect, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query"
 import {
-  getAdvice, getPresets, saveConfig, skipWelcome, startOpenRouter, testConfig, testMessage,
-  type Advice, type Preset,
+  getAdvice, getPresets, getPullStatus, overallPercent, saveConfig, skipWelcome, startOpenRouter, startPull, testConfig,
+  testMessage, type Advice, type PullStatus, type Preset,
 } from "@/lib/llm"
 
 const field = "w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/30"
@@ -18,6 +18,7 @@ export default function BemVindo() {
   const [model, setModel] = useState("")
   const [key, setKey] = useState("")
   const [busy, setBusy] = useState<string | null>(null)
+  const [pull, setPull] = useState<PullStatus | null>(null)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(
     params.get("erro") === "openrouter" ? { ok: false, text: "A conexão com o OpenRouter não foi concluída. Tente de novo ou cole uma chave." } : null,
   )
@@ -86,9 +87,28 @@ export default function BemVindo() {
       setMsg({ ok: false, text: "Não consegui salvar o modelo local." })
       return
     }
+    // baixa o modelo (e o de memoria) com barra de progresso; avisa se o Ollama nao estiver instalado
+    const started = await startPull([m, "embeddinggemma"])
+    if (!started.ok) {
+      const d = (started.data as unknown as { detail?: string } | null)?.detail
+      setMsg({ ok: false, text: typeof d === "string" ? d : "Não consegui preparar o modelo local." })
+      return
+    }
+    setPull(started.data)
     await qc.invalidateQueries({ queryKey: ["llm-config"] })
-    nav("/", { replace: true })
   }
+
+  useEffect(() => {
+    if (!pull || pull.done) return
+    const t = window.setInterval(() => {
+      void getPullStatus().then(r => {
+        if (!r.data) return
+        setPull(r.data)
+        if (r.data.done && !r.data.error) window.setTimeout(() => nav("/", { replace: true }), 800)
+      })
+    }, 1500)
+    return () => window.clearInterval(t)
+  }, [pull, nav])
 
   function skip() {
     skipWelcome()
@@ -165,6 +185,18 @@ export default function BemVindo() {
           <p className="mt-1 text-sm text-white/50">Verificando o seu computador…</p>
         )}
       </section>
+
+      {pull && (
+        <section className="jf-panel mt-4 p-5" aria-live="polite">
+          <h2 className="text-lg font-medium text-white">{pull.done ? (pull.error ? "Não terminou" : "Pronto!") : "Baixando o modelo…"}</h2>
+          <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white/10" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={overallPercent(pull)}>
+            <div className="h-full bg-cyan-400 transition-all" style={{ width: `${overallPercent(pull)}%` }} />
+          </div>
+          <p className="mt-2 text-sm text-white/60">
+            {pull.error ?? "Isso acontece só uma vez e pode levar alguns minutos, dependendo da internet. Pode deixar esta janela aberta."}
+          </p>
+        </section>
+      )}
 
       <p className="mt-5 text-center text-sm">
         <button type="button" onClick={skip} className="jf-focus text-white/50 underline hover:text-white/80">

@@ -9,6 +9,8 @@ function when(ts?: string): string {
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
 }
 
+import { getSearchEngine, upgradeSearchEngine, type SearchEngine } from "@/lib/llm"
+
 export default function Memoria() {
   const [query, setQuery] = useState("")
   const [hits, setHits] = useState<Hit[] | null>(null)
@@ -19,7 +21,13 @@ export default function Memoria() {
   const [recent, setRecent] = useState<Hit[] | null>(null)
   const [confirming, setConfirming] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
+  const [engine, setEngine] = useState<SearchEngine | null>(null)
+  const [upgrading, setUpgrading] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  useEffect(() => {
+    void getSearchEngine().then(r => setEngine(r.data))
+  }, [])
 
   const loadRecent = useCallback(async () => {
     try {
@@ -149,6 +157,26 @@ export default function Memoria() {
 
   return (
     <div className="mx-auto h-full max-w-3xl space-y-4 overflow-y-auto pb-4">
+      {engine?.can_upgrade && (
+        <div role="status" className="jf-panel flex flex-wrap items-center justify-between gap-3 border border-cyan-400/30 p-3 text-sm text-white/80">
+          <span>Há um jeito melhor de a memória encontrar o que você guardou. Suas memórias são mantidas.</span>
+          <button
+            type="button"
+            disabled={upgrading}
+            className="jf-btn jf-focus px-3 py-1.5"
+            onClick={() => {
+              setUpgrading(true)
+              void upgradeSearchEngine().then(async r => {
+                setUpgrading(false)
+                setMsg(r.ok ? { ok: true, text: "Busca melhorada. Suas memórias foram migradas." } : { ok: false, text: "Não consegui melhorar a busca agora." })
+                setEngine((await getSearchEngine()).data)
+              })
+            }}
+          >
+            {upgrading ? "Melhorando…" : "Melhorar a busca"}
+          </button>
+        </div>
+      )}
       <header>
         <h1 className="text-2xl font-semibold text-white">Memória</h1>
         <p className="text-sm text-white/55">O que o Jefrey guarda sobre você. Fica só no seu computador e é separado por usuário.</p>

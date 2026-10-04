@@ -13,6 +13,8 @@ import logging
 import re
 from typing import Optional
 
+from src.jefrey.core.embeddings import EmbeddingsUnavailable
+import asyncio
 from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
 from src.jefrey.core.memory import get_memory_manager
 
@@ -39,6 +41,8 @@ async def search_memory(
         # Chama busca vetorial com filtro por user_id
         results = mm.long_term.search(q, top_k=limit, user_id=user_id)
         return {"memories": results, "count": len(results)}
+    except EmbeddingsUnavailable as e:  # sem busca por sentido: 503 com mensagem clara (nao 500)
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         logger.error("memory: erro na busca (user=%s): %s", user_id, e, exc_info=True)
         raise HTTPException(status_code=500, detail="Erro interno na busca de memÃ³ria.")
@@ -60,6 +64,8 @@ async def memory_health(request: Request):
             "short_term_messages": short_term_count,
             "long_term_memories": total_long_term,
         }
+    except EmbeddingsUnavailable as e:  # sem busca por sentido: 503 com mensagem clara (nao 500)
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         logger.error("memory: erro no health check: %s", e, exc_info=True)
         return {
@@ -97,6 +103,8 @@ async def add_memory(request: Request):
     try:
         memory_id = get_memory_manager().long_term.add(
             full, metadata={"type": type_, **({"title": title} if title else {})}, user_id=user_id)
+    except EmbeddingsUnavailable as e:  # sem busca por sentido: 503 com mensagem clara (nao 500)
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         logger.error("memory/add erro user=%s: %s", user_id, e, exc_info=True)
         raise HTTPException(status_code=500, detail="Erro ao salvar memoria")
@@ -109,6 +117,8 @@ async def recent_memories(request: Request, limit: int = Query(30, ge=1, le=200)
     user_id = _require_user(request)
     try:
         items = get_memory_manager().long_term.list_recent(limit=limit, user_id=user_id)
+    except EmbeddingsUnavailable as e:  # sem busca por sentido: 503 com mensagem clara (nao 500)
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         logger.error("memory/recent erro user=%s: %s", user_id, e, exc_info=True)
         raise HTTPException(status_code=500, detail="Erro ao listar memorias")
@@ -123,6 +133,8 @@ async def delete_memory(request: Request, memory_id: str):
         raise HTTPException(status_code=400, detail="id invalido")
     try:
         ok = get_memory_manager().long_term.delete(memory_id, user_id=user_id)
+    except EmbeddingsUnavailable as e:  # sem busca por sentido: 503 com mensagem clara (nao 500)
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         logger.error("memory/delete erro user=%s: %s", user_id, e, exc_info=True)
         raise HTTPException(status_code=500, detail="Erro ao apagar memoria")
@@ -153,6 +165,13 @@ async def import_document(request: Request, file: UploadFile = File(...)):
             ids.append(ltm.add(f"{name}\n{piece}",
                                metadata={"title": name, "type": "document", "chunk": i + 1, "chunks": len(chunks)},
                                user_id=user_id))
+    except EmbeddingsUnavailable as e:  # sem busca por sentido: 503 com mensagem clara (nao 500)
+        for mid in ids:  # tambem nao deixa documento pela metade
+            try:
+                ltm.delete(mid, user_id=user_id)
+            except Exception:
+                pass
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         logger.error("memory/import erro user=%s: %s", user_id, e, exc_info=True)
         for mid in ids:  # nao deixa documento pela metade
@@ -162,3 +181,24 @@ async def import_document(request: Request, file: UploadFile = File(...)):
                 pass
         raise HTTPException(status_code=500, detail="Erro ao importar o documento")
     return {"ok": True, "title": name, "chunks": len(ids), "chars": len(text)}
+
+
+@router.get("/search-engine")
+async def search_engine(request: Request):
+    """Motor da busca por sentido em uso e o melhor disponivel agora (para oferecer 'melhorar a busca')."""
+    from src.jefrey.core.memory import search_engine_status
+
+    _require_user(request)
+    return await asyncio.to_thread(search_engine_status)
+
+
+@router.post("/search-engine/upgrade")
+async def upgrade_search(request: Request):
+    """Troca para o melhor motor disponivel e reindexa as memorias. Nada e apagado."""
+    from src.jefrey.core.memory import upgrade_search_engine
+
+    _require_user(request)
+    try:
+        return await asyncio.to_thread(upgrade_search_engine)
+    except EmbeddingsUnavailable as e:
+        raise HTTPException(status_code=503, detail=str(e))

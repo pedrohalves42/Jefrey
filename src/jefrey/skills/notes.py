@@ -23,9 +23,12 @@ class NotesSkill(SkillBase):
     
     def initialize(self) -> bool:
         # Testa conexão com memória
+        from src.jefrey.core.embeddings import EmbeddingsUnavailable
         try:
             self.memory.long_term.count()
             return True
+        except EmbeddingsUnavailable:
+            return True  # a skill carrega; ao usar, a ferramenta responde com a mensagem clara de como conectar
         except Exception as e:
             logger.error(f"NotesSkill init falhou: {e}")
             return False
