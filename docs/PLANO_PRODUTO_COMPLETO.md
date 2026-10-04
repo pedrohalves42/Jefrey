@@ -217,3 +217,45 @@ Objetivo: provar a superioridade e manter.
   **Saída:** 60 fps em máquina de referência com GPU integrada; modo simples ≥ 30 fps sem WebGL; trocar tema/forma sem recarregar; o chat continua utilizável com a visualização desligada.
 - **Fase 6**: WhatsApp primeiro (via API oficial Cloud ou ponte local, a decidir pela política de contas); verificação de identidade do remetente obrigatória antes de aprovar ações.
 - **Fase 7**: empacotamento Windows (instalador + app desktop); modo leve como padrão.
+
+---
+
+## Estado real (atualizado)
+
+Legenda: **feito** = implementado e verificado (testes/evals/uso no navegador) · **parcial** = existe, com limite
+declarado · **não feito** = ainda não começou.
+
+| Fase | Item | Estado | Observação |
+|---|---|---|---|
+| 0 | Base limpa, CI, testes verdes | feito | CI enxuto; árvore limpa; hook de pré-commit corrigido |
+| 1 | Evals em um comando | feito | 34 casos contra o sistema vivo |
+| 1 | Modelo configurável, local por padrão | feito | Ollama/Claude/ChatGPT/compatível; chave nunca volta ao navegador |
+| 1 | Primeira palavra em ≤ 2 s | parcial | ~1,2 s em pergunta curta; sobe com contexto e com pouca RAM livre |
+| 2 | Interface nova (4 áreas), status real | feito | sem números inventados; responsiva; acessível |
+| 2 | Cérebro 3D personalizável | feito | 3 formas, cor, brilho, neurônios, animação; testado só neste notebook |
+| 2 | Teste end-to-end com Playwright | **não feito** | validação foi por vitest (96) e uso no navegador do painel |
+| 2 | Onboarding guiado | não feito | removido o tour antigo (tinha texto falso) |
+| 3 | Catálogo de risco + aprovação humana | feito | 40 ferramentas, 8 de alto risco; verificado com Postgres real |
+| 3 | Notas, hora, conta, clima, arquivos | feito | calculadora sem `eval`; arquivos isolados por usuário |
+| 3 | Importar documentos | parcial | txt/md/csv/json/html; **PDF e Word não** |
+| 3 | Google (agenda, e-mail, Drive) | parcial | código existe; **não validado com conta Google real** |
+| 3 | Navegador, código/shell em sandbox, tela, MCP, Home Assistant | **não feito** | |
+| 3 | Ligar/desligar skills | feito | |
+| 4 | Ouvir (Whisper local), falar, interromper, conversa contínua | feito | validado com áudio real no servidor; fala só com vozes do Windows |
+| 4 | Palavra de ativação local, TTS neural, tempo real (Pipecat) | **não feito** | |
+| 5 | Memória multilíngue, migração, esquecer, isolamento | feito | embedding escolhido por benchmark (97% top-1) |
+| 5 | Aprender fatos sozinho / grafo | **não feito** | |
+| 6 | WhatsApp (API oficial) | parcial | código e testes completos; **sem teste com conta real** (veja docs/WHATSAPP.md) |
+| 6 | Telegram, e-mail como canal, agentes proativos | **não feito** | |
+| 7 | `doctor`, backup/restore, modo leve, iniciador, PWA | feito | service worker testado por unidade; **registro não confirmado no navegador do painel** |
+| 7 | Modo sem Docker (SQLite), app nativo (bandeja/atalho), auto-atualização, instalador assinado | **não feito** | hoje exige Docker Desktop |
+| 8 | README, comparação honesta, documentação | feito | veja COMPARACAO_REFERENCIAS.md |
+| 8 | Benchmark público contra isair/OpenJarvis, auditoria de segurança independente | **não feito** | não executei os projetos de referência |
+
+### Limites do ambiente que afetaram a validação
+
+- Notebook com 16 GB, sem GPU, e Docker ocupando ~6 GB: com pouca RAM livre as respostas ficam 5 a 10 vezes mais lentas.
+- O disco C: chegou a 0,5 GB livres e travou o Docker uma vez (resolvido limpando cache de build; o espaço só volta ao
+  Windows compactando o disco virtual do Docker, o que exige administrador).
+- O navegador embutido do painel não tem microfone nem registra service worker; essas duas coisas foram verificadas
+  por outros meios (áudio sintético no servidor e testes de unidade), não ao vivo no Edge/Chrome.

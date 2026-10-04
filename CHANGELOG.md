@@ -1,4 +1,21 @@
-# Changelog - Jefrey
+# Changelog
+
+## [Nao lancado] - Reconstrucao do produto (fases 0 a 8 do plano)
+
+- **Interface nova**: conversa em streaming, cerebro 3D personalizavel, status e metricas reais, memoria,
+  skills, aprovacoes e configuracoes; app instalavel (PWA).
+- **Modelos**: padrao leve `qwen3:1.7b` (local), recomendado `qwen2.5:3b`; Claude/ChatGPT opcionais; embedding
+  multilingue `embeddinggemma` com migracao automatica. Comparacao medida em `docs/MODELOS.md`.
+- **Ferramentas seguras**: catalogo de risco (40), aprovacao humana real, chamada nativa de ferramentas,
+  atalhos deterministicos (hora, contas, notas), filtro contra injecao de prompt.
+- **Voz local**: Whisper no servidor, fala com vozes do sistema, interrupcao, conversa continua.
+- **Memoria**: isolamento por usuario (varias falhas corrigidas), esquecer, importar documentos.
+- **WhatsApp** (API oficial): assinatura obrigatoria, lista de autorizados, aprovacao por codigo. Sem teste real.
+- **Operacao**: `doctor`, `backup`/`restore`, modo leve (4 containers), `start_jefrey.bat`.
+- **Seguranca**: chat anonimo fechado; `/approvals` aceita o JWT do usuario e nao confia em `X-User-Id`;
+  injecao de prompt em portugues bloqueada; `update_note` e `/memory/add` corrigidos.
+- **Qualidade**: 430 testes de servidor, 96 de interface, 34 evals; `npm ci` e `tsc` funcionando.
+- **Limpeza**: scripts de sondagem e documentos de status antigos removidos.
 
 ## [1.6.0-jarvis-100] — 2026-09-04 — Jefrey Stark-mode (capacidades J.A.R.V.I.S.) — 175/175 2x + 21/21 2x + 27/27 2x + 54/54 2x + 40 passed 2x — APROVADO
 **Projeto**: Jefrey permanece Jefrey — Stark-mode inspirado no J.A.R.V.I.S. (Just A Rather Very Intelligent System). Sem renomeação. Marca Jefrey + HUD JEFREY + wake jefrey/jarvis alias.
