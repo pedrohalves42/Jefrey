@@ -152,6 +152,21 @@ def memoria_acha_por_sentido_e_nao_por_palavra(c: Ctx):
 
 
 @case("memoria")
+def documento_importado_responde_perguntas(c: Ctx):
+    """Importa um .md com fatos inventados (unicos por execucao) e pergunta no chat."""
+    tag = uuid.uuid4().hex[:5]
+    h = _token_for(c, "evd" + tag)
+    cu = Ctx(c.base, c.http, h["Authorization"][7:])
+    doc = (f"# Projeto Zefiro{tag}\n\nO responsavel pelo Zefiro{tag} e o engenheiro Dionisio. "
+           f"O codigo do cofre do Zefiro{tag} e jacaranda{tag}.\n").encode()
+    r = c.http.post(f"{c.base}/memory/import", headers=h, files={"file": ("zefiro.md", doc, "text/markdown")}, timeout=120)
+    if r.status_code != 200:
+        return False, f"import HTTP {r.status_code}"
+    text, _ = ask_stream(cu, f"Qual e o codigo do cofre do Zefiro{tag}?", _thread())
+    return f"jacaranda{tag}" in text.lower(), text[:80]
+
+
+@case("memoria")
 def esquecer_apaga_de_verdade(c: Ctx):
     h = _token_for(c, "evf" + uuid.uuid4().hex[:8])
     mid = c.http.post(f"{c.base}/memory/add", headers=h, timeout=60, json={"content": "codigo temporario ananas-zeta"}).json()["id"]

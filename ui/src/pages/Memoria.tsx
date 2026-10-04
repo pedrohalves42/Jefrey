@@ -18,6 +18,7 @@ export default function Memoria() {
   const [saving, setSaving] = useState(false)
   const [recent, setRecent] = useState<Hit[] | null>(null)
   const [confirming, setConfirming] = useState<string | null>(null)
+  const [importing, setImporting] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
   const loadRecent = useCallback(async () => {
@@ -75,6 +76,28 @@ export default function Memoria() {
       setMsg({ ok: false, text: "Não consegui guardar. Tente de novo." })
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function importFile(file: File | undefined) {
+    if (!file || importing) return
+    setImporting(true)
+    setMsg(null)
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      const r = await authedFetch("/memory/import", { method: "POST", body: fd })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        setMsg({ ok: false, text: typeof j.detail === "string" ? j.detail[0].toUpperCase() + j.detail.slice(1) + "." : "Não consegui importar esse arquivo." })
+        return
+      }
+      setMsg({ ok: true, text: `"${j.title}" importado: ${j.chunks} trecho${j.chunks === 1 ? "" : "s"} guardado${j.chunks === 1 ? "" : "s"}. Já dá para perguntar sobre ele.` })
+      await loadRecent()
+    } catch {
+      setMsg({ ok: false, text: "Não consegui importar agora. Verifique se o Jefrey está rodando." })
+    } finally {
+      setImporting(false)
     }
   }
 
@@ -156,6 +179,28 @@ export default function Memoria() {
             {saving ? "Guardando…" : "Guardar"}
           </button>
         </form>
+      </section>
+
+      <section className="jf-panel p-4" aria-labelledby="m-import">
+        <h2 id="m-import" className="mb-1 font-medium text-white">
+          Importar um documento
+        </h2>
+        <p className="mb-2 text-sm text-white/55">
+          Texto, Markdown, CSV, JSON ou HTML (até 2 MB). O Jefrey corta em trechos e passa a responder com base neles. PDF e Word ainda não.
+        </p>
+        <label className="jf-btn jf-focus inline-block cursor-pointer px-4 py-1.5 text-sm">
+          {importing ? "Importando…" : "Escolher arquivo"}
+          <input
+            type="file"
+            className="sr-only"
+            accept=".txt,.md,.markdown,.csv,.json,.html,.htm,.log,.yaml,.yml,.xml"
+            disabled={importing}
+            onChange={e => {
+              void importFile(e.target.files?.[0])
+              e.target.value = ""
+            }}
+          />
+        </label>
       </section>
 
       <section className="jf-panel p-4" aria-labelledby="m-find">

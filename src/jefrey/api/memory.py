@@ -13,7 +13,7 @@ import logging
 import re
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
 from src.jefrey.core.memory import get_memory_manager
 
 logger = logging.getLogger(__name__)
@@ -129,3 +129,36 @@ async def delete_memory(request: Request, memory_id: str):
     if not ok:
         raise HTTPException(status_code=404, detail="memoria nao encontrada")
     return {"ok": True, "id": memory_id}
+
+
+@router.post("/import")
+async def import_document(request: Request, file: UploadFile = File(...)):
+    """Importa um documento de texto: corta em trechos e guarda cada um na memoria do usuario."""
+    from src.jefrey.core.ingest import MAX_BYTES, MAX_CHUNKS, IngestError, chunk_text, extract_text
+
+    user_id = _require_user(request)
+    data = await file.read(MAX_BYTES + 1)
+    name = (file.filename or "documento")[:200]
+    try:
+        text = extract_text(name, data)
+    except IngestError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    chunks = chunk_text(text)
+    if len(chunks) > MAX_CHUNKS:
+        raise HTTPException(status_code=413, detail=f"documento longo demais ({len(chunks)} trechos; o maximo e {MAX_CHUNKS})")
+    ltm = get_memory_manager().long_term
+    ids: list[str] = []
+    try:
+        for i, piece in enumerate(chunks):
+            ids.append(ltm.add(f"{name}\n{piece}",
+                               metadata={"title": name, "type": "document", "chunk": i + 1, "chunks": len(chunks)},
+                               user_id=user_id))
+    except Exception as e:
+        logger.error("memory/import erro user=%s: %s", user_id, e, exc_info=True)
+        for mid in ids:  # nao deixa documento pela metade
+            try:
+                ltm.delete(mid, user_id=user_id)
+            except Exception:
+                pass
+        raise HTTPException(status_code=500, detail="Erro ao importar o documento")
+    return {"ok": True, "title": name, "chunks": len(ids), "chars": len(text)}
