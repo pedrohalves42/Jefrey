@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Link } from "react-router-dom"
 import { BrainStage, type BrainState } from "@/components/brain/BrainStage"
 import { MessageText } from "@/components/MessageText"
 import { useSpeaker } from "@/hooks/useSpeaker"
@@ -8,6 +9,9 @@ import { useListener } from "@/hooks/useListener"
 import { useVoiceReady } from "@/hooks/useVoiceReady"
 import { voiceView } from "@/lib/voiceMode"
 import { useEasy } from "@/lib/easy"
+import { useActivity } from "@/hooks/useActivity"
+import { ambientLabel } from "@/lib/briefing"
+import BriefingCard from "@/components/BriefingCard"
 import { SentenceBuffer } from "@/lib/voice/sentences"
 import { authedFetch, ensureSession } from "@/lib/session"
 import {
@@ -113,11 +117,13 @@ export default function Conversa() {
     setThreads(prev => prev.map(t => (t.id === id ? fn(t) : t)))
   }, [])
 
+  const activity = useActivity()
+  const note = ambientLabel(activity)
   const brainState: BrainState = pendingApproval !== undefined
     ? "approval"
     : streaming
       ? gotToken ? "responding" : "thinking"
-      : listeningNow ? "listening" : "idle"
+      : listeningNow ? "listening" : note ? "thinking" : "idle"
 
   async function send(textArg?: string) {
     const text = (textArg ?? input).trim()
@@ -151,6 +157,8 @@ export default function Conversa() {
           }))
         },
         onPendingApproval: id => setPendingApproval({ id: id ?? null }),
+        onRecall: items =>
+          updateThread(tid, t => ({ ...t, messages: t.messages.map(m => (m.id === aiMsg.id ? { ...m, recall: items } : m)) })),
         onToolStart: (tool, label, risk) =>
           updateThread(tid, t => ({
             ...t,
@@ -369,11 +377,12 @@ export default function Conversa() {
           </button>
         </div>
 
+        <BriefingCard />
         <div className="jf-hud">
           <span className="pointer-events-none absolute right-3 top-2 z-10 text-xs tabular-nums tracking-widest text-[hsl(var(--hue)_80%_75%)] opacity-70">
             {clock.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
           </span>
-          <BrainStage state={brainState} level={micLevel} className={empty ? "h-[34vh] min-h-[200px]" : "h-[22vh] min-h-[130px]"} />
+          <BrainStage state={brainState} level={micLevel} note={streaming || listeningNow ? null : note} className={empty ? "h-[34vh] min-h-[200px]" : "h-[22vh] min-h-[130px]"} />
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-1" role="log" aria-live="polite" aria-label="Mensagens">
@@ -432,6 +441,13 @@ export default function Conversa() {
                           </div>
                         )}
                         <MessageText text={m.content} />
+                        {m.recall && m.recall.length > 0 && (
+                          <p className="mt-2 border-t border-white/10 pt-2 text-sm text-white/65">
+                            <span className="jf-accent">Lembrei de: </span>
+                            {m.recall.map(r => r.text).join(" · ")}{" "}
+                            <Link to="/aprendi" className="underline hover:text-white">ver tudo</Link>
+                          </p>
+                        )}
                       </>
                     )}
                   </div>

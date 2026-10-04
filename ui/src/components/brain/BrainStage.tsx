@@ -28,7 +28,7 @@ function SimpleOrb({ state }: { state: BrainState }) {
   )
 }
 
-export function BrainStage({ state, level = 0, className = "" }: { state: BrainState; level?: number; className?: string }) {
+export function BrainStage({ state, level = 0, className = "", note = null }: { state: BrainState; level?: number; className?: string; note?: string | null }) {
   const { appearance, set } = useAppearance()
   const [noGl, setNoGl] = useState(false)
   const [slow, setSlow] = useState(false)
@@ -37,7 +37,7 @@ export function BrainStage({ state, level = 0, className = "" }: { state: BrainS
   const show3d = appearance.visual && !noGl && !holo
 
   return (
-    <div className={`relative ${className}`} role="img" aria-label={`Jefrey: ${LABEL[state]}`}>
+    <div className={`relative ${className}`} role="img" aria-label={`Jefrey: ${note ?? LABEL[state]}`}>
       {holo ? (
         <Suspense fallback={<SimpleOrb state={state} />}>
           <HologramAvatar state={state} level={level} appearance={appearance} />
@@ -56,7 +56,7 @@ export function BrainStage({ state, level = 0, className = "" }: { state: BrainS
         <SimpleOrb state={state} />
       )}
       <div className="pointer-events-none absolute bottom-1 left-0 right-0 text-center text-xs tracking-wide text-[hsl(var(--hue)_80%_75%)] opacity-80">
-        {LABEL[state]}
+        {note ?? LABEL[state]}
       </div>
       {slow && show3d && (
         <button

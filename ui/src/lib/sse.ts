@@ -6,6 +6,22 @@ export type ChatEvent =
   | { type: "tool_start"; tool: string; label: string; risk: string }
   | { type: "tool_end"; tool: string; ok: boolean; status: string; summary: string }
   | { type: "approval_required"; approval_id: string; tool: string; label: string; risk?: string }
+  | { type: "recall"; items: RecallItem[] }
+
+export type RecallItem = { kind: "fato" | "lembranca" | "diario" | "estudo"; text: string }
+export const RECALL_KINDS = ["fato", "lembranca", "diario", "estudo"]
+
+function recallItems(v: unknown): RecallItem[] {
+  if (!Array.isArray(v)) return []
+  const out: RecallItem[] = []
+  for (const it of v.slice(0, 6)) {
+    if (!it || typeof it !== "object") continue
+    const kind = (it as RecallItem).kind
+    const text = (it as RecallItem).text
+    if (RECALL_KINDS.includes(kind) && typeof text === "string" && text.trim()) out.push({ kind, text: text.slice(0, 160) })
+  }
+  return out
+}
 
 /**
  * Parser incremental de Server-Sent Events. Aceita pedacos arbitrarios (um evento pode chegar
@@ -68,6 +84,10 @@ function parseBlock(block: string): ChatEvent | null {
         return typeof j.approval_id === "string" && typeof j.tool === "string"
           ? { type: "approval_required", approval_id: j.approval_id, tool: j.tool, label: typeof j.label === "string" ? j.label : j.tool, risk: j.risk }
           : null
+      case "recall": {
+        const items = recallItems(j.items)
+        return items.length ? { type: "recall", items } : null
+      }
       default:
         return null
     }

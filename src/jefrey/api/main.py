@@ -136,6 +136,26 @@ def create_app() -> FastAPI:
             logger.error("criacao das tabelas do ORM falhou (HITL/approvals indisponivel): %s", e)
 
     @app.on_event("startup")
+    async def _startup_scheduler():
+        # estudos em segundo plano: so com o programa aberto, pessoa ausente, dentro do orcamento (core/studies.py)
+        try:
+            from src.jefrey.core import briefing, scheduler, studies
+            scheduler.register("estudos", 600, studies.study_tick)
+            scheduler.register("resumo-do-dia", 300, briefing.briefing_tick)
+            scheduler.register("avisos-de-lembretes", 30, briefing.reminder_tick)
+            scheduler.start()
+        except Exception as e:
+            logger.warning("agendador indisponivel: %s", e)
+
+    @app.on_event("shutdown")
+    async def _shutdown_scheduler():
+        try:
+            from src.jefrey.core import scheduler
+            scheduler.stop()
+        except Exception:
+            pass
+
+    @app.on_event("startup")
     async def _startup_register_tools():
         try:
             from src.jefrey.core.registry import register_default_tools
@@ -362,6 +382,13 @@ def create_app() -> FastAPI:
     app.include_router(connections_router)
     from src.jefrey.api.google_connect import router as google_connect_router
     app.include_router(google_connect_router)
+    from src.jefrey.api.learning_routes import router as learning_router
+    app.include_router(learning_router)
+    from src.jefrey.api.studies_routes import router as studies_router
+    app.include_router(studies_router)
+    from src.jefrey.api.briefing_routes import activity_router, router as briefing_router
+    app.include_router(briefing_router)
+    app.include_router(activity_router)
 
     # Monta a sub-aplicacao de aprovacoes Starlette (mantem CIPHER-019, 020, 024 intactos)
     # FIX: mount em /approvals (nao /) para evitar conflito com outros routers.

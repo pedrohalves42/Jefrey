@@ -12,6 +12,8 @@ import Avancado from "@/pages/Avancado"
 import BemVindo from "@/pages/BemVindo"
 import Conexoes from "@/pages/Conexoes"
 import Ajuda from "@/pages/Ajuda"
+import Aprendi from "@/pages/Aprendi"
+import Estudos from "@/pages/Estudos"
 import { applyEasy, getEasy } from "@/lib/easy"
 
 const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true } } })
@@ -35,6 +37,8 @@ export default function App() {
               <Route path="/bem-vindo" element={<BemVindo />} />
               <Route path="/conexoes" element={<Conexoes />} />
               <Route path="/ajuda" element={<Ajuda />} />
+              <Route path="/aprendi" element={<Aprendi />} />
+              <Route path="/estudos" element={<Estudos />} />
               {/* enderecos antigos */}
               <Route path="/memory" element={<Navigate to="/memoria" replace />} />
               <Route path="/settings" element={<Navigate to="/configuracoes" replace />} />

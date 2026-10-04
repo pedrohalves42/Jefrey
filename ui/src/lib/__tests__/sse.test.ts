@@ -78,6 +78,18 @@ describe("SseParser", () => {
     expect(p.push(ev({ type: "tool_start" }) + ev({ type: "approval_required", tool: "x" }) + ev({ type: "tool_end", ok: true }))).toEqual([])
   })
 
+  it("entende 'Lembrei de' e descarta itens ruins, sem confiar no formato", () => {
+    const p = new SseParser()
+    const out = p.push(
+      ev({ type: "recall", items: [{ kind: "fato", text: "Mora em Curitiba." }, { kind: "hacker", text: "x" }, { kind: "diario", text: "  " }, 5, null, { kind: "lembranca", text: "a".repeat(500) }] }),
+    )
+    expect(out).toHaveLength(1)
+    const items = (out[0] as { items: { kind: string; text: string }[] }).items
+    expect(items.map(i => i.kind)).toEqual(["fato", "lembranca"])
+    expect(items[1]!.text.length).toBe(160)
+    expect(p.push(ev({ type: "recall", items: "nada" }) + ev({ type: "recall" }))).toEqual([])
+  })
+
   it("tool_end so e ok quando ok === true (nao confia em valores truthy)", () => {
     const p = new SseParser()
     expect(p.push(ev({ type: "tool_end", tool: "x", ok: "true", status: "ok", summary: "" }))).toEqual([

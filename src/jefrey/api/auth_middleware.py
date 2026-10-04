@@ -35,7 +35,7 @@ _PUBLIC_PREFIXES = ("/assets/", "/images/")  # /images: icones do manifesto (o n
 # Paginas do app (React Router). Sao tambem prefixos de API (/memory, /approvals...), entao so
 # servimos o index.html quando e navegacao de navegador (GET + Accept: text/html).
 _SPA_PAGES = {"/studio", "/memory", "/approvals", "/observability", "/settings", "/knowledge", "/chat",
-              "/memoria", "/skills", "/configuracoes", "/avancado", "/bem-vindo", "/conexoes", "/ajuda"}
+              "/memoria", "/skills", "/configuracoes", "/avancado", "/bem-vindo", "/conexoes", "/ajuda", "/aprendi", "/estudos"}
 _INDEX_HTML = Path(__file__).resolve().parent.parent / "static" / "index.html"
 # CIPHER-301: /chat aceita modo anonimo, mas se vier Authorization a identidade e validada
 # (antes /chat e /chat/status eram publicos e todos viravam "anonymous": um usuario lia a

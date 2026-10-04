@@ -248,6 +248,12 @@ def start_tray(url: str, logs_dir: Path, on_quit) -> "object | None":
         )
         icon = pystray.Icon("Jefrey", image, "Jefrey", menu)
         icon.run_detached()
+        try:  # avisos do Windows (lembretes, resumo da manha): balao perto do relogio
+            from src.jefrey.core import notify
+
+            notify.set_sink(lambda title, text: icon.notify(text, title))
+        except Exception:
+            pass
         return icon
     except Exception:
         return None

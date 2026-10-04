@@ -1,9 +1,9 @@
 import { authedFetch } from "@/lib/session"
-import { SseParser } from "@/lib/sse"
+import { RECALL_KINDS, SseParser, type RecallItem } from "@/lib/sse"
 
 export type Role = "user" | "assistant"
 export type ToolStep = { tool: string; label: string; risk: string; state: "running" | "waiting" | "ok" | "failed"; summary?: string }
-export type Message = { id: string; role: Role; content: string; error?: boolean; at: number; tools?: ToolStep[] }
+export type Message = { id: string; role: Role; content: string; error?: boolean; at: number; tools?: ToolStep[]; recall?: RecallItem[] }
 export type Thread = { id: string; title: string; updated: number; messages: Message[] }
 
 const KEY = "jefrey_threads_v1"
@@ -43,6 +43,12 @@ function sanitizeThreads(raw: unknown): Thread[] {
                 tool: String(t.tool), label: String(t.label || t.tool), risk: String(t.risk || "unknown"),
                 state: t.state === "ok" || t.state === "failed" ? t.state : "failed", summary: t.summary ? String(t.summary).slice(0, 300) : undefined,
               }))
+            : undefined,
+          recall: Array.isArray(m.recall)
+            ? m.recall
+                .filter(r => r && RECALL_KINDS.includes(r.kind) && typeof r.text === "string")
+                .slice(0, 6)
+                .map(r => ({ kind: r.kind, text: String(r.text).slice(0, 160) }))
             : undefined,
         })),
     })
@@ -105,6 +111,7 @@ export type StreamHandlers = {
   onToolStart?: (tool: string, label: string, risk: string) => void
   onToolEnd?: (tool: string, ok: boolean, summary: string) => void
   onApprovalRequired?: (approvalId: string, tool: string, label: string) => void
+  onRecall?: (items: RecallItem[]) => void
 }
 
 export type StreamResult = { ok: boolean; error?: string; firstTokenMs?: number }
@@ -154,6 +161,7 @@ export async function streamChat(
       else if (ev.type === "tool_start") handlers.onToolStart?.(ev.tool, ev.label, ev.risk)
       else if (ev.type === "tool_end") handlers.onToolEnd?.(ev.tool, ev.ok, ev.summary)
       else if (ev.type === "approval_required") handlers.onApprovalRequired?.(ev.approval_id, ev.tool, ev.label)
+      else if (ev.type === "recall") handlers.onRecall?.(ev.items)
     }
   }
   try {

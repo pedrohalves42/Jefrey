@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import ListenButton from "@/components/ListenButton"
+import { BRIEFING_HOURS, getBriefing, putBriefingPrefs, type BriefingPrefs } from "@/lib/briefing"
 import { useEasy } from "@/lib/easy"
 
 const TOPICS: { title: string; text: string }[] = [
@@ -9,6 +11,48 @@ const TOPICS: { title: string; text: string }[] = [
   { title: "Conectar as suas contas", text: "Na tela de Conexões você liga o Jefrey à inteligência que responde e ao seu Google. Em cada uma é só apertar o botão, entrar na sua conta e voltar." },
   { title: "Para fechar o Jefrey", text: "Procure o ícone do Jefrey perto do relógio do Windows, clique com o botão direito e escolha Sair." },
 ]
+
+function MorningSettings() {
+  const [p, setP] = useState<BriefingPrefs | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  useEffect(() => {
+    void getBriefing().then(r => setP(r.data?.prefs ?? null))
+  }, [])
+  async function save(change: Partial<BriefingPrefs>) {
+    const r = await putBriefingPrefs(change)
+    if (r.ok && r.data) {
+      setP(r.data)
+      setErr(null)
+    } else setErr("Não consegui mudar isso agora. Tente de novo.")
+  }
+  if (!p) return null
+  const field = "rounded-lg border border-white/15 bg-black/30 px-3 py-3 text-base text-white"
+  return (
+    <section className="jf-panel p-5" aria-labelledby="h-manha">
+      <h2 id="h-manha" className="text-xl font-medium text-white">Resumo da manhã</h2>
+      <p className="mt-2 text-base text-white/80">
+        De manhã eu preparo um resumo com os seus lembretes do dia e o que eu estudei. Ele aparece na tela de Conversa.
+      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-4">
+        <label className="flex items-center gap-2 text-base text-white/85">
+          <input type="checkbox" className="h-5 w-5" checked={p.enabled} onChange={e => void save({ enabled: e.target.checked })} />
+          Preparar o resumo
+        </label>
+        <label className="text-base text-white/85">
+          Horário
+          <select className={`${field} ml-2`} value={p.hour} onChange={e => void save({ hour: Number(e.target.value) })}>
+            {BRIEFING_HOURS.map(h => <option key={h} value={h}>{String(h).padStart(2, "0")}h</option>)}
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-base text-white/85">
+          <input type="checkbox" className="h-5 w-5" checked={p.notify} onChange={e => void save({ notify: e.target.checked })} />
+          Avisar no Windows
+        </label>
+      </div>
+      {err && <p role="alert" className="mt-2 text-base text-red-200">{err}</p>}
+    </section>
+  )
+}
 
 export default function Ajuda() {
   const [easy, setEasy] = useEasy()
@@ -32,6 +76,8 @@ export default function Ajuda() {
           </div>
         </section>
       ))}
+
+      <MorningSettings />
 
       <section className="jf-panel p-5">
         <h2 className="text-xl font-medium text-white">Letra grande e menu simples</h2>
