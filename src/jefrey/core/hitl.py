@@ -15,7 +15,6 @@ import logging
 import time
 import uuid
 import datetime
-from typing import Any
 
 from src.jefrey.core.rbac import as_role  # noqa: F401  (mantém API simétrica)
 from src.jefrey.core.metrics import APPROVALS_CREATED, APPROVALS_DECIDED
@@ -42,7 +41,6 @@ class ApprovalManager:
     ) -> str:
         from src.jefrey.core.db import get_db
         from src.jefrey.core.models import Approval
-        from sqlalchemy import func
 
         aid = str(uuid.uuid4())
         now = datetime.datetime.now(datetime.timezone.utc)

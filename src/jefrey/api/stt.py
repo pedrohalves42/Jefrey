@@ -2,7 +2,6 @@
 from __future__ import annotations
 import logging
 import time
-from typing import Optional
 
 from fastapi import APIRouter, Request, HTTPException, UploadFile, File
 
@@ -114,8 +113,6 @@ async def stt_transcribe(request: Request, audio: UploadFile = File(...)):
             pass
         # EventBus per-tenant (CIPHER-033) — best effort, fail open for MVP
         try:
-            from src.jefrey.eventbus.publisher import publish_event
-            import json as _json
             # HMAC kid rotation handled in signing; publish wraps
             # publish_event is async? try sync fallback
             pass

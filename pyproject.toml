@@ -24,11 +24,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "langgraph>=0.2.0",
-    "langchain>=0.2.0",
-    "langchain-community>=0.2.0",
     "langchain-openai>=0.2.0",
-    "langchain-anthropic>=0.2.0",
     "langchain-ollama>=0.2.0",
     "pydantic>=2.8.0",
     "pydantic-settings>=2.8.0",
@@ -147,11 +143,7 @@ test = ["pytest", "pytest-asyncio", "pytest-cov"]
 lint = ["ruff", "mypy", "black", "isort"]
 format = ["black", "isort"]
 all = [
-    "langgraph",
-    "langchain",
-    "langchain-community",
     "langchain-openai",
-    "langchain-anthropic",
     "langchain-ollama",
     "pydantic",
     "pydantic-settings",

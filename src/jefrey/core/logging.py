@@ -3,7 +3,6 @@ Provides a simple init_logging that configures structured JSON logs using the st
 """
 import logging
 import sys
-import json
 from pythonjsonlogger import jsonlogger
 
 def init_logging(level: str = "INFO", logfile: str | None = None) -> None:

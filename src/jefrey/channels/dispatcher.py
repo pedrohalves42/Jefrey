@@ -17,7 +17,7 @@ import secrets
 import time
 import unicodedata
 from collections import OrderedDict, deque
-from typing import Any, AsyncIterator, Awaitable, Callable, Optional
+from typing import AsyncIterator, Awaitable, Callable, Optional
 
 from src.jefrey.channels.base import Channel, InboundMessage
 

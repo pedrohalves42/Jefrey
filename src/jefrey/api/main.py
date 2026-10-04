@@ -13,7 +13,7 @@ import os
 # CIPHER-313: chromadb tenta enviar telemetria (posthog) e loga ERROR a cada operacao
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
 import uvicorn
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from fastapi.middleware.cors import CORSMiddleware
@@ -113,7 +113,7 @@ def create_app() -> FastAPI:
                 if any(str(m.get("name", "")).split(":")[0] == model.split(":")[0] for m in tags):
                     return
                 logger.warning("modelo de embeddings %s ausente no Ollama - baixando em background", model)
-                async with _f3_httpx.AsyncClient(timeout=None) as c:
+                async with _f3_httpx.AsyncClient(timeout=_f3_httpx.Timeout(3600.0, connect=10.0)) as c:
                     r = await c.post(base + "/api/pull", json={"model": model, "stream": False})
                     logger.info("pull %s -> HTTP %s", model, r.status_code)
             except Exception as e:
@@ -186,8 +186,11 @@ def create_app() -> FastAPI:
     if local_guard_enabled():
         app.add_middleware(
             LocalGuardMiddleware,
-            extra_hosts=(os.getenv("JEFREY_ALLOWED_HOSTS") or "").split(","),
-            extra_origins=(os.getenv("JEFREY_ALLOWED_ORIGINS") or "").split(","),
+            # nomes que os containers usam entre si e as origens de tela ja liberadas no CORS
+            extra_hosts=[*(os.getenv("JEFREY_ALLOWED_HOSTS") or "").split(","),
+                         *(["jefrey-api", "api", "host.docker.internal", "mcp-server", "frontend"]
+                           if (os.getenv("JEFREY_MODE") or "").lower() != "native" else [])],
+            extra_origins=[*(os.getenv("JEFREY_ALLOWED_ORIGINS") or "").split(","), *cors_origins],
         )
 
     # P6: Observability -- Prometheus metrics endpoint (PUBLICO, sem auth)
@@ -207,7 +210,6 @@ def create_app() -> FastAPI:
         """
         from src.jefrey.core.metrics import SERVICE_HEALTH
         from src.jefrey.core.config import get_settings
-        import time as _time
 
         cfg = get_settings()
         base = (getattr(cfg.llm, 'base_url', None) or 'http://host.docker.internal:11434').rstrip('/')
@@ -359,15 +361,9 @@ def create_app() -> FastAPI:
     # FIX: mount em /approvals (nao /) para evitar conflito com outros routers.
     # Rotas relativas do sub-app: /pending e /{id}/decide
     # Resultado final: /approvals/pending e /approvals/{id}/decide
-    @app.websocket("/ws")
-    async def websocket_endpoint(websocket: WebSocket):
-        manager = get_ws_manager()
-        await manager.connect(websocket)
-        try:
-            while True:
-                await websocket.receive_text()
-        except WebSocketDisconnect:
-            manager.disconnect(websocket)
+    # AUDITORIA 2026-10: o endpoint publico /ws (WebSocket sem login) foi removido: a interface nao o usa e o
+    # gerenciador transmitiria a todos os conectados consultas de memoria e ids de usuario. Reintroduzir so com
+    # autenticacao (primeira mensagem com token, nunca token na URL).
 
     approvals_app = build_approvals_app()
     app.mount("/approvals", approvals_app)
@@ -397,7 +393,6 @@ def main():
         reload=False  # docker read_only fix: watchfiles /app/.cache Permission denied (Axiom 1),
     )
 
-from src.jefrey.api.ws import get_ws_manager  # type: ignore
 
 if __name__ == "__main__":
     main()

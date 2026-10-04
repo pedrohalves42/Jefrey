@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from src.jefrey.core.hardware import TIERS, detect_gpu, local_advice, read_memory_gb, recommend_model
 from src.jefrey.core.llm_provider import (
     LLMClient, LLMConfigError, MAX_FALLBACKS, PROVIDERS, config_from_settings, load_fallback_configs,
-    load_override, load_saved_key, save_fallbacks, save_override,
+    load_override, save_fallbacks, save_override,
 )
 
 logger = logging.getLogger(__name__)

@@ -18,6 +18,7 @@ if os.getenv("JEFREY_TEST_REDIS") != "real":
     os.environ["JEFREY_REDIS__BACKEND"] = "local"
 
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
+os.environ.setdefault("JEFREY_LOCAL_GUARD", "0")  # o TestClient usa Host "testserver"; a protecao tem testes proprios
 
 
 import pytest

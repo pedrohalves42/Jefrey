@@ -1,11 +1,9 @@
 """Configuracao centralizada com Pydantic Settings v2."""
 from __future__ import annotations
 import threading
-from pathlib import Path
 from typing import Literal, Optional
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-import yaml
 
 class LLMSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="JEFREY_LLM__", extra="ignore")

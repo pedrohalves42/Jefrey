@@ -8,13 +8,10 @@ Critical security fixes:
 from __future__ import annotations
 
 import base64
-import json
 import logging
 from typing import Optional
 
-import redis
 
-from src.jefrey.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 

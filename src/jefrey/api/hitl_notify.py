@@ -17,7 +17,6 @@ import json
 from email.mime.text import MIMEText
 from typing import Optional
 
-from src.jefrey.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +113,8 @@ def _notify_webhook(url: str, approval_id: str, tool_name: str, risk_level: str,
         "risk_level": risk_level,
         "thread_id": thread_id,
     }).encode("utf-8")
+    if not url.lower().startswith(("https://", "http://")):  # nada de file:// ou esquemas estranhos
+        raise ValueError("webhook so aceita http(s)")
     req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=10) as resp:
         logger.info("hitl_notify: webhook enviado, status=%d", resp.status)

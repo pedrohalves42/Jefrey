@@ -8,17 +8,14 @@ CIPHER-031: per-tenant client_id/secret storage in OAuth2 clients table.
 from __future__ import annotations
 
 import logging
-import re
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
-import asyncio
 
-from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, Index, create_engine, select
-from src.jefrey.core.pg_memory_ttl import MemoryTTL
-from sqlalchemy.orm import sessionmaker, Session, declarative_base
+from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, Index, select
+from src.jefrey.core.pg_memory_ttl import MemoryTTL, schedule_memory_cleanup
+from sqlalchemy.orm import Session, declarative_base
 
-from src.jefrey.core.config import get_settings
 from src.jefrey.core.metrics import MEMORY_OPS, MEMORY_LATENCY
 
 Base = declarative_base()

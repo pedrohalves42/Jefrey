@@ -18,8 +18,7 @@ import json
 import logging
 import asyncio
 import time
-from typing import Any
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 
 logger = logging.getLogger(__name__)

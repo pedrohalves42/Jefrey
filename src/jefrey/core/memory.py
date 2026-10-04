@@ -6,17 +6,14 @@ import re
 import uuid
 import threading
 from datetime import datetime
-from functools import lru_cache
-from pathlib import Path
 from typing import Any
 from collections import deque
-from contextlib import contextmanager
 
 import chromadb
 from chromadb.config import Settings as ChromaSettings
 from langchain_openai import OpenAIEmbeddings
 from langchain_ollama import OllamaEmbeddings
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage, ToolMessage
 
 from src.jefrey.core.config import get_settings
 

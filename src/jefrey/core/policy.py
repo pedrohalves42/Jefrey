@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from types import SimpleNamespace
 from typing import Any, Dict, Optional
 
 class RiskLevel(Enum):

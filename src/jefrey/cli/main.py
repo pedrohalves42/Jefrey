@@ -6,9 +6,7 @@ Comandos: chat, approvals (list/decide), memory (search), stt, tts.
 from __future__ import annotations
 
 import os
-import sys
 import json
-import logging
 from typing import Optional
 
 import httpx
@@ -16,7 +14,6 @@ import typer
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn
 
 app = typer.Typer(
     name="jefrey",

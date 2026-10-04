@@ -24,7 +24,7 @@ class WebSearchSkill(SkillBase):
     def __init__(self) -> None:
         super().__init__()
         self._client = None
-        self._cache: dict[str, tuple[float, di]] = {}
+        self._cache: dict[str, tuple[float, dict]] = {}
 
     def _cache_get(self, key: str) -> dict | None:
         item = self._cache.get(key)

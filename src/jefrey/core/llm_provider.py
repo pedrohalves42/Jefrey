@@ -19,7 +19,7 @@ from typing import Any, AsyncIterator, Optional
 
 import httpx
 
-from src.jefrey.core.llm_tools import StreamItem, StreamParser, ToolCall, tool_defs, to_provider_messages
+from src.jefrey.core.llm_tools import StreamItem, StreamParser, tool_defs, to_provider_messages
 
 Message = dict[str, str]
 
@@ -422,7 +422,7 @@ def load_fallback_configs() -> list[LLMConfig]:
 
 def save_fallbacks(items: list[dict]) -> None:
     """items: [{id, provider, model, base_url?, api_key?}]. api_key None mantem a atual; "" apaga."""
-    from src.jefrey.core.secret_store import read_secret, valid_id, write_secret
+    from src.jefrey.core.secret_store import read_secret, valid_id
 
     if len(items) > MAX_FALLBACKS:
         raise LLMConfigError(f"no maximo {MAX_FALLBACKS} provedores de reserva")

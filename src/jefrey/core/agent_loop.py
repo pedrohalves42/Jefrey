@@ -13,7 +13,7 @@ import logging
 import re
 import unicodedata
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Callable, Optional
+from typing import Any, AsyncIterator, Optional
 
 from src.jefrey.core.llm_tools import ToolCall
 from src.jefrey.core.tool_catalog import CATALOG, policy_for

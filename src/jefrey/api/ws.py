@@ -1,7 +1,7 @@
 # src/jefrey/api/ws.py – Broadcast de eventos para interface gráfica 3D (Phase 10)
 import asyncio
-from fastapi import WebSocket, WebSocketDisconnect
-from typing import Dict, Set
+from fastapi import WebSocket
+from typing import Set
 
 # Gerenciador de conexões WebSocket (singleton por instância do app)
 class WSManager:

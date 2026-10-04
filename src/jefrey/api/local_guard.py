@@ -80,4 +80,11 @@ class LocalGuardMiddleware:
 
 
 def local_guard_enabled() -> bool:
-    return (os.getenv("JEFREY_MODE", "") or "").strip().lower() == "native" or os.getenv("JEFREY_LOCAL_GUARD", "") == "1"
+    """Liga no modo nativo e em qualquer execucao de desenvolvimento (onde o login /auth/dev-token existe).
+    JEFREY_LOCAL_GUARD=1 forca ligar; =0 forca desligar (usado nos testes). Em producao real nao e usado."""
+    flag = os.getenv("JEFREY_LOCAL_GUARD", "")
+    if flag in ("0", "1"):
+        return flag == "1"
+    if (os.getenv("JEFREY_MODE", "") or "").strip().lower() == "native":
+        return True
+    return (os.getenv("JEFREY_ENV", "dev") or "dev").strip().lower() == "dev"

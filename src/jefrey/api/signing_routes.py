@@ -12,7 +12,7 @@ import logging
 from fastapi import Request, APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
-from src.jefrey.eventbus.signing import sign_message, verify_message, _get_hmac_keys, rotate_hmac_key as _rotate_hmac_key_internal
+from src.jefrey.eventbus.signing import _get_hmac_keys, rotate_hmac_key as _rotate_hmac_key_internal
 
 logger = logging.getLogger(__name__)
 

@@ -3,7 +3,7 @@
 import os
 import cv2
 import numpy as np
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 
 
 def load_image(image_path: str, convert_rgb: bool = True) -> Optional[np.ndarray]:

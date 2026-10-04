@@ -123,6 +123,13 @@ def test_ativacao_pelo_modo(monkeypatch):
     from src.jefrey.api.local_guard import local_guard_enabled
     monkeypatch.delenv("JEFREY_MODE", raising=False)
     monkeypatch.delenv("JEFREY_LOCAL_GUARD", raising=False)
+    monkeypatch.setenv("JEFREY_ENV", "prod")
+    assert not local_guard_enabled()  # producao real: nao se aplica
+    monkeypatch.setenv("JEFREY_ENV", "dev")
+    assert local_guard_enabled()  # dev (Docker ou nao): o login /auth/dev-token existe, entao protege
+    monkeypatch.setenv("JEFREY_LOCAL_GUARD", "0")
     assert not local_guard_enabled()
+    monkeypatch.delenv("JEFREY_LOCAL_GUARD")
+    monkeypatch.setenv("JEFREY_ENV", "prod")
     monkeypatch.setenv("JEFREY_MODE", "native")
     assert local_guard_enabled()

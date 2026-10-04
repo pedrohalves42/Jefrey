@@ -1,7 +1,6 @@
 """Connections 1-clique — F6-3 (Axiom #1 FAIL-CLOSED, #2 ISOLAMENTO, #4 PERSISTENCIA, CIPHER-032)"""
 from __future__ import annotations
 import os
-from urllib.parse import urlparse
 import re
 import logging
 import httpx

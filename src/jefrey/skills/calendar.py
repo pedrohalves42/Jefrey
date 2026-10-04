@@ -368,7 +368,6 @@ class CalendarSkill(SkillBase):
         if not creds:
             return [{"error": f"OAuth token não encontrado para user_id={_uid}"}]
         
-        from datetime import datetime, timedelta
         from googleapiclient.discovery import build
         try:
             service = build("calendar", "v3", credentials=creds)

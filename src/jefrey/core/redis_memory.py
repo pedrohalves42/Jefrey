@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import logging
-import time
-from typing import Optional, Dict, Any
 
-import redis
 
 logger = logging.getLogger(__name__)
 

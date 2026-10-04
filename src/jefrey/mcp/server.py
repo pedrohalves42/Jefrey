@@ -145,7 +145,6 @@ _cache_misses: int = 0
 # ---------------------------------------------------------------------------
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse
 
 class _OAuthMiddleware(BaseHTTPMiddleware):
     """Middleware que valida OAuth para rotas MCP (exceto publicas)."""
@@ -264,7 +263,6 @@ async def _run_guarded(tool: StructuredTool, args: dict, thread_id: str) -> str:
     exposto ao caller; logo nenhum cliente pode se autodeclarar "admin" via payload.
     """
     from src.jefrey.core.policy import get_policy_engine, PolicyContext, Decision
-    from src.jefrey.core.registry import register_default_tools
 
     policy = get_policy_engine()
     ctx = PolicyContext(thread_id=thread_id, user_role=_resolve_role(), autonomous=policy.autonomous)
@@ -379,7 +377,6 @@ def _make_wrapper(tool: StructuredTool) -> callable:
     server-side em _resolve_role() — um cliente jamais pode se autodeclarar "admin".
     """
     import inspect
-    from functools import wraps
 
     schema = tool.args_schema
     fields = schema.model_fields

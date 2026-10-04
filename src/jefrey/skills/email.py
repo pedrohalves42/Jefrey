@@ -1,6 +1,6 @@
 """Skill: E-mail (Gmail) - OAuth multi-tenant (CIPHER-001 fix)."""
 from __future__ import annotations
-from typing import Any
+from typing import Final
 import logging
 from pathlib import Path
 

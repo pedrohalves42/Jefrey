@@ -7,20 +7,38 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import json
 import logging
 import os
 import time
 import secrets
-import warnings
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from urllib.parse import urlencode
-from typing import Any, Dict, Optional
+from typing import Optional
 
 import httpx
 from fastapi import APIRouter, Request, HTTPException, status
 
 from src.jefrey.core.config import get_settings
+
+_GOOGLE_STATE_TTL_S = 600
+_google_states: dict[str, tuple[str, float]] = {}  # state -> (code_verifier, expira)
+
+
+def _remember_google_state(state: str, verifier: str) -> None:
+    now = time.time()
+    _google_states[state] = (verifier, now + _GOOGLE_STATE_TTL_S)
+    for k in [k for k, (_, exp) in _google_states.items() if exp < now]:
+        _google_states.pop(k, None)
+    while len(_google_states) > 50:
+        _google_states.pop(next(iter(_google_states)))
+
+
+def _consume_google_state(state: str) -> Optional[str]:
+    """Devolve o code_verifier se o state existe, nao expirou e ainda nao foi usado; senao None."""
+    entry = _google_states.pop(state or "", None)
+    if entry is None or entry[1] < time.time():
+        return None
+    return entry[0]
 
 logger = logging.getLogger(__name__)
 
@@ -94,9 +112,14 @@ async def google_login(request: Request = None):
             detail="OAuth2 não configurado. Configure JEFREY_OAUTH__CLIENT_ID e JEFREY_OAUTH__CLIENT_SECRET no .env"
         )
     
-    # state CSRF - em prod deveria ser salvo em cookie httpOnly + validado no callback
-    state = secrets.token_urlsafe(16)
+    # state CSRF + PKCE (S256): guardados no servidor, de uso unico, e conferidos no retorno
+    state = secrets.token_urlsafe(24)
+    verifier = secrets.token_urlsafe(48)
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    _remember_google_state(state, verifier)
     params = {
+        "code_challenge": challenge,
+        "code_challenge_method": "S256",
         "client_id": creds["client_id"],
         "redirect_uri": creds["redirect_uri"],
         "response_type": "code",
@@ -127,10 +150,10 @@ async def google_callback(request: Request):
             detail="OAuth2 não configurado. Configure JEFREY_OAUTH__CLIENT_ID e JEFREY_OAUTH__CLIENT_SECRET no .env"
         )
     
-    # state validacao CSRF (log apenas em dev, enforce em prod futuro)
-    state = request.query_params.get("state")
-    if state:
-        logger.debug("OAuth state=%s", state[:16])
+    # state CSRF: obrigatorio e de uso unico (antes era so registrado em log)
+    code_verifier = _consume_google_state(request.query_params.get("state") or "")
+    if code_verifier is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Login recusado: state invalido, expirado ou ja usado")
     code = request.query_params.get("code")
     if not code:
         raise HTTPException(
@@ -149,6 +172,7 @@ async def google_callback(request: Request):
                 "client_secret": creds["client_secret"],
                 "redirect_uri": creds["redirect_uri"],
                 "grant_type": "authorization_code",
+                "code_verifier": code_verifier,
             },
             timeout=10.0,
         )
@@ -188,7 +212,7 @@ async def google_callback(request: Request):
                 payload = _jwt.decode(id_token, options={"verify_signature": False})
                 user_id = payload.get("sub")
                 email = payload.get("email")
-                logger.info("id_token claims sub=%s email=%s iss=%s", payload.get("sub"), payload.get("email"), payload.get("iss"))
+                logger.info("id_token recebido iss=%s", payload.get("iss"))
             except Exception as e:
                 logger.debug("id_token decode sem verify falhou: %s", e)
 
@@ -204,7 +228,7 @@ async def google_callback(request: Request):
                 # userinfo e autoritativo - sobrescreve id_token se presente
                 user_id = ui.get("sub") or user_id
                 email = ui.get("email") or email
-                logger.info("userinfo OK sub=%s email=%s", user_id, email)
+                logger.info("userinfo OK")
             else:
                 logger.warning("userinfo status=%s body=%s", ui_resp.status_code, ui_resp.text[:300])
                 if not user_id:
