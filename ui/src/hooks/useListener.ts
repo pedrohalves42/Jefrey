@@ -32,20 +32,23 @@ type Options = {
   onLevel?: (level: number) => void
   /** o audio nao rendeu texto (ruido, fala curta): a tela pode dizer "nao entendi, pode repetir?" */
   onUnclear?: () => void
+  /** endereco que recebe o audio (padrao "/stt") e, se houver onResult, quem trata a resposta crua */
+  endpoint?: string
+  onResult?: (json: Record<string, unknown>) => void
 }
 
 /**
  * Ouve pelo microfone, detecta o fim da fala no proprio navegador (nada e enviado antes disso) e
  * transcreve com o Whisper LOCAL do servidor. Sem Web Speech API (que mandaria o audio ao Google).
  */
-export function useListener({ onTranscript, onSpeechStart, onLevel, onUnclear }: Options) {
+export function useListener({ onTranscript, onSpeechStart, onLevel, onUnclear, endpoint, onResult }: Options) {
   const supported = typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== "undefined"
   const [state, setState] = useState<ListenerState>("idle")
   const [error, setError] = useState<string | null>(null)
   const cleanup = useRef<(() => void) | null>(null)
   const starting = useRef(false)
-  const cb = useRef({ onTranscript, onSpeechStart, onLevel, onUnclear })
-  cb.current = { onTranscript, onSpeechStart, onLevel, onUnclear }
+  const cb = useRef({ onTranscript, onSpeechStart, onLevel, onUnclear, endpoint, onResult })
+  cb.current = { onTranscript, onSpeechStart, onLevel, onUnclear, endpoint, onResult }
 
   const stop = useCallback(() => {
     cleanup.current?.()
@@ -59,7 +62,13 @@ export function useListener({ onTranscript, onSpeechStart, onLevel, onUnclear }:
     try {
       const fd = new FormData()
       fd.append("audio", blob, "voz.webm")
-      const r = await authedFetch("/stt", { method: "POST", body: fd })
+      const r = await authedFetch(cb.current.endpoint ?? "/stt", { method: "POST", body: fd })
+      if (r.ok && cb.current.onResult) {
+        // modo "palavra de ativacao": o servidor so devolve {wake, rest}; nada do que foi dito fica aqui
+        cb.current.onResult(await r.json().catch(() => ({})))
+        setState("idle")
+        return
+      }
       if (r.status === 400) {
         // ruido ou fala que nao deu para entender: nao e erro, e so pedir de novo
         setState("idle")

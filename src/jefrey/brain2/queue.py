@@ -76,8 +76,8 @@ class Brain2Queue:
         if r is not None:
             try:
                 total += int(r.xlen(STREAM_KEY) or 0)
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("ignorado (%s): %s", 'queue.py', type(_e).__name__)
         return total
 
     def get_fallback(self) -> List[Dict[str, Any]]:

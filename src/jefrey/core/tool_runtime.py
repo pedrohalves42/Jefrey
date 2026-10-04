@@ -132,8 +132,8 @@ class ToolRuntime:
         try:
             from src.jefrey.core.metrics import TOOLS_BLOCKED
             TOOLS_BLOCKED.labels(tool_name=tool if policy_for(tool) else "desconhecida", reason=reason).inc()
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("ignorado (%s): %s", 'tool_runtime.py', type(_e).__name__)
 
     async def run(self, name: str, args: Any) -> ToolOutcome:
         policy: ToolPolicy | None = policy_for(name)
@@ -207,8 +207,8 @@ class ToolRuntime:
             try:
                 from src.jefrey.core.metrics import TOOL_EXEC_LATENCY
                 TOOL_EXEC_LATENCY.labels(tool_name=name).observe(time.monotonic() - started)
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("ignorado (%s): %s", 'tool_runtime.py', type(_e).__name__)
         # resultado de ferramenta e conteudo NAO confiavel (pode vir da web): filtra injecao
         text = sanitize_tool_output(text, source=f"tool:{name}")
         if len(text) > MAX_RESULT_CHARS:

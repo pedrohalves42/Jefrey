@@ -5,6 +5,7 @@ import { getConfig, needsWelcome, welcomeSkipped } from "@/lib/llm"
 import { useEasy, visibleItems, type NavItem } from "@/lib/easy"
 import { StatusPill } from "@/components/StatusPill"
 import { ReminderBanner } from "@/components/ReminderBanner"
+import WaApprovals from "@/components/WaApprovals"
 
 // easy: aparece no modo Fácil (padrao): so o essencial para quem nao e tecnico
 const ITEMS: NavItem[] = [
@@ -49,6 +50,7 @@ export function AppShell() {
   return (
     <div className="flex h-dvh flex-col md:flex-row">
       <ReminderBanner />
+      <WaApprovals />
       <ConnectedNotice />
       {/* barra lateral (desktop) */}
       <nav className="jf-panel m-3 mr-0 hidden w-56 shrink-0 flex-col p-3 md:flex" aria-label="Principal">

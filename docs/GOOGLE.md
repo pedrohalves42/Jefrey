@@ -20,6 +20,15 @@ Jefrey no Google e colocar as credenciais. Quem usa o Jefrey não faz isto: só 
   "restrito" e exige verificação mais rigorosa (e, em geral, avaliação de segurança anual). A **Agenda** é mais simples de liberar.
 - Alternativa para lançar rápido: liberar primeiro só **Agenda** (e/ou Drive `drive.file`) e deixar o Gmail para depois.
 
+## Se o Google mostrar "Erro 400: redirect_uri_mismatch"
+O Google só aceita o endereço de retorno que você **registrou** no app (clientes do tipo "Aplicativo da Web"). Duas saídas:
+1. **Recomendado:** crie o cliente como **"Aplicativo para computador"** (Desktop). Aceita qualquer porta local, então o botão funciona
+   mesmo quando o Jefrey sobe numa porta diferente da 8000.
+2. Se já tem um cliente "Aplicativo da Web": em **Credenciais > seu cliente > URIs de redirecionamento autorizados**, adicione
+   `http://localhost:8000/auth/google/callback` (e, se quiser, `http://127.0.0.1:8000/connections/google/callback`).
+   Se o endereço registrado estiver em `JEFREY_OAUTH__REDIRECT_URIS` e na mesma porta do Jefrey, o botão usa exatamente esse.
+   Se o Jefrey abrir em outra porta (8001, 8002…), o cliente "Web" não serve: use o tipo "Computador".
+
 ## O que o Jefrey guarda
 Tokens de acesso e de renovação, protegidos pelo Windows (DPAPI), no banco local, por pessoa. Nada vai a terceiros.
 O botão **Desconectar** apaga os tokens e avisa o Google para revogá-los.

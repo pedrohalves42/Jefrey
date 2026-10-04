@@ -184,14 +184,14 @@ class CalendarSkill(SkillBase):
                 token_file.parent.mkdir(parents=True, exist_ok=True)
                 try:
                     token_file.parent.chmod(0o700)
-                except Exception:
-                    pass
+                except Exception as _e:
+                    logger.debug("ignorado (%s): %s", 'calendar.py', type(_e).__name__)
                 with open(token_file, "w", encoding="utf-8") as f:
                     f.write(creds.to_json())
                 try:
                     token_file.chmod(0o600)
-                except Exception:
-                    pass
+                except Exception as _e:
+                    logger.debug("ignorado (%s): %s", 'calendar.py', type(_e).__name__)
             return creds
         except Exception as e:
             logger.warning(f"Calendar initialize falhou: {type(e).__name__}")

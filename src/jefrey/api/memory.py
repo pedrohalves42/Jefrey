@@ -169,16 +169,16 @@ async def import_document(request: Request, file: UploadFile = File(...)):
         for mid in ids:  # tambem nao deixa documento pela metade
             try:
                 ltm.delete(mid, user_id=user_id)
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("ignorado (%s): %s", 'memory.py', type(_e).__name__)
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         logger.error("memory/import erro user=%s: %s", user_id, e, exc_info=True)
         for mid in ids:  # nao deixa documento pela metade
             try:
                 ltm.delete(mid, user_id=user_id)
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("ignorado (%s): %s", 'memory.py', type(_e).__name__)
         raise HTTPException(status_code=500, detail="Erro ao importar o documento")
     return {"ok": True, "title": name, "chunks": len(ids), "chars": len(text)}
 

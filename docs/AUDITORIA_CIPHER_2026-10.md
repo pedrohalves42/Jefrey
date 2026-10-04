@@ -48,3 +48,31 @@ caracteres no chat; zip-slip tratado no restore; isolamento por usuário coberto
 - Teste contra o WhatsApp Web e o login do Google reais (exigem contas e o seu celular).
 - Código de interface além da leitura de padrões (sem teste de ponta a ponta automatizado com Playwright).
 - Vulnerabilidades em dependências **transitivas** do `.exe` e das bibliotecas nativas (só `requirements.txt` foi auditado).
+
+## 4. Atualização após as Sessões 3 a 11 (04/10/2026)
+
+### Pendências da seção 2 que mudaram
+| # | Situação | O que foi feito |
+|---|---|---|
+| P-01, P-02, P-05 | **Resolvidas antes** | Embeddings sem Ollama, Python 3.12 fixado, registros em arquivo, bandeja com "Sair", porta alternativa |
+| P-04 | **Resolvida** | Tudo que vem de fora entra em `<dados>…</dados>` (`core/framing.py`): memórias, fatos aprendidos, diário e guias estudados; `<` e `>` do conteúdo são neutralizados (não fecha nem imita a moldura). Mensagens de terceiros (WhatsApp) são tratadas por um modelo **sem ferramentas**. Teste de regressão `test_session11_security.py` |
+| P-06 | **Parcial** | Botão "Entrar com o Google" pronto (PKCE, `state` ligado à pessoa, tokens protegidos pelo Windows, revogação ao desconectar). **Falta**: criar o app no Google Cloud e a verificação (guia em `docs/GOOGLE.md`) |
+| P-08 | **Resolvida nos arquivos com logger** | 70 blocos silenciosos viraram `logger.debug`; teste impede que voltem. Ficam 3 arquivos sem logger (`llm_provider`, `launcher`, `token_refresh`), todos com `pass` intencional em melhor-esforço |
+| P-09 | **Resolvida** | Modelo de nuvem recebe **todas** as ferramentas; local continua por palavra-chave. Busca na web sem chave (DuckDuckGo, em outra thread) e leitor de páginas protegido |
+| P-10 | **Resolvida** | `/metrics` exige login no modo nativo; MCP escuta em `127.0.0.1` fora do Docker. `/api/status` segue público (só informa se as peças estão de pé) |
+| P-03, P-07, P-11 | **Pendentes** | Atualizar `langchain-core`/`openai`; separar código não usado (MCP, eventbus, plugins, visão); limite do modelo local |
+
+### Superfícies novas e como foram protegidas
+| Superfície | Risco | Proteção |
+|---|---|---|
+| Leitor de páginas e busca (estudos, ferramenta `extract`) | SSRF, página gigante, injeção por texto da página | só http/https; bloqueio por IP **resolvido** a cada redirecionamento (máx. 3); 1,5 MB e 10 s; só texto; o texto vai para o modelo dentro de moldura de dado e o modelo **não tem ferramentas** nesse ciclo. Limite conhecido: o DNS é conferido antes de conectar, não há "pinagem" do IP (rebinding teórico; o alvo é um PC pessoal) |
+| Estudo em segundo plano | Gasto sem controle | orçamento diário (padrão US$ 0,10), só nuvem, só com a pessoa ausente (≥ 5 min), fora do horário de silêncio, um assunto por rodada; assuntos de saúde/dinheiro nunca escolhidos sozinho |
+| Aprendizado automático | Guardar segredo | filtro de CPF/CNPJ/RG, cartão (Luhn), chaves/tokens, "senha/PIN/CVV…" antes de gravar; saúde e dinheiro com marca; tela para corrigir/esquecer; "esquecer tudo" apaga fatos, diário, estudos e resumo |
+| Atalho global e palavra de ativação | Gravar sem querer | atalho só registra a tecla; palavra de ativação é local (Whisper), exige o nome **no início** da fala (medido: 0 falsos disparos em 40 frases), só `{wake, rest}` sai do servidor, áudio não é guardado; vem **desligada** |
+| WhatsApp (extensão) | Resposta indevida, vazamento, bloqueio do número | pareamento por código (6 dígitos, 10 min, uso único, 10 tentativas/min) e token do aparelho **guardado só como hash** e revogável; só conversas liberadas, nunca grupos; dinheiro/dados/links/emergência/compromisso/mídia/dúvida exigem aprovação; texto do contato é dado; limites por conversa (6/10 min) e por hora (40); pausa geral; sem ferramentas; mensagens guardadas 30 dias; `/wa/device/*` só aceita `Origin: chrome-extension://` (página da web não consegue forjar) e o resto da API continua fechado para a extensão |
+| Planejador de tarefas | Tarefa presa derrubando o programa | cada tarefa isolada em `try/except`, intervalos fixos, desligado nos testes |
+
+### Ainda não verificado
+- Teste real do WhatsApp Web (seletores mudam; só com o celular da pessoa) e do login do Google (precisa do app no Google Cloud).
+- Qualidade das respostas com modelo de nuvem (precisa de uma chave para medir).
+- Instalação em PC limpo, assinatura do instalador e antivírus (Sessão 13).

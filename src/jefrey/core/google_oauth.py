@@ -17,7 +17,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 logger = logging.getLogger(__name__)
 
@@ -64,8 +64,30 @@ def scopes_for(services: list[str]) -> list[str]:
     return BASE_SCOPES + [SERVICES[s]["scope"] for s in dict.fromkeys(services)]
 
 
-def begin(user_id: str, services: list[str], redirect_uri: str) -> str:
-    """Endereco do Google para a pessoa autorizar. Guarda state/PKCE preso a `user_id`."""
+CALLBACK_PATHS = ("/connections/google/callback", "/auth/google/callback")
+
+
+def redirect_uri(origin: str) -> str:
+    """Endereco de retorno. Clientes "Web" do Google aceitam so enderecos registrados: se o dono ja registrou um em
+    JEFREY_OAUTH__REDIRECT_URIS (na mesma porta do programa), usa ele; senao o padrao (clientes "Computador" aceitam qualquer porta local)."""
+    port = urlsplit(origin).port
+    for raw in os.getenv("JEFREY_OAUTH__REDIRECT_URIS", "").split(","):
+        p = urlsplit(raw.strip())
+        if p.scheme == "http" and p.hostname in ("localhost", "127.0.0.1") and p.path in CALLBACK_PATHS and p.port == port:
+            return raw.strip()
+    return origin.rstrip("/") + CALLBACK_PATHS[0]
+
+
+def has_state(state: str) -> bool:
+    e = _pending.get(state or "")
+    return bool(e and e["exp"] >= time.time())
+
+
+def begin(user_id: str, services: list[str], redirect_uri: str, return_to: str = "") -> str:
+    """Endereco do Google para a pessoa autorizar. Guarda state/PKCE preso a `user_id`.
+
+    `return_to` e a origem da tela (ex.: http://127.0.0.1:8000): ao voltar do Google a pessoa e levada para la, mesmo que o
+    endereco de retorno registrado use outro nome (localhost) e, portanto, outro "armazenamento" do navegador."""
     creds = credentials()
     if creds is None:
         raise LookupError("google nao configurado")
@@ -73,7 +95,7 @@ def begin(user_id: str, services: list[str], redirect_uri: str) -> str:
     now = time.time()
     state, verifier = secrets.token_urlsafe(24), secrets.token_urlsafe(48)
     _pending[state] = {"verifier": verifier, "user": user_id, "services": list(dict.fromkeys(services)),
-                       "redirect": redirect_uri, "exp": now + STATE_TTL_S}
+                       "redirect": redirect_uri, "return_to": return_to.rstrip("/"), "exp": now + STATE_TTL_S}
     for k in [k for k, v in _pending.items() if v["exp"] < now]:
         _pending.pop(k, None)
     while len(_pending) > MAX_PENDING:
@@ -151,7 +173,7 @@ def delete_tokens(user_id: str) -> list[str]:
             tok = r.refresh_token or r.access_token
             try:
                 revoke.append(unprotect(tok))
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("ignorado (%s): %s", 'google_oauth.py', type(_e).__name__)
             s.delete(r)
     return list(dict.fromkeys(revoke))

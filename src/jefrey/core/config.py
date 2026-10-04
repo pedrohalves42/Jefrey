@@ -303,7 +303,8 @@ class AgentSettings(BaseSettings):
 class MCPServerSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="JEFREY_MCP__", extra="ignore")
 
-    host: str = "0.0.0.0"
+    # fora do Docker o MCP escuta so neste computador (127.0.0.1); dentro do container precisa de 0.0.0.0
+    host: str = "0.0.0.0" if __import__("os").path.exists("/.dockerenv") else "127.0.0.1"
     port: int = 8001
     transport: str = "streamable-http"
     path: str = "/mcp"

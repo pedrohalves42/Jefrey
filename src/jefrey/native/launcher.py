@@ -259,6 +259,56 @@ def start_tray(url: str, logs_dir: Path, on_quit) -> "object | None":
         return None
 
 
+def tray_title(snapshot: dict) -> str:
+    """Texto do icone da bandeja (aparece ao parar o mouse em cima)."""
+    if snapshot.get("studying"):
+        return "Jefrey: estudando" + (f" {snapshot['topic']}" if snapshot.get("topic") else "")
+    if snapshot.get("learning"):
+        return "Jefrey: aprendendo com a conversa"
+    return "Jefrey"
+
+
+def start_tray_updates(icon, interval_s: float = 5.0) -> threading.Event:
+    """Atualiza o texto do icone com o que o Jefrey esta fazendo. Devolve o evento que para a atualizacao."""
+    stop = threading.Event()
+
+    def loop() -> None:
+        from src.jefrey.core import activity
+
+        last = ""
+        while not stop.wait(interval_s):
+            try:
+                title = tray_title(activity.any_busy())
+                if title != last:
+                    icon.title = title[:120]
+                    last = title
+            except Exception:
+                pass
+
+    threading.Thread(target=loop, daemon=True, name="jefrey-tray-title").start()
+    return stop
+
+
+def start_global_hotkey(url: str, no_browser: bool):
+    """Atalho global (Ctrl+Alt+J): traz o Jefrey para a frente (ou abre) e manda ele comecar a ouvir."""
+    if os.getenv("JEFREY_NO_HOTKEY"):
+        return None
+    try:
+        from src.jefrey.core import wake
+        from src.jefrey.native import hotkey
+
+        def on_press() -> None:
+            wake.request()
+            if wake.ui_alive():
+                hotkey.focus_window()
+            elif not no_browser:
+                webbrowser.open(url)  # a tela nova pergunta pelo pedido ao abrir
+
+        return hotkey.start_hotkey(on_press)
+    except Exception:
+        return None
+
+
 def local_model_chosen() -> bool:
     """So baixa modelo local se a pessoa escolheu o modo local (nuvem e o padrao recomendado)."""
     try:
@@ -345,9 +395,15 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     control.set_quit_hook(quit_now)
     tray = None if no_tray else start_tray(url, logs_dir, quit_now)
+    tray_updates = start_tray_updates(tray) if tray is not None else None
+    stop_hotkey = start_global_hotkey(url, no_browser)
     try:
         server.run()
     finally:
+        if stop_hotkey is not None:
+            stop_hotkey()
+        if tray_updates is not None:
+            tray_updates.set()
         control.set_quit_hook(None)
         if tray is not None:
             try:

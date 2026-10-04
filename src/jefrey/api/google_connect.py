@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 from typing import Optional
+from urllib.parse import urlsplit
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
@@ -36,23 +37,31 @@ async def google_status(request: Request):
 @router.post("/start")
 async def google_start(body: StartBody, request: Request):
     uid = _user(request)
-    redirect = str(request.base_url).rstrip("/") + "/connections/google/callback"
+    origin = str(request.base_url).rstrip("/")
     try:
-        return {"auth_url": G.begin(uid, body.services, redirect)}
+        return {"auth_url": G.begin(uid, body.services, G.redirect_uri(origin), origin)}
     except LookupError:
         raise HTTPException(status_code=409, detail="Este programa ainda não está habilitado para conectar o Google. Veja docs/GOOGLE.md.")
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
 
-@router.get("/callback")
-async def google_callback(code: str = "", state: str = "", error: str = ""):
+def _back(entry: Optional[dict], result: str) -> RedirectResponse:
+    """De volta a tela do Jefrey (a mesma origem de onde a pessoa saiu), sem expor nada na URL alem de ok/erro."""
+    base = ""
+    if entry:
+        p = urlsplit(entry.get("return_to", ""))
+        if p.scheme == "http" and p.hostname in ("127.0.0.1", "localhost", "[::1]", "::1"):
+            base = entry["return_to"]
+    return RedirectResponse(f"{base}/conexoes?google={result}", status_code=303)
+
+
+async def finish(code: str, state: str, error: str) -> RedirectResponse:
+    """Conclui a conexao (usado pelos dois enderecos de retorno)."""
     entry = G.consume_state(state)
-    if error or not code or entry is None:
-        return RedirectResponse("/conexoes?google=erro", status_code=303)
     creds = G.credentials()
-    if creds is None:
-        return RedirectResponse("/conexoes?google=erro", status_code=303)
+    if error or not code or entry is None or creds is None:
+        return _back(entry, "erro")
     try:
         async with httpx.AsyncClient(timeout=20) as c:
             r = await c.post(G.TOKEN_URL, data={"code": code, "client_id": creds["client_id"], "client_secret": creds["client_secret"],
@@ -67,13 +76,18 @@ async def google_callback(code: str = "", state: str = "", error: str = ""):
                 u = await c.get(G.USERINFO_URL, headers={"Authorization": f"Bearer {tok['access_token']}"}, timeout=10)
                 if u.status_code == 200:
                     email = u.json().get("email")
-            except httpx.HTTPError:
-                pass
+            except httpx.HTTPError as _e:
+                logger.debug("google: e-mail nao obtido (%s)", type(_e).__name__)
         G.save_tokens(entry["user"], entry["services"], tok, email)
     except Exception as e:  # nunca registra codigo, token nem e-mail
         logger.warning("google callback falhou: %s", type(e).__name__)
-        return RedirectResponse("/conexoes?google=erro", status_code=303)
-    return RedirectResponse("/conexoes?google=ok", status_code=303)
+        return _back(entry, "erro")
+    return _back(entry, "ok")
+
+
+@router.get("/callback")
+async def google_callback(code: str = "", state: str = "", error: str = ""):
+    return await finish(code, state, error)
 
 
 @router.delete("")
@@ -83,6 +97,6 @@ async def google_disconnect(request: Request):
         for t in tokens:
             try:
                 await c.post(G.REVOKE_URL, data={"token": t})
-            except httpx.HTTPError:
-                pass
+            except httpx.HTTPError as _e:
+                logger.debug("google: revogacao nao concluida (%s)", type(_e).__name__)
     return {"ok": True}

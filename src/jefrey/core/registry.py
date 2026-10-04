@@ -208,8 +208,8 @@ def register_default_tools():
         _t = type(_name, (), {"name": _name, "risk": _risk, "required_role": _role})()
         try:
             TOOL_REGISTRY.register(_t, overwrite=True)
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("ignorado (%s): %s", 'registry.py', type(_e).__name__)
 
     TOOL_REGISTRY.valid_for_production()
     logger.info("Default tools registered: %d", len(TOOL_REGISTRY.list_tools()))

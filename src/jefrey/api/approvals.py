@@ -119,8 +119,8 @@ async def decide(request):
             _risk = getattr(_row, "risk_level", None) or (isinstance(_row, dict) and _row.get("risk_level"))
             if _risk in ("high", "critical"):
                 logger.warning("CIPHER-111: auto-approval %s risk=%s by user_id=%s (review RBAC)", approval_id, _risk, user_id)
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.debug("ignorado (%s): %s", 'approvals.py', type(_e).__name__)
     ok = ApprovalManager().decide(approval_id, decision, decided_by, user_id=user_id)
     if not ok:
         return JSONResponse(

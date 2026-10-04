@@ -27,8 +27,8 @@ class STTEngine(ABC):
         pass
 
     @abstractmethod
-    def transcribe(self, audio_bytes: bytes) -> str:
-        """Transcreve Ã¡udio para texto."""
+    def transcribe(self, audio_bytes: bytes, prompt: Optional[str] = None) -> str:
+        """Transcreve audio para texto. `prompt` e uma dica de vocabulario (so o Whisper usa)."""
         pass
 
 
@@ -65,7 +65,7 @@ class WhisperSTTEngine(STTEngine):
     def language(self) -> str:
         return self._language
 
-    def transcribe(self, audio_bytes: bytes) -> str:
+    def transcribe(self, audio_bytes: bytes, prompt: Optional[str] = None) -> str:
         if not audio_bytes:
             raise ValueError("Audio data is empty")
 
@@ -77,10 +77,11 @@ class WhisperSTTEngine(STTEngine):
 
         try:
             if hasattr(self._model, "transcribe"):  # faster-whisper
-                segments, info = self._model.transcribe(tmp_path, language=self._language, beam_size=3, vad_filter=True)
+                segments, info = self._model.transcribe(tmp_path, language=self._language, beam_size=3, vad_filter=True,
+                                                        initial_prompt=prompt)
                 text = " ".join(seg.text for seg in segments).strip()
             else:  # openai-whisper
-                result = self._model.transcribe(tmp_path, language=self._language)
+                result = self._model.transcribe(tmp_path, language=self._language, initial_prompt=prompt)
                 text = result.get("text", "").strip()
 
             if not text:
@@ -89,8 +90,8 @@ class WhisperSTTEngine(STTEngine):
         finally:
             try:
                 os.unlink(tmp_path)
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("ignorado (%s): %s", 'stt_engine.py', type(_e).__name__)
 
 
 class GoogleSTTEngine(STTEngine):
@@ -199,8 +200,8 @@ class AzureSTTEngine(STTEngine):
         finally:
             try:
                 os.unlink(tmp_path)
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("ignorado (%s): %s", 'stt_engine.py', type(_e).__name__)
 
 
 # Singleton factory

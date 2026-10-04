@@ -30,7 +30,7 @@ _PUBLIC_PATHS = {"/health", "/docs", "/openapi.json", "/redoc", "/metrics", "/",
 # UI-1 Shell public — Axiom 5 least privilege (Livro 3 Security Eng cap8, CIPHER-019)
 # /chat|/memory|/approvals continuam protegidos; /assets/* sao build Vite hashados sem user data
 # /auth/dev-token e publico mas fail-closed em prod (CIPHER-021, auth.py is_prod 403)
-_PUBLIC_PREFIXES = ("/assets/", "/images/")  # /images: icones do manifesto (o navegador busca sem login)
+_PUBLIC_PREFIXES = ("/assets/", "/images/", "/wa/device/")  # /images: icones do manifesto; /wa/device/: a extensao do Chrome (token proprio do aparelho)
 
 # Paginas do app (React Router). Sao tambem prefixos de API (/memory, /approvals...), entao so
 # servimos o index.html quando e navegacao de navegador (GET + Accept: text/html).
@@ -72,8 +72,13 @@ def _decode_dev_jwt(token: str, secret: str) -> str | None:
 # CIPHER-307: rate limit HTTP por identidade (antes 70 req seguidas = 70x 200).
 _RL_LIMIT_PER_MIN = 60
 _RL_BURST = 20
-_RL_EXEMPT_PREFIXES = ("/assets/", "/health", "/metrics", "/api/status", "/stt/health", "/tts/health",
+_RL_EXEMPT_PREFIXES = ("/assets/", "/health", "/metrics", "/api/status", "/stt/health", "/tts/health", "/wa/device/",
                        "/stt/status", "/tts/status", "/favicon.ico", "/manifest.json", "/sw.js", "/vite.svg")
+def _native_mode() -> bool:
+    return (os.getenv("JEFREY_MODE", "") or "").strip().lower() == "native"
+
+
+_USER_RL_EXEMPT =("/system/wake", "/system/activity", "/wa/pending")  # so leitura, baratas, perguntadas de poucos em poucos segundos
 _rl_buckets: dict[str, tuple[float, float]] = {}
 
 
@@ -151,7 +156,8 @@ class FastAPIAuthMiddleware(BaseHTTPMiddleware):
                 and "text/html" in request.headers.get("accept", "") and _INDEX_HTML.exists()):
             return FileResponse(_INDEX_HTML)
         # UI-1 public whitelist — FAIL-CLOSED exceto UI estatica (Axiom 5, CIPHER-019)
-        if path in _PUBLIC_PATHS or path.startswith(_PUBLIC_PREFIXES):
+        # no modo nativo as metricas (contagens de uso, nomes de modelos e ferramentas) pedem login como o resto
+        if (path in _PUBLIC_PATHS or path.startswith(_PUBLIC_PREFIXES)) and not (path == "/metrics" and _native_mode()):
             request.state.user_id = "system"
             if not path.startswith(_RL_EXEMPT_PREFIXES) and path not in ("/", "/docs", "/redoc", "/openapi.json"):
                 ip = request.client.host if request.client else "unknown"
@@ -194,7 +200,8 @@ class FastAPIAuthMiddleware(BaseHTTPMiddleware):
                 identity = _decode_dev_jwt(token, secret)
                 client = "dev-token" if identity else None
             if identity:
-                ok, retry = _rl_allow(f"user:{identity}")
+                # consultas leves de segundo plano (a tela pergunta sempre) nao gastam o limite da pessoa
+                ok, retry = (True, 0) if path in _USER_RL_EXEMPT else _rl_allow(f"user:{identity}")
                 if not ok:
                     return JSONResponse({"ok": False, "error": "muitas requisicoes"}, status_code=429, headers={"Retry-After": str(retry)})
                 request.state.user_id = identity
@@ -211,8 +218,8 @@ class FastAPIAuthMiddleware(BaseHTTPMiddleware):
                     if _is_revoked_hash(_cache_key(token)):
                         _introspection_cache.pop(_cache_key(token), None)  # type: ignore
                         cached = None
-                except Exception:
-                    pass
+                except Exception as _e:
+                    logger.debug("ignorado (%s): %s", 'auth_middleware.py', type(_e).__name__)
                 if cached is not None:
                     result = cached
                 else:

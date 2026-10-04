@@ -5,6 +5,10 @@ import ListenButton from "@/components/ListenButton"
 import { disconnectGoogle, getGoogle, googleReturnMessage, SERVICE_LABEL, startGoogle, type GoogleService, type GoogleStatus } from "@/lib/connections"
 import { cleanKey, guideFor, KEY_COST_NOTE, KEY_GUIDES, keyProblem, type KeyProviderId } from "@/lib/keyGuide"
 import { getConfig, getPresets, saveConfig, startOpenRouter, testConfig, testMessage, type LlmConfig, type Preset } from "@/lib/llm"
+import {
+  MODE_LABEL, minutesLeft, sortChats, waForgetAll, waOpenFolder, waPairing, waRevoke, waSetMode, waSetPaused, waStatus, WA_PRIVACY_NOTE, WA_RISK_NOTE,
+  type WaChat, type WaMode, type WaStatus,
+} from "@/lib/wa"
 
 const card = "jf-panel p-5"
 const big = "jf-btn jf-focus px-5 py-3 text-base"
@@ -275,16 +279,163 @@ function Google() {
   )
 }
 
+const STATUS_LABEL: Record<string, string> = { sent: "enviada", rejected: "você não quis enviar", expired: "venceu", failed: "não consegui enviar", approved: "esperando para enviar" }
+
 function WhatsApp() {
+  const [st, setSt] = useState<WaStatus | null>(null)
+  const [code, setCode] = useState<{ code: string; at: number; ttl: number } | null>(null)
+  const [now, setNow] = useState(() => Date.now())
+  const [msg, setMsg] = useState<Msg>(null)
+  const [confirmWipe, setConfirmWipe] = useState(false)
+
+  async function load() {
+    const r = await waStatus()
+    if (r.data) setSt(r.data)
+  }
+  useEffect(() => {
+    void load()
+    const t = window.setInterval(() => {
+      void load()
+      setNow(Date.now())
+    }, 5000)
+    return () => window.clearInterval(t)
+  }, [])
+  useEffect(() => {
+    if (!code) return
+    const t = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(t)
+  }, [code])
+
+  const paired = (st?.devices.length ?? 0) > 0
+  const left = code ? minutesLeft(code.ttl, (now - code.at) / 1000) : 0
+
+  async function makeCode() {
+    const r = await waPairing()
+    if (r.data) setCode({ code: r.data.code, at: Date.now(), ttl: r.data.expires_in })
+    else setMsg({ ok: false, text: "Não consegui gerar o código agora. Tente de novo." })
+  }
+  async function openFolder() {
+    const r = await waOpenFolder()
+    setMsg(r.ok ? { ok: true, text: "Abri a pasta da extensão. Siga os passos abaixo." } : { ok: false, text: "Não consegui abrir a pasta. Peça ajuda a quem instalou o Jefrey." })
+  }
+  async function mode(c: WaChat, m: WaMode) {
+    const r = await waSetMode(c.id, m)
+    if (!r.ok) setMsg({ ok: false, text: "Não consegui mudar isso agora." })
+    await load()
+  }
+  async function pause(p: boolean) {
+    await waSetPaused(p)
+    setMsg({ ok: true, text: p ? "Pausado. O Jefrey não vai ler nem responder nada no WhatsApp." : "Continuando. O Jefrey volta a atender as conversas liberadas." })
+    await load()
+  }
+  async function wipe() {
+    await waForgetAll()
+    setConfirmWipe(false)
+    setCode(null)
+    setMsg({ ok: true, text: "Pronto. Apaguei as conversas, as mensagens guardadas e desconectei o WhatsApp." })
+    await load()
+  }
+
+  const btn = "jf-focus rounded-lg border px-4 py-2 text-base"
   return (
     <section className={card} aria-labelledby="c-wa">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 id="c-wa" className="text-xl font-medium text-white">WhatsApp</h2>
-        <Badge on={false} yes="" no="Em breve" />
+        <Badge on={paired && !st?.paused} yes="Conectado" no={paired ? "Em pausa" : "Ainda não conectado"} />
       </div>
       <p className="mt-2 text-base text-white/70">
-        Em breve o Jefrey vai poder ler e responder as suas conversas, só com as pessoas que você liberar e perguntando antes quando for algo delicado.
+        O Jefrey lê e responde, no WhatsApp do computador (web.whatsapp.com), só as conversas que você liberar. Quando for dinheiro, dados pessoais, compromisso ou
+        algo delicado, ele pergunta a você antes.
       </p>
+      <p className="mt-2 text-sm text-amber-100/90">{WA_RISK_NOTE}</p>
+      <p className="mt-2 text-sm text-white/60">{WA_PRIVACY_NOTE}</p>
+
+      {!paired && (
+        <div className="mt-4 rounded-xl border border-white/10 p-4">
+          <ol className="list-decimal space-y-2 pl-6 text-base text-white/85">
+            <li>Aperte o botão para abrir a pasta da extensão do Chrome.</li>
+            <li>No Chrome, digite <b>chrome://extensions</b> no endereço, ligue o <b>Modo do desenvolvedor</b> e clique em <b>Carregar sem compactação</b>. Escolha a pasta que abriu.</li>
+            <li>Aperte o botão abaixo para gerar um código, clique no ícone do Jefrey no Chrome e digite o código.</li>
+          </ol>
+          <div className="mt-3 flex flex-wrap gap-3">
+            <button type="button" onClick={() => void openFolder()} className={`${btn} border-white/25 text-white/85 hover:bg-white/5`}>Abrir a pasta da extensão</button>
+            <button type="button" onClick={() => void makeCode()} className={big}>Gerar código</button>
+          </div>
+          {code && (
+            <p className="mt-4 text-center" aria-live="polite">
+              <span className="block text-sm text-white/60">Digite este código na extensão ({left > 0 ? `vale por ${left} min` : "venceu, gere outro"}):</span>
+              <span className="mt-1 block text-4xl font-semibold tracking-[0.4em] text-white">{code.code}</span>
+            </p>
+          )}
+        </div>
+      )}
+
+      {paired && st && (
+        <>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button type="button" onClick={() => void pause(!st.paused)} className={st.paused ? big : `${btn} border-amber-300/50 text-amber-100 hover:bg-amber-400/10`}>
+              {st.paused ? "Continuar" : "Pausar tudo"}
+            </button>
+          </div>
+
+          <h3 className="mt-5 text-lg font-medium text-white">Conversas</h3>
+          {st.chats.length === 0 && <p className="mt-1 text-base text-white/70">Ainda não vi nenhuma conversa. Abra o WhatsApp Web no Chrome e clique em uma conversa.</p>}
+          <ul className="mt-2 space-y-3">
+            {sortChats(st.chats).map(c => (
+              <li key={c.id} className="rounded-lg border border-white/10 p-3">
+                <p className="text-lg text-white">{c.display} <span className="text-sm text-white/55">· {MODE_LABEL[c.mode]}</span></p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {(["ask", "auto", "off"] as WaMode[]).map(m => (
+                    <button
+                      key={m}
+                      type="button"
+                      aria-pressed={c.mode === m}
+                      onClick={() => void mode(c, m)}
+                      className={`${btn} ${c.mode === m ? "border-cyan-300 bg-cyan-400/10 text-white" : "border-white/25 text-white/85 hover:bg-white/5"}`}
+                    >
+                      {m === "ask" ? "Perguntar antes" : m === "auto" ? "Responder sozinho" : "Ignorar"}
+                    </button>
+                  ))}
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          {st.recent.length > 0 && (
+            <>
+              <h3 className="mt-5 text-lg font-medium text-white">Últimas respostas</h3>
+              <ul className="mt-2 space-y-1 text-base text-white/80">
+                {st.recent.slice(0, 5).map(d => (
+                  <li key={d.id}>{d.chat}: <span className="text-white/60">{d.reply ? `"${d.reply}"` : "(sem resposta)"} · {STATUS_LABEL[d.status] ?? d.status}</span></li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          <div className="mt-5 flex flex-wrap gap-3">
+            {st.devices.map(d => (
+              <button key={d.id} type="button" onClick={() => void waRevoke(d.id).then(load)} className={`${btn} border-white/25 text-white/85 hover:bg-white/5`}>
+                Desconectar {d.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      <div className="mt-4">
+        {confirmWipe ? (
+          <div>
+            <p className="text-base text-white/85">Apagar tudo do WhatsApp (conversas liberadas, mensagens guardadas e a conexão)? Não dá para desfazer.</p>
+            <div className="mt-2 flex gap-2">
+              <button type="button" onClick={() => void wipe()} className={`${btn} border-red-300/50 text-red-100 hover:bg-red-400/10`}>Sim, apagar</button>
+              <button type="button" onClick={() => setConfirmWipe(false)} className={`${btn} border-white/25 text-white/85`}>Não</button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" onClick={() => setConfirmWipe(true)} className="jf-focus text-sm text-white/55 underline hover:text-white/80">Apagar tudo do WhatsApp</button>
+        )}
+      </div>
+      <Note msg={msg} />
     </section>
   )
 }

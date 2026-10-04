@@ -118,8 +118,8 @@ class AuditLogger:
             path = get_settings().api.audit_fallback_path
             try:
                 pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("ignorado (%s): %s", 'audit.py', type(_e).__name__)
             os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
             record = {
                 "ts": datetime.datetime.now(datetime.timezone.utc).isoformat(),

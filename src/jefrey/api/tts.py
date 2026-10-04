@@ -84,8 +84,8 @@ async def tts_synthesize(request: Request, req: TTSRequest):
         from src.jefrey.core.config import get_settings
         cfg = get_settings()
         provider = getattr(cfg.voice.tts, "provider", "piper")
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.debug("ignorado (%s): %s", 'tts.py', type(_e).__name__)
 
     try:
         from src.jefrey.core.tts_engine import get_tts_engine
@@ -96,8 +96,8 @@ async def tts_synthesize(request: Request, req: TTSRequest):
         try:
             TTS_DURATION.labels(provider=provider, voice=voice).observe(elapsed)
             TTS_REQUESTS.labels(status="success").inc()
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("ignorado (%s): %s", 'tts.py', type(_e).__name__)
         # Determine media type
         media = "audio/mpeg" if req.format == "mp3" else "audio/wav"
         # If pyttsx3 wav fallback but request mp3, still return wav with mp3 header? keep wav
@@ -108,22 +108,22 @@ async def tts_synthesize(request: Request, req: TTSRequest):
         try:
             from src.jefrey.core.metrics import TTS_REQUESTS
             TTS_REQUESTS.labels(status="bad_request").inc()
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("ignorado (%s): %s", 'tts.py', type(_e).__name__)
         raise HTTPException(status_code=400, detail=str(ve))
     except RuntimeError as re:
         try:
             from src.jefrey.core.metrics import TTS_REQUESTS
             TTS_REQUESTS.labels(status="error").inc()
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("ignorado (%s): %s", 'tts.py', type(_e).__name__)
         logger.error("TTS runtime: %s", re)
         raise HTTPException(status_code=500, detail=str(re))
     except Exception as e:
         try:
             from src.jefrey.core.metrics import TTS_REQUESTS
             TTS_REQUESTS.labels(status="error").inc()
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("ignorado (%s): %s", 'tts.py', type(_e).__name__)
         logger.error("TTS error: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="erro interno TTS")

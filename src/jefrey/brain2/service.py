@@ -68,8 +68,8 @@ class Brain2Service:
             # broadcast so funciona se Brain2 rodar no mesmo processo da API (nao e o caso em container separado)
             # Mantido para compatibilidade quando Brain2 for sidecar
             await mgr.broadcast({"type": "brain2_insight", "user_id": user_id, **payload})
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("ignorado (%s): %s", 'service.py', type(_e).__name__)
 
     async def handle_one(self, r, msg_id: str, fields: Dict[str, Any]) -> None:
         user_id = fields.get("user_id", "guest")
@@ -150,8 +150,8 @@ class Brain2Service:
                             # ack mesmo em erro para nao travar fila (DLQ futuro)
                             try:
                                 await r.xack(STREAM_KEY, GROUP, msg_id)
-                            except Exception:
-                                pass
+                            except Exception as _e:
+                                logger.debug("ignorado (%s): %s", 'service.py', type(_e).__name__)
             except asyncio.CancelledError:
                 logger.info("brain2 cancelled")
                 break
@@ -165,8 +165,8 @@ class Brain2Service:
                 except Exception:
                     try:
                         await r.close()  # type: ignore
-                    except Exception:
-                        pass
+                    except Exception as _e:
+                        logger.debug("ignorado (%s): %s", 'service.py', type(_e).__name__)
 
 
 async def main():

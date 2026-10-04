@@ -152,8 +152,8 @@ def create_app() -> FastAPI:
         try:
             from src.jefrey.core import scheduler
             scheduler.stop()
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("ignorado (%s): %s", 'main.py', type(_e).__name__)
 
     @app.on_event("startup")
     async def _startup_register_tools():
@@ -174,8 +174,8 @@ def create_app() -> FastAPI:
         try:
             from src.jefrey.core.checkpointer import close_postgres_checkpointer
             await close_postgres_checkpointer()
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("ignorado (%s): %s", 'main.py', type(_e).__name__)
 
 
     # CIPHER-031: CORS origins must be explicitly configured via env var
@@ -217,8 +217,8 @@ def create_app() -> FastAPI:
     SERVICE_HEALTH.labels(component="api").set(1)
     try:
         UPTIME.set_function(lambda: _time.time() - _START_TIME)
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.debug("ignorado (%s): %s", 'main.py', type(_e).__name__)
     app.include_router(metrics_router)
     app.include_router(signing_router)
 
@@ -240,8 +240,8 @@ def create_app() -> FastAPI:
             async with _f3_httpx.AsyncClient(timeout=2) as c:
                 r = await c.get(base + '/api/tags')
                 ollama_ok = r.status_code == 200
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("ignorado (%s): %s", 'main.py', type(_e).__name__)
 
         native = (os.getenv("JEFREY_MODE", "") or "").lower() == "native"  # sem Docker: SQLite + memoria local
 
@@ -254,8 +254,8 @@ def create_app() -> FastAPI:
             r = _redis.Redis.from_url(cfg.redis.dsn or 'redis://localhost:6379')
             r.ping()
             redis_ok = True
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("ignorado (%s): %s", 'main.py', type(_e).__name__)
 
         # Check Postgres (simple connectivity - Axiom #1 fail-closed)
         postgres_ok = False
@@ -303,8 +303,8 @@ def create_app() -> FastAPI:
         # Update metrics
         try:
             SERVICE_HEALTH.labels(component="api").set(1)
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("ignorado (%s): %s", 'main.py', type(_e).__name__)
 
         return {
             "api": {"status": "ok" if ollama_ok else "degraded"},
@@ -351,8 +351,8 @@ def create_app() -> FastAPI:
         try:
             from src.jefrey.core.metrics import SERVICE_HEALTH
             SERVICE_HEALTH.labels(component="api").set(1 if overall == "healthy" else 0)
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("ignorado (%s): %s", 'main.py', type(_e).__name__)
 
         return {
             "status": overall,
@@ -389,6 +389,10 @@ def create_app() -> FastAPI:
     from src.jefrey.api.briefing_routes import activity_router, router as briefing_router
     app.include_router(briefing_router)
     app.include_router(activity_router)
+    from src.jefrey.api.wake_routes import router as wake_router
+    app.include_router(wake_router)
+    from src.jefrey.api.wa_web_routes import router as wa_web_router
+    app.include_router(wa_web_router)
 
     # Monta a sub-aplicacao de aprovacoes Starlette (mantem CIPHER-019, 020, 024 intactos)
     # FIX: mount em /approvals (nao /) para evitar conflito com outros routers.

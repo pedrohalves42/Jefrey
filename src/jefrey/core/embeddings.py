@@ -263,7 +263,7 @@ def default_candidates() -> list[tuple[Choice, Optional[str]]]:
         cc = cloud_choice(cfg.base_url, cfg.api_key or llm_key) if cfg.provider == "openai" else None
         if cc:
             out.append((cc, cfg.api_key or llm_key))
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.debug("ignorado (%s): %s", 'embeddings.py', type(_e).__name__)
     out.append((Choice("chroma", CHROMA_MODEL), None))
     return out

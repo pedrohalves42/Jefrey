@@ -176,14 +176,14 @@ def test_api_fluxo_completo_com_google_simulado(api, monkeypatch):
     monkeypatch.setattr(gc.httpx, "AsyncClient", Fake)
     # o callback e uma navegacao do navegador: sem cabecalho de login
     r = c.get("/connections/google/callback", params={"code": "codigo", "state": state})
-    assert r.status_code == 303 and r.headers["location"] == "/conexoes?google=ok"
+    assert r.status_code == 303 and r.headers["location"] == "/conexoes?google=ok"  # "testserver" nao e endereco local: volta relativo
     assert visto["data"]["code_verifier"] and visto["data"]["client_secret"] == "segredo-de-teste"
     st = c.get("/connections/google", headers=h).json()
     assert st["connected"] and st["email"] == "pessoa@exemplo.com" and sorted(st["services"]) == ["calendar", "email"]
     assert "AT-api" not in json.dumps(st)
     # o mesmo state nao serve duas vezes
     r2 = c.get("/connections/google/callback", params={"code": "codigo", "state": state})
-    assert r2.headers["location"] == "/conexoes?google=erro"
+    assert r2.headers["location"] == "/conexoes?google=erro"  # state ja usado: sem origem conhecida, volta relativo
     assert c.delete("/connections/google", headers=h).json() == {"ok": True}
     assert c.get("/connections/google", headers=h).json()["connected"] is False
 
@@ -196,6 +196,68 @@ def test_callback_recusa_state_falso_ou_erro_do_google():
     for params in ({"code": "x", "state": "falso"}, {"error": "access_denied", "state": "falso"}, {}):
         r = c.get("/connections/google/callback", params=params)
         assert r.status_code == 303 and r.headers["location"] == "/conexoes?google=erro"
+
+
+def test_endereco_de_retorno_usa_o_registrado_na_mesma_porta(monkeypatch):
+    monkeypatch.setenv("JEFREY_OAUTH__REDIRECT_URIS", "http://localhost:8000/auth/google/callback")
+    assert G.redirect_uri("http://127.0.0.1:8000") == "http://localhost:8000/auth/google/callback"
+    assert G.redirect_uri("http://127.0.0.1:8001") == "http://127.0.0.1:8001/connections/google/callback"  # outra porta: padrao
+    monkeypatch.setenv("JEFREY_OAUTH__REDIRECT_URIS", "https://evil.example/auth/google/callback,http://localhost:8000/outra/rota")
+    assert G.redirect_uri("http://127.0.0.1:8000") == "http://127.0.0.1:8000/connections/google/callback"  # so enderecos locais e conhecidos
+    monkeypatch.delenv("JEFREY_OAUTH__REDIRECT_URIS")
+    assert G.redirect_uri("http://127.0.0.1:8000") == "http://127.0.0.1:8000/connections/google/callback"
+
+
+def test_retorno_pelo_endereco_antigo_conclui_o_fluxo_novo_e_volta_a_tela_de_origem(api, monkeypatch):
+    """O app do Google so tem registrado /auth/google/callback em localhost: o botao novo funciona sem mexer no Google Cloud,
+    e a pessoa volta para http://127.0.0.1 (onde esta o login dela), nao para localhost."""
+    import src.jefrey.api.google_connect as gc
+    _config(monkeypatch)
+    c, h = api
+    url = G.begin("apigoogle", ["calendar"], "http://localhost:8000/auth/google/callback", "http://127.0.0.1:8000")
+    state = parse_qs(urlparse(url).query)["state"][0]
+
+    class Resp:
+        def __init__(self, d):
+            self.d, self.status_code = d, 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return self.d
+
+    class Fake:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, url, data=None, **k):
+            assert data["redirect_uri"] == "http://localhost:8000/auth/google/callback"  # o MESMO endereco usado na ida
+            return Resp({"access_token": "AT", "refresh_token": "RT", "expires_in": 3600, "scope": "openid"})
+
+        async def get(self, url, **k):
+            return Resp({"email": "pessoa@exemplo.com"})
+
+    monkeypatch.setattr(gc.httpx, "AsyncClient", Fake)
+    r = c.get("/auth/google/callback", params={"code": "x", "state": state})
+    assert r.status_code == 303 and r.headers["location"] == "http://127.0.0.1:8000/conexoes?google=ok"
+    assert c.get("/connections/google", headers=h).json()["connected"] is True
+    again = c.get("/auth/google/callback", params={"code": "x", "state": state})  # state de uso unico: cai no fluxo antigo, que o recusa
+    assert again.status_code != 303
+
+
+def test_origem_de_retorno_so_aceita_enderecos_locais():
+    import src.jefrey.api.google_connect as gc
+    assert gc._back({"return_to": "http://127.0.0.1:8000"}, "ok").headers["location"] == "http://127.0.0.1:8000/conexoes?google=ok"
+    assert gc._back({"return_to": "https://evil.example"}, "ok").headers["location"] == "/conexoes?google=ok"
+    assert gc._back({"return_to": "http://evil.example"}, "erro").headers["location"] == "/conexoes?google=erro"
+    assert gc._back(None, "erro").headers["location"] == "/conexoes?google=erro"
 
 
 def test_skills_leem_token_protegido(monkeypatch):

@@ -7,6 +7,7 @@ import { greeting } from "@/lib/greeting"
 import { getProfile } from "@/lib/llm"
 import { useListener } from "@/hooks/useListener"
 import { useVoiceReady } from "@/hooks/useVoiceReady"
+import { useWakeSignal } from "@/hooks/useWakeSignal"
 import { voiceView } from "@/lib/voiceMode"
 import { useEasy } from "@/lib/easy"
 import { useActivity } from "@/hooks/useActivity"
@@ -99,6 +100,19 @@ export default function Conversa() {
     onLevel: setMicLevel,
   })
   const listeningNow = listener.state === "listening" || listener.state === "hearing"
+  // ---- chamar pelo nome ("Jefrey, ...") e pelo atalho do Windows (Ctrl+Alt+J) ----
+  const [wakeOn, setWakeOn] = useState(() => readFlag("jefrey_wake", false))
+  const startVoiceRef = useRef<(first?: string) => Promise<void>>(async () => {})
+  const wakeListener = useListener({
+    endpoint: "/stt/wake",
+    onTranscript: () => {},
+    onResult: j => {
+      if (j.wake === true) void startVoiceRef.current(typeof j.rest === "string" ? j.rest.trim() : "")
+    },
+  })
+  useWakeSignal(() => {
+    if (!micOn && listener.state === "idle") void startVoiceRef.current()
+  })
   const endRef = useRef<HTMLDivElement>(null)
   const taRef = useRef<HTMLTextAreaElement>(null)
 
@@ -240,6 +254,43 @@ export default function Conversa() {
     setMicOn(true)
     void listener.start()
   }
+
+  /** Liga a conversa por voz (usado pelo atalho e pela palavra "Jefrey"); `first` e o que a pessoa ja disse depois do nome. */
+  async function startVoice(first?: string) {
+    if (micOn) return
+    wakeListener.stop()
+    speaker.cancel()
+    if (!(await voiceReady.ensure())) return
+    setVoiceReplyState(true)
+    writeFlag("jefrey_voice_reply", true)
+    setContinuousState(true)
+    writeFlag("jefrey_voice_continuous", true)
+    setMicOn(true)
+    if (first) void send(first)
+    else void listener.start()
+  }
+  startVoiceRef.current = startVoice
+
+  async function toggleWake() {
+    const next = !wakeOn
+    if (next && !(await voiceReady.ensure())) return
+    setWakeOn(next)
+    writeFlag("jefrey_wake", next)
+    if (!next) wakeListener.stop()
+  }
+
+  // escuta so pelo nome enquanto nada mais esta acontecendo
+  useEffect(() => {
+    if (wakeOn && !micOn && !streaming && !speaker.speaking && listener.state === "idle" && wakeListener.state === "idle") void wakeListener.start()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wakeOn, micOn, streaming, speaker.speaking, listener.state, wakeListener.state])
+  useEffect(() => {
+    if (micOn || streaming) wakeListener.stop()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [micOn, streaming])
+  useEffect(() => {
+    if (wakeListener.state === "error") setWakeOn(false)
+  }, [wakeListener.state])
 
   /** Botao grande: liga (ou desliga) a conversa por voz inteira: ouvir, responder falando e ouvir de novo. */
   async function toggleVoiceMode() {
@@ -549,7 +600,7 @@ export default function Conversa() {
               </button>
             )}
           </div>
-          <div className="mt-1 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[12px] text-white/50">
+          <div className="mt-1 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm text-white/65">
             {speaker.supported && (
               <label className="flex cursor-pointer items-center gap-1.5">
                 <input
@@ -562,6 +613,12 @@ export default function Conversa() {
                   }}
                 />
                 Falar as respostas
+              </label>
+            )}
+            {listener.supported && (
+              <label className="flex cursor-pointer items-center gap-1.5" title="O microfone fica ligado e eu só entendo o que você fala quando começa com 'Jefrey'. Nada é guardado nem enviado para a internet.">
+                <input type="checkbox" checked={wakeOn} onChange={() => void toggleWake()} />
+                Chamar pelo nome ("Jefrey, …")
               </label>
             )}
             {listener.supported && (

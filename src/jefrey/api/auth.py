@@ -143,6 +143,14 @@ async def google_callback(request: Request):
     Valida o token no Introspection endpoint (CIPHER-031).
     Retorna user_id, email e tokens para o sistema.
     """
+    # o botao "Conectar Google" da tela usa este mesmo endereco de retorno quando o app do Google so tem ele registrado
+    from src.jefrey.core import google_oauth as _G
+
+    _st = request.query_params.get("state") or ""
+    if _G.has_state(_st):
+        from src.jefrey.api.google_connect import finish
+
+        return await finish(request.query_params.get("code") or "", _st, request.query_params.get("error") or "")
     creds = _get_oauth_credentials()
     if not creds["client_id"] or not creds["client_secret"]:
         raise HTTPException(

@@ -98,8 +98,8 @@ class PiperTTSEngine(TTSEngine):
         finally:
             try:
                 os.unlink(output_path)
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("ignorado (%s): %s", 'tts_engine.py', type(_e).__name__)
 
 
 class ElevenLabsTTSEngine(TTSEngine):
@@ -191,8 +191,8 @@ class Pyttsx3TTSEngine(TTSEngine):
         finally:
             try:
                 os.unlink(output_path)
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("ignorado (%s): %s", 'tts_engine.py', type(_e).__name__)
 
 
 # Singleton factory

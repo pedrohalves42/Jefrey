@@ -114,8 +114,8 @@ class MemoryManager:
             # P6: Instrumentation
             try:
                 MEMORY_OPS.labels(operation="add", layer="longterm").inc()
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("ignorado (%s): %s", 'pg_memory.py', type(_e).__name__)
 
             # M5: Schedule TTL cleanup after add
             # (não limpa imediatamente para evitar performance hit em writes)
@@ -179,8 +179,8 @@ class MemoryManager:
             try:
                 MEMORY_OPS.labels(operation="search", layer="longterm").inc()
                 MEMORY_LATENCY.labels(operation="search").observe(0.001)
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("ignorado (%s): %s", 'pg_memory.py', type(_e).__name__)
             return list(records)
         except Exception as e:
             session.rollback()
@@ -330,8 +330,8 @@ class MemoryManager:
             try:
                 MEMORY_OPS.labels(operation="search", layer="longterm").inc()
                 MEMORY_LATENCY.labels(operation="search").observe(0.001)
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("ignorado (%s): %s", 'pg_memory.py', type(_e).__name__)
             return list(records)
         except Exception as e:
             session.rollback()

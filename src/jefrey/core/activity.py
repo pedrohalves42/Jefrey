@@ -46,6 +46,13 @@ def busy(user_id: str, kind: str, label: str = "") -> Iterator[None]:
 _labels: dict[tuple[str, str], str] = {}
 
 
+def any_busy() -> dict:
+    """O que o Jefrey faz sozinho, somando todas as pessoas (para o icone da bandeja)."""
+    studying = [lab for (u, k), lab in _labels.items() if k == "estudando"]
+    return {"studying": any(d.get("estudando", 0) > 0 for d in _busy.values()),
+            "learning": any(d.get("aprendendo", 0) > 0 for d in _busy.values()), "topic": studying[0] if studying else None}
+
+
 def current(user_id: str) -> dict:
     d = _busy.get(user_id, {})
     return {"studying": d.get("estudando", 0) > 0, "learning": d.get("aprendendo", 0) > 0,

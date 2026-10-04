@@ -52,8 +52,15 @@ GROUPS: list[tuple[tuple[str, ...], list[str]]] = [
 ]
 
 
-def select_tools(message: str, available: list[str]) -> list[str]:
-    """Ferramentas a oferecer ao modelo: so os grupos cujas palavras aparecem na mensagem."""
+def select_tools(message: str, available: list[str], offer_all: bool = False) -> list[str]:
+    """Ferramentas a oferecer ao modelo.
+
+    Modelo de nuvem (offer_all): TODAS as disponiveis; ele escolhe bem (a mensagem "o que esta acontecendo no Brasil?" nao tem
+    palavra-chave nenhuma e mesmo assim precisa da busca). Modelo local pequeno: so os grupos cujas palavras aparecem na mensagem.
+    As ferramentas de risco continuam exigindo aprovacao, em qualquer caso.
+    """
+    if offer_all:
+        return [t for t in available if t in CATALOG]
     msg = _norm(message)
     chosen: list[str] = []
     for words, tools in GROUPS:
@@ -198,6 +205,7 @@ def parse_text_tool_call(text: str, allowed: set[str]) -> Optional[ToolCall]:
 @dataclass
 class LoopConfig:
     max_steps: int = MAX_STEPS
+    offer_all: Optional[bool] = None  # None = automatico: nuvem oferece todas as ferramentas, local so as relevantes
 
 
 async def _run_tool_with_events(runtime: ToolRuntime, call: ToolCall) -> AsyncIterator[Event | ToolOutcome]:
@@ -239,7 +247,8 @@ async def run_agent(
     """Gera eventos {token|tool_start|approval_required|tool_end}. O chamador acrescenta 'done'."""
     cfg = config or LoopConfig()
     msgs = list(messages)
-    offered = select_tools(user_input, list(tools.keys()))
+    offer_all = cfg.offer_all if cfg.offer_all is not None else bool(getattr(getattr(llm, "config", None), "is_cloud", False))
+    offered = select_tools(user_input, list(tools.keys()), offer_all)
     specs = [tool_spec(tools[n]) for n in offered]
     allowed = set(offered)
 

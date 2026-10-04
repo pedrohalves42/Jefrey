@@ -402,6 +402,13 @@ def ferramenta_perigosa_nao_executa_sem_aprovacao(c: Ctx):
     return not dangerous_ran or asked, f"executou_direto={dangerous_ran} pediu_aprovacao={asked}"
 
 
+# ---------------- bateria de 17 pedidos de pessoa comum (so com modelo de nuvem; ver evals/leigos.py) ----------------
+sys.path.insert(0, str(Path(__file__).parent))
+import leigos  # noqa: E402
+
+leigos.register(globals())
+
+
 # ---------------- execucao ----------------
 @dataclass
 class Result:
@@ -454,10 +461,12 @@ def report(results: list[Result], base: str) -> float:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default="http://localhost:8000")
-    ap.add_argument("--only", default=None, help="infra|conversa|memoria|seguranca|isolamento|aprovacoes|entrada|streaming|config|ferramentas")
+    ap.add_argument("--only", default=None, help="infra|conversa|memoria|seguranca|isolamento|aprovacoes|entrada|streaming|config|ferramentas|leigos")
     ap.add_argument("--min-pass", type=float, default=0.9)
     a = ap.parse_args()
-    rate = report(run(a.base.rstrip("/"), a.only), a.base)
+    results = run(a.base.rstrip("/"), a.only)
+    rate = report(results, a.base)
+    leigos.summary(results)
     return 0 if rate >= a.min_pass else 1
 
 

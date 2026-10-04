@@ -109,8 +109,8 @@ async def summarize_day(user_id: str, day: date, tz, client: Any = None) -> Opti
 
             a, b = _day_bounds_utc(day, tz)
             learned = [f["text"] for f in FactStore().active(user_id, 200) if a.isoformat() <= f["created_at"] < b.isoformat() and not f["sensitive"]]
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("ignorado (%s): %s", 'diary.py', type(_e).__name__)
         summary = None
         if client is not None and getattr(getattr(client, "config", None), "is_cloud", False):
             dialog = "\n".join(f"{'Pessoa' if t['role'] == 'user' else 'Jefrey'}: {t['content'][:300]}" for t in turns[-30:])

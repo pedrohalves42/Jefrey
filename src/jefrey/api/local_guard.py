@@ -18,6 +18,7 @@ from starlette.responses import PlainTextResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 LOCAL_NAMES = ("127.0.0.1", "localhost", "[::1]")
+DEVICE_PREFIX = "/wa/device/"
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
@@ -70,6 +71,12 @@ class LocalGuardMiddleware:
                 await self._deny(scope, receive, send, 403, "Origem nao permitida")
                 return
         elif scope.get("method", "GET").upper() not in SAFE_METHODS:
+            if (scope.get("path", "").startswith(DEVICE_PREFIX) and origin is not None
+                    and origin.lower().startswith("chrome-extension://")):
+                # a extensao do Chrome (pareada por codigo; cada pedido leva o token do aparelho). Uma pagina da web nao
+                # consegue forjar o cabecalho Origin, entao so uma extensao instalada chega aqui.
+                await self.app(scope, receive, send)
+                return
             if origin is not None and not self._origin_ok(origin):
                 await self._deny(scope, receive, send, 403, "Origem nao permitida")
                 return

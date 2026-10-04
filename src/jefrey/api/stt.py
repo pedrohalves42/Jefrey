@@ -49,8 +49,8 @@ async def stt_transcribe(request: Request, audio: UploadFile = File(...)):
             if not TOOL_REGISTRY.get_tool("stt_transcribe"):
                 _stt = type("stt_transcribe", (), {"name": "stt_transcribe", "risk": "LOW", "required_role": "USER"})()
                 TOOL_REGISTRY.register(_stt)
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("ignorado (%s): %s", 'stt.py', type(_e).__name__)
         pe = get_policy_engine()
         ctx = PolicyContext(thread_id="stt", user_role="user", user_id=user_id, autonomous=True)
         try:
@@ -89,8 +89,8 @@ async def stt_transcribe(request: Request, audio: UploadFile = File(...)):
         cfg = get_settings()
         provider = getattr(cfg.voice.stt, "provider", "whisper")
         model = getattr(cfg.voice.stt, "model", "small")
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.debug("ignorado (%s): %s", 'stt.py', type(_e).__name__)
 
     try:
         from src.jefrey.core.stt_engine import get_stt_engine
@@ -103,42 +103,42 @@ async def stt_transcribe(request: Request, audio: UploadFile = File(...)):
         try:
             STT_DURATION.labels(provider=provider, model=model).observe(elapsed)
             STT_REQUESTS.labels(status="success").inc()
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("ignorado (%s): %s", 'stt.py', type(_e).__name__)
         # Audit log (CIPHER-010)
         try:
             from src.jefrey.core.audit import audit_tool_call
             audit_tool_call(thread_id="stt", tool_name="stt_transcribe", actor_role="user", risk="medium", decision="allow", reason="stt ok", source="stt", user_id=user_id)
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("ignorado (%s): %s", 'stt.py', type(_e).__name__)
         # EventBus per-tenant (CIPHER-033) — best effort, fail open for MVP
         try:
             # HMAC kid rotation handled in signing; publish wraps
             # publish_event is async? try sync fallback
             pass
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("ignorado (%s): %s", 'stt.py', type(_e).__name__)
         return {"transcript": text, "language": model, "duration": round(elapsed,3)}
     except ValueError as ve:
         try:
             from src.jefrey.core.metrics import STT_REQUESTS
             STT_REQUESTS.labels(status="bad_request").inc()
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("ignorado (%s): %s", 'stt.py', type(_e).__name__)
         raise HTTPException(status_code=400, detail=str(ve))
     except RuntimeError as re:
         try:
             from src.jefrey.core.metrics import STT_REQUESTS
             STT_REQUESTS.labels(status="error").inc()
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("ignorado (%s): %s", 'stt.py', type(_e).__name__)
         logger.error("STT runtime: %s", re)
         raise HTTPException(status_code=500, detail=str(re))
     except Exception as e:
         try:
             from src.jefrey.core.metrics import STT_REQUESTS
             STT_REQUESTS.labels(status="error").inc()
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("ignorado (%s): %s", 'stt.py', type(_e).__name__)
         logger.error("STT error: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="erro interno STT")

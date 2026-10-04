@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query"
 import { useStatus } from "@/lib/status"
+import { authedFetch } from "@/lib/session"
 import { formatDuration, formatSeconds, histogramQuantile, parsePrometheus, sum, type Metrics } from "@/lib/metrics"
 
 async function fetchMetrics(): Promise<Metrics> {
-  const r = await fetch("/metrics", { cache: "no-store" })
+  const r = await authedFetch("/metrics", { cache: "no-store" })
   if (!r.ok) throw new Error(String(r.status))
   return parsePrometheus(await r.text())
 }
