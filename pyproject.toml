@@ -74,8 +74,8 @@ dev = [
 ]
 
 [project.scripts]
-jefrey = "src.jefrey.cli:main"
-jefrey-cli = "src.jefrey.cli:main"
+jefrey = "src.jefrey.cli:app"
+jefrey-cli = "src.jefrey.cli:app"
 
 [tool.poetry]
 package-dir = "src"

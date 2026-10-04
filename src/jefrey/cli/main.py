@@ -518,5 +518,85 @@ def version():
     console.print(f"Jefrey CLI v{cfg.version}")
 
 
+@app.command("doctor")
+def doctor(
+    base_url: str = typer.Option("http://localhost:8000", help="Endereco do servidor do Jefrey"),
+    ollama_url: str = typer.Option("http://localhost:11434", help="Endereco do Ollama"),
+):
+    """Diagnostica o ambiente e mostra como resolver cada problema."""
+    from pathlib import Path
+    from src.jefrey.core.doctor import FAIL, OK, WARN, Probes, run_checks, summarize
+
+    checks = run_checks(Probes(base_url=base_url.rstrip("/"), ollama_url=ollama_url.rstrip("/"), project_dir=Path.cwd()))
+    icon = {OK: "[green]OK[/green]", WARN: "[yellow]AVISO[/yellow]", FAIL: "[red]PROBLEMA[/red]"}
+    table = Table(title="Diagnostico do Jefrey")
+    table.add_column("", no_wrap=True)
+    table.add_column("Item")
+    table.add_column("Situacao")
+    for ch in checks:
+        table.add_row(icon[ch.status], ch.label, ch.detail)
+    console.print(table)
+    problems = [ch for ch in checks if ch.status != OK and ch.fix]
+    if problems:
+        console.print("\n[bold]Como resolver:[/bold]")
+        for ch in problems:
+            console.print(f"  - {ch.label}: {ch.fix}")
+    ok, warn, fail = summarize(checks)
+    console.print(f"\n{ok} ok, {warn} aviso(s), {fail} problema(s).")
+    raise typer.Exit(code=1 if fail else 0)
+
+
+@app.command("backup")
+def backup(
+    out: str = typer.Option("backups", help="Pasta onde guardar o arquivo .zip"),
+    include_secrets: bool = typer.Option(False, "--incluir-segredos", help="Inclui chaves e tokens (guarde o arquivo em local seguro!)"),
+    no_db: bool = typer.Option(False, "--sem-banco", help="Nao exporta o banco de dados (Postgres)"),
+):
+    """Salva configuracao, memorias, arquivos e banco em um unico .zip."""
+    from pathlib import Path
+    from src.jefrey.core.backup import BackupError, create_backup, docker_pg_dump
+
+    try:
+        path = create_backup(Path(out), config_dir=Path("config"), data_dir=Path("data"),
+                             include_secrets=include_secrets, db_dump=None if no_db else docker_pg_dump)
+    except BackupError as e:
+        console.print(f"[red]{e}[/red]  (use --sem-banco para salvar so arquivos)")
+        raise typer.Exit(code=1)
+    size = path.stat().st_size / 1024 / 1024
+    console.print(f"[green]Backup salvo:[/green] {path} ({size:.1f} MB)")
+    if include_secrets:
+        console.print("[yellow]Este arquivo contem chaves e tokens. Nao compartilhe.[/yellow]")
+
+
+@app.command("restore")
+def restore(
+    file: str = typer.Argument(..., help="Arquivo .zip gerado por 'jefrey backup'"),
+    yes: bool = typer.Option(False, "--sim", help="Nao pedir confirmacao"),
+    no_db: bool = typer.Option(False, "--sem-banco", help="Nao restaura o banco de dados"),
+):
+    """Restaura um backup. O que existe hoje e guardado em pastas '.antes-da-restauracao-...'."""
+    from pathlib import Path
+    from src.jefrey.core.backup import BackupError, docker_pg_restore, read_manifest, restore_backup
+
+    try:
+        m = read_manifest(Path(file))
+    except BackupError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(code=1)
+    console.print(f"Backup de {m.get('created')}: {m.get('counts')}")
+    if not yes and not typer.confirm("Restaurar agora? (o que existe sera guardado, nao apagado)"):
+        raise typer.Exit(code=1)
+    try:
+        r = restore_backup(Path(file), config_dir=Path("config"), data_dir=Path("data"),
+                           db_restore=None if no_db else docker_pg_restore)
+    except BackupError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(code=1)
+    console.print(f"[green]Restaurado:[/green] {r['config']} arquivos de config, {r['data']} de dados, banco={'sim' if r['db'] else 'nao'}")
+    for p in r["moved_to"]:
+        console.print(f"  versao anterior guardada em: {p}")
+    console.print("Reinicie o Jefrey: docker compose restart jefrey-api")
+
+
 if __name__ == "__main__":
     app()

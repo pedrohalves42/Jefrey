@@ -146,3 +146,5 @@ scripts/_audit_total.json
 tmp/
 evals/reports/
 config/llm.runtime.json
+backups/
+*.antes-da-restauracao-*

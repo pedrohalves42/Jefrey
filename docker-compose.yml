@@ -114,6 +114,7 @@ services:
       dockerfile: Dockerfile.mcp
     image: jefrey-mcp:local
     container_name: jefrey-mcp
+    profiles: ["full"]  # modo completo: docker compose --profile full up -d
     working_dir: /app
     read_only: true
     tmpfs:
@@ -186,6 +187,7 @@ services:
   n8n:
     image: n8nio/n8n:latest
     container_name: jefrey-n8n
+    profiles: ["full"]  # modo completo: docker compose --profile full up -d
     ports:
       - "5678:5678"
     environment:
@@ -216,6 +218,7 @@ services:
   prometheus:
     image: prom/prometheus:v2.53.0
     container_name: jefrey-prometheus
+    profiles: ["full"]  # modo completo: docker compose --profile full up -d
     ports:
       - "9090:9090"
     volumes:
@@ -237,6 +240,7 @@ services:
   grafana:
     image: grafana/grafana:11.1.0
     container_name: jefrey-grafana
+    profiles: ["full"]  # modo completo: docker compose --profile full up -d
     ports:
       - "3000:3000"
     env_file: [.env]
@@ -264,6 +268,7 @@ services:
       dockerfile: Dockerfile.api
     image: jefrey-api:local
     container_name: jefrey-brain2
+    profiles: ["full"]  # modo completo: docker compose --profile full up -d
     command: ["python", "-m", "src.jefrey.brain2.service"]
     volumes:
       - ./:/app:rw
@@ -295,6 +300,7 @@ services:
       dockerfile: frontend/Dockerfile.frontend
     image: jefrey-frontend:local
     container_name: jefrey-frontend
+    profiles: ["full"]  # modo completo: docker compose --profile full up -d
     ports:
       - "3001:8080"
     depends_on:

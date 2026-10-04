@@ -30,7 +30,7 @@ _PUBLIC_PATHS = {"/ws", "/health", "/docs", "/openapi.json", "/redoc", "/metrics
 # UI-1 Shell public — Axiom 5 least privilege (Livro 3 Security Eng cap8, CIPHER-019)
 # /chat|/memory|/approvals continuam protegidos; /assets/* sao build Vite hashados sem user data
 # /auth/dev-token e publico mas fail-closed em prod (CIPHER-021, auth.py is_prod 403)
-_PUBLIC_PREFIXES = ("/assets/", "/ws")
+_PUBLIC_PREFIXES = ("/assets/", "/images/", "/ws")  # /images: icones do manifesto (o navegador busca sem login)
 
 # Paginas do app (React Router). Sao tambem prefixos de API (/memory, /approvals...), entao so
 # servimos o index.html quando e navegacao de navegador (GET + Accept: text/html).

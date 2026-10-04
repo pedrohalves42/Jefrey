@@ -1,31 +1,70 @@
 @echo off
-REM start_jefrey.bat v2 — Jefrey 1 programa 7 pecas — F6-4 PWA One-Click (Axiom #7)
-REM Uso: duplo clique. Sobe 7/7 jefrey_* + abre http://localhost:8000
-setlocal
+REM Iniciar o Jefrey (duplo clique).
+REM   start_jefrey.bat            -> modo leve: so o essencial (4 containers, usa menos memoria)
+REM   start_jefrey.bat completo   -> tambem monitoramento (Grafana/Prometheus), n8n e MCP
+REM Defina JEFREY_NO_BROWSER=1 para nao abrir o navegador (util em automacao).
+setlocal EnableExtensions
 cd /d "%~dp0"
-echo === Jefrey One-Click v2 ===
-echo [1/4] Verificando docker...
-docker --version >nul 2>&1 || (echo Docker nao encontrado. Instale Docker Desktop. & pause & exit /b 1)
-echo [2/4] Subindo stack 7/7 (jefrey-api, postgres, redis, mcp, n8n, prometheus, grafana)...
-docker compose up -d --build
-if errorlevel 1 (echo Falha no docker compose up & pause & exit /b 1)
-echo [3/4] Aguardando health 7/7 (timeout 90s)...
-set COUNT=0
-:loop
-docker compose ps --format "table {{.Name}} {{.Status}}" | findstr /i "healthy" >nul
-for /f %%c in ('docker compose ps --format "{{.Status}}" ^| findstr /c:"healthy" /c:"Up" ^| find /c /v ""') do set HC=%%c
-echo  7/7 check tentativa %COUNT% — aguarde...
-timeout /t 5 /nobreak >nul
-set /a COUNT+=1
-if %COUNT% GEQ 18 goto open
-docker compose ps | findstr /i "healthy" | find /c "healthy" >nul 2>&1
-if %COUNT% LSS 6 goto loop
-:open
-echo [4/4] Abrindo Jefrey...
-start "" http://localhost:8000
+title Jefrey
+
+set PROFILE=
+if /i "%~1"=="completo" set PROFILE=--profile full
+
 echo.
-echo Pronto! Se ver HUD preto + "Pronto" no header, esta vivo.
-echo Dica: primeira visita mostra wizard 3 passos. Fale "oi" ou clique no microfone.
-echo Logs: docker compose logs -f jefrey-api
-echo Parar: docker compose down
+echo === Iniciando o Jefrey ===
+
+echo [1/4] Verificando o Docker...
+docker --version >nul 2>&1
+if errorlevel 1 goto nodocker
+docker info >nul 2>&1
+if not errorlevel 1 goto dockerok
+
+echo O Docker Desktop esta fechado. Abrindo e esperando ele ficar pronto...
+start "" "%ProgramFiles%\Docker\Docker\Docker Desktop.exe"
+set /a TRIES=0
+:waitdocker
+docker info >nul 2>&1
+if not errorlevel 1 goto dockerok
+set /a TRIES+=1
+if %TRIES% GEQ 36 goto dockerfail
+timeout /t 5 /nobreak >nul
+goto waitdocker
+
+:nodocker
+echo Nao encontrei o Docker. Instale o Docker Desktop: https://www.docker.com/products/docker-desktop
 pause
+exit /b 1
+
+:dockerfail
+echo O Docker nao ficou pronto em 3 minutos. Abra o Docker Desktop manualmente e tente de novo.
+pause
+exit /b 1
+
+:dockerok
+echo [2/4] Subindo os servicos...
+docker compose %PROFILE% up -d
+if errorlevel 1 goto upfail
+
+echo [3/4] Esperando o Jefrey ficar pronto (ate 3 minutos)...
+powershell -NoProfile -Command "$ok=$false; for($i=0;$i -lt 36;$i++){ try { if((Invoke-WebRequest -UseBasicParsing -Uri http://localhost:8000/health -TimeoutSec 3).StatusCode -eq 200){$ok=$true;break} } catch {}; Start-Sleep -Seconds 5 }; if($ok){exit 0}else{exit 1}"
+if errorlevel 1 goto notready
+
+echo [4/4] Pronto.
+if not defined JEFREY_NO_BROWSER start "" http://localhost:8000
+echo.
+echo O Jefrey esta em http://localhost:8000
+echo Dica: no Edge/Chrome use "Instalar aplicativo" para abrir o Jefrey como um programa do Windows.
+echo Para parar: stop_jefrey.bat
+if not defined JEFREY_NO_BROWSER timeout /t 8 >nul
+exit /b 0
+
+:upfail
+echo Falha ao subir os servicos. Rode: docker compose logs --tail 50
+pause
+exit /b 1
+
+:notready
+echo O Jefrey nao respondeu a tempo. Veja o diagnostico:
+echo   python -m src.jefrey.cli doctor
+pause
+exit /b 1

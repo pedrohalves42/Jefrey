@@ -27,3 +27,18 @@ def test_chamada_de_api_sem_token_continua_401(client, path):
 def test_api_nao_e_exposta_so_por_mandar_accept_html(client):
     assert client.get("/memory/search?q=x", headers=HTML).status_code == 401
     assert client.get("/settings/llm", headers=HTML).status_code == 401
+
+
+@pytest.mark.parametrize("path,tipo", [
+    ("/manifest.json", "json"), ("/sw.js", "javascript"), ("/images/icon-192.png", "image/png"),
+    ("/images/icon-512.png", "image/png"), ("/images/icon-maskable-512.png", "image/png"),
+])
+def test_arquivos_para_instalar_o_app_sao_publicos(client, path, tipo):
+    """O navegador busca manifesto, service worker e icones sem login: precisam abrir."""
+    r = client.get(path)
+    assert r.status_code == 200 and tipo in r.headers["content-type"], (path, r.status_code)
+
+
+def test_publicar_imagens_nao_abre_a_api(client):
+    assert client.get("/images/../memory/recent").status_code in (401, 404)
+    assert client.get("/memory/recent").status_code == 401
