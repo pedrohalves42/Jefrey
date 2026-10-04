@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>Jefrey para WhatsApp</title>
+    <style>
+      body { width: 300px; margin: 0; padding: 14px; font: 15px system-ui, sans-serif; background: #0b1a22; color: #e6f7ff; }
+      h1 { font-size: 17px; margin: 0 0 8px; }
+      p { margin: 6px 0; line-height: 1.35; }
+      input { width: 100%; box-sizing: border-box; font-size: 20px; letter-spacing: 6px; text-align: center; padding: 8px; border-radius: 8px; border: 1px solid #2bd; background: #06121a; color: #fff; }
+      button { width: 100%; margin-top: 8px; padding: 10px; font-size: 15px; border-radius: 8px; border: 1px solid #2bd; background: #0f3a4a; color: #dff; cursor: pointer; }
+      .msg { margin-top: 8px; font-size: 14px; }
+      .err { color: #fbb; }
+      .ok { color: #9f9; }
+      .small { font-size: 12px; color: #9bb; }
+    </style>
+  </head>
+  <body>
+    <h1>Jefrey para WhatsApp</h1>
+    <div id="unpaired">
+      <p>No Jefrey, abra <b>Conexões &gt; WhatsApp</b> e toque em <b>Gerar código</b>. Digite aqui o código de 6 números:</p>
+      <input id="code" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="off" />
+      <button id="pair">Conectar</button>
+    </div>
+    <div id="paired" hidden>
+      <p class="ok">Conectado ao Jefrey.</p>
+      <p class="small">Abra o WhatsApp Web (web.whatsapp.com). No Jefrey você escolhe em quais conversas ele pode responder.</p>
+      <button id="pause"></button>
+      <button id="unpair">Desconectar</button>
+    </div>
+    <p id="msg" class="msg"></p>
+    <script src="popup.js"></script>
+  </body>
+</html>

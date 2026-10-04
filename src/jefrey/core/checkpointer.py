@@ -16,7 +16,10 @@ from __future__ import annotations
 import asyncio
 from typing import Optional
 
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+try:  # dependencia opcional: nenhum fluxo do Jefrey abre este checkpointer
+    from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+except ImportError:  # pragma: no cover
+    AsyncPostgresSaver = None  # type: ignore[assignment,misc]
 
 from src.jefrey.core.config import get_settings
 
@@ -25,19 +28,7 @@ _cm = None  # context manager retornado por from_conn_string (para fechar o pool
 _lock = asyncio.Lock()
 
 
-def _ns_thread_id(thread_id: str, user_id: str | None) -> str:
-    """Namespacing para isolamento multi-tenant (M3, Axiom #2).
-
-    Se user_id for informado, prefixa: `user_id:thread_id` para que checkpoints
-    de usuarios diferentes nunca se misturem no mesmo saver upstream
-    (AsyncPostgresSaver nao filtra por user_id nativamente).
-    Sem user_id retorna thread_id original (compat).
-    """
-    if not user_id:
-        return thread_id
-    if thread_id.startswith(f"{user_id}:"):
-        return thread_id
-    return f"{user_id}:{thread_id}"
+from src.jefrey.core.thread_ids import _ns_thread_id  # noqa: E402,F401  (movida; reexportada)
 
 
 def _psycopg_dsn() -> str:
@@ -45,7 +36,7 @@ def _psycopg_dsn() -> str:
     return get_settings().database.dsn.replace("+psycopg", "") if get_settings().database.dsn.startswith("postgresql+psycopg") else get_settings().database.dsn
 
 
-async def get_postgres_checkpointer() -> AsyncPostgresSaver:
+async def get_postgres_checkpointer() -> "AsyncPostgresSaver":
     """Retorna (e cria, se necessário) um único AsyncPostgresSaver compartilhado.
 
     Cria as tabelas de checkpoint uma única vez via `setup()` (idempotente).

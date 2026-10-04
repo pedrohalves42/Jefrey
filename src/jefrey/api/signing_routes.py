@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import os
 import logging
-from fastapi import APIRouter, HTTPException, status
+from fastapi import Request, APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
-from src.jefrey.eventbus.signing import sign_message, verify_message, _get_hmac_keys, rotate_hmac_key as _rotate_hmac_key_internal
+from src.jefrey.eventbus.signing import _get_hmac_keys, rotate_hmac_key as _rotate_hmac_key_internal
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +47,11 @@ class RotateHMACKeyResponse(BaseModel):
         message: Descriptive status message
     """,
 )
-async def rotate_hmac_key_endpoint() -> RotateHMACKeyResponse:
+async def rotate_hmac_key_endpoint(request: Request) -> RotateHMACKeyResponse:
     """Rotate HMAC key for event bus signing with dual-verify support."""
+    # CIPHER-301: antes era publico; agora so o token de servico (secret_key) pode girar chaves
+    if getattr(request.state, "oauth2_client", None) != "configured-secret":
+        raise HTTPException(status_code=403, detail="apenas o token de servico pode girar chaves HMAC")
     try:
         new_key, new_kid = _rotate_hmac_key_internal()
         
@@ -79,7 +82,7 @@ async def rotate_hmac_key_endpoint() -> RotateHMACKeyResponse:
     except ValueError as e:
         logger.error(f"HMAC key rotation validation failed: {e}")
         raise HTTPException(
-            status_code=status.HTTP_400_INTERNAL_SERVER_ERROR,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"HMAC key rotation validation error: {str(e)}"
         )
 
@@ -98,8 +101,9 @@ async def hmac_status() -> dict:
         "current_kid": kid,
         "total_keys": len(keys),
         "keys_available": list(keys.keys()),
-        "env_hmac_key": os.getenv("JEFREY_EVENTBUS__HMAC_KEY", "")[:8] + "..." if os.getenv("JEFREY_EVENTBUS__HMAC_KEY") else "",
-        "env_hmac_keys_json": os.getenv("JEFREY_EVENTBUS__HMAC_KEYS_JSON", "")[:80] + "..." if os.getenv("JEFREY_EVENTBUS__HMAC_KEYS_JSON") else "not set",
+        # CIPHER-301: nunca expor material de chave (antes vazava a chave v1 inteira em env_hmac_keys_json)
+        "env_hmac_key_set": bool(os.getenv("JEFREY_EVENTBUS__HMAC_KEY")),
+        "env_hmac_keys_json_set": bool(os.getenv("JEFREY_EVENTBUS__HMAC_KEYS_JSON")),
         "env_is_prod": os.getenv("JEFREY_ENV", "dev") == "prod",
         "dual_verify_active": len(keys) >= 2,
     }

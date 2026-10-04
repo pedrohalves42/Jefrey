@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git branch*)",
+      "Bash(git show*)",
+      "Bash(C:/Users/Pedro/jv312/Scripts/python.exe -m pytest *)",
+      "Bash(C:/Users/Pedro/jv312/Scripts/python.exe -m py_compile *)",
+      "Bash(npx tsc --noEmit*)",
+      "Bash(npm test*)",
+      "Bash(curl -s localhost:8000/health)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.prod)",
+      "Read(./k8s/base/secret.yaml)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)"
+    ]
+  }
+}

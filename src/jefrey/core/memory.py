@@ -1,22 +1,24 @@
 """Sistema de Memória Otimizado - Curto e Longo Prazo."""
 from __future__ import annotations
+import functools
 import json
+import logging
+import re
 import uuid
 import threading
 from datetime import datetime
-from functools import lru_cache
-from pathlib import Path
 from typing import Any
 from collections import deque
-from contextlib import contextmanager
 
 import chromadb
 from chromadb.config import Settings as ChromaSettings
-from langchain_openai import OpenAIEmbeddings
-from langchain_ollama import OllamaEmbeddings
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage
+from src.jefrey.core.embeddings import AutoEmbeddings, EmbeddingsUnavailable, default_candidates
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage, ToolMessage
 
 from src.jefrey.core.config import get_settings
+
+logger = logging.getLogger(__name__)
+logging.getLogger("chromadb.telemetry.product.posthog").setLevel(logging.CRITICAL)  # bug conhecido do Chroma: so polui o log
 
 # Ativa logging estruturado (JSON) ao carregar o subsistema de memória.
 import src.jefrey.core.logging  # noqa: F401
@@ -48,23 +50,10 @@ _embedding_cache = _EmbeddingCache()
 
 
 def _create_embeddings():
-    """Cria instância de embeddings baseada na configuração."""
-    s = get_settings()
-    emb_settings = s.embeddings
-    llm_settings = s.llm
-    
-    # Se provider for ollama, usa OllamaEmbeddings
-    if llm_settings.provider == "ollama":
-        return OllamaEmbeddings(
-            model=emb_settings.model,
-            base_url=emb_settings.base_url,
-        )
-    # Senão usa OpenAI
-    return OpenAIEmbeddings(
-        model=emb_settings.model,
-        api_key=emb_settings.api_key or llm_settings.api_key,
-        base_url=emb_settings.base_url,
-    )
+    """Embeddings com escolha automatica no modo nativo (Ollama -> nuvem do usuario -> motor local embutido)."""
+    from src.jefrey.core.redis_factory import is_native
+
+    return AutoEmbeddings(default_candidates, auto=is_native())
 
 
 class CachedEmbeddings:
@@ -73,34 +62,43 @@ class CachedEmbeddings:
     def __init__(self, base_embeddings):
         self._base = base_embeddings
     
+    def _mid(self) -> str:
+        return str(getattr(self._base, "model_id", "") or "")
+
+    @property
+    def model_id(self) -> str:
+        return self._base.model_id
+
     def embed_query(self, text: str) -> list[float]:
-        cached = _embedding_cache.get(text)
+        key = f"{self._mid()}\x00{text}"  # vetores de modelos diferentes nunca se misturam no cache
+        cached = _embedding_cache.get(key)
         if cached is not None:
             return cached
         embedding = self._base.embed_query(text)
-        _embedding_cache.set(text, embedding)
+        _embedding_cache.set(key, embedding)
         return embedding
     
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        results = []
+        mid = self._mid()
+        results: list = []
         uncached_texts = []
         uncached_indices = []
-        
+
         for i, text in enumerate(texts):
-            cached = _embedding_cache.get(text)
+            cached = _embedding_cache.get(f"{mid}\x00{text}")
             if cached is not None:
                 results.append(cached)
             else:
                 results.append(None)
                 uncached_texts.append(text)
                 uncached_indices.append(i)
-        
+
         if uncached_texts:
             new_embeddings = self._base.embed_documents(uncached_texts)
-            for idx, emb in zip(uncached_indices, new_embeddings):
+            for idx, text, emb in zip(uncached_indices, uncached_texts, new_embeddings):
                 results[idx] = emb
-                _embedding_cache.set(uncached_texts[uncached_indices.index(idx)], emb)
-        
+                _embedding_cache.set(f"{mid}\x00{text}", emb)
+
         return results
 
 
@@ -214,6 +212,33 @@ class ShortTermMemory:
             return self._token_count
 
 
+LEGACY_EMBEDDING_MODEL = "nomic-embed-text"  # modelo da colecao original (sem sufixo no nome)
+
+
+def collection_name_for(base: str, embedding_model: str) -> str:
+    """Vetores de modelos diferentes NUNCA compartilham colecao (os espacos vetoriais nao se misturam)."""
+    if not embedding_model or embedding_model == LEGACY_EMBEDDING_MODEL:
+        return base
+    slug = re.sub(r"[^a-zA-Z0-9_-]+", "_", embedding_model).strip("_-")[:40] or "m"
+    return f"{base}__{slug}"[:63]
+
+
+def reindex_collection(old, new, embed_documents, batch: int = 16) -> int:
+    """Copia itens de `old` para `new` re-embedando com o modelo atual. Idempotente (upsert por id)."""
+    done = 0
+    offset = 0
+    while True:
+        got = old.get(include=["documents", "metadatas"], limit=batch, offset=offset)
+        ids = got.get("ids") or []
+        if not ids:
+            break
+        docs = got["documents"]
+        new.upsert(ids=ids, documents=docs, metadatas=got["metadatas"], embeddings=embed_documents(docs))
+        done += len(ids)
+        offset += len(ids)
+    return done
+
+
 class ChromaConnectionPool:
     """Pool de conexões ChromaDB para reuso eficiente."""
     
@@ -265,7 +290,8 @@ class ChromaConnectionPool:
 class LongTermMemory:
     """Memória vetorial persistente com ChromaDB - Otimizada."""
     
-    __slots__ = ("_top_k", "_similarity_threshold", "_embeddings", "_collection")
+    __slots__ = ("_top_k", "_similarity_threshold", "_embeddings", "_collection", "_legacy", "_legacy_checked",
+                 "_base_name", "_forced_model")
     
     def __init__(
         self,
@@ -282,13 +308,67 @@ class LongTermMemory:
         # Embeddings com cache (usando factory)
         self._embeddings = get_embeddings()
         
-        # Pool de conexões
+        self._base_name = collection_name or s.memory.long_term.collection_name
+        self._forced_model = embedding_model
+        self._collection = None
+        self._legacy = None
+        self._legacy_checked = True
+        try:
+            self._init_collection()
+        except EmbeddingsUnavailable as e:  # sem backend de embeddings: a memoria fica indisponivel, o resto do Jefrey nao
+            logger.warning("memoria indisponivel por enquanto: %s", e)
+
+    def _init_collection(self) -> None:
+        """Escolhe o espaco vetorial (modelo) e abre a colecao dele. Levanta EmbeddingsUnavailable se nao houver backend."""
+        model = self._forced_model or self._embeddings.model_id  # o espaco que de fato gera os vetores
+        base = self._base_name
         pool = ChromaConnectionPool()
-        s = get_settings()
-        self._collection = pool.get_collection(
-            collection_name or s.memory.long_term.collection_name
-        )
+        name = collection_name_for(base, model)
+        self._collection = pool.get_collection(name)
+        # colecao antiga (outro modelo de embedding) a migrar, se existir
+        self._legacy = pool.get_collection(base) if name != base else None
+        self._legacy_checked = False
+        self.migrate_legacy()
+
+    def rebind(self) -> None:
+        """Reabre a colecao (apos trocar o backend de embeddings). Levanta EmbeddingsUnavailable se nao houver backend."""
+        self._collection = None
+        self._legacy = None
+        self._legacy_checked = True
+        self._init_collection()
+
+    def _ensure(self) -> None:
+        """Garante a colecao antes de usar; tenta de novo se antes nao havia backend (ex.: chave colada depois)."""
+        if self._collection is None and getattr(self, "_base_name", None):
+            self._init_collection()
+        if self._collection is None:
+            raise EmbeddingsUnavailable("A memória está indisponível.")
+
+    @property
+    def available(self) -> bool:
+        try:
+            self._ensure()
+            return True
+        except EmbeddingsUnavailable:
+            return False
     
+    def migrate_legacy(self) -> int:
+        """Reindexa memorias da colecao antiga com o modelo atual. Nunca derruba quem chama."""
+        legacy = getattr(self, "_legacy", None)
+        if legacy is None or getattr(self, "_legacy_checked", False):
+            return 0
+        try:
+            if legacy.count() <= self._collection.count():
+                self._legacy_checked = True
+                return 0
+            n = reindex_collection(legacy, self._collection, self._embeddings.embed_documents)
+            self._legacy_checked = True
+            logger.info("memoria: %d itens reindexados com o modelo de embedding atual", n)
+            return n
+        except Exception as e:  # modelo ainda baixando / Ollama fora: tenta de novo na proxima vez
+            logger.warning("memoria: migracao adiada (%s: %s)", type(e).__name__, e)
+            return 0
+
     def add(
         self,
         content: str,
@@ -298,10 +378,11 @@ class LongTermMemory:
     ) -> str:
         """Adiciona uma memória."""
         memory_id = memory_id or str(uuid.uuid4())
-        metadata = metadata or {}
-        # H2: Isolar por user_id no metadata para fallback ChromaDB
+        metadata = dict(metadata or {})  # nao muta o dict de quem chamou
+        # H2: isolamento multi-tenant. O user_id vem do servidor e SEMPRE sobrescreve o metadata:
+        # o modelo (ou um chamador) nao pode gravar na memoria de outro usuario.
         if user_id:
-            metadata.setdefault("user_id", user_id)
+            metadata["user_id"] = user_id
         metadata.setdefault("timestamp", datetime.now().isoformat())
         metadata.setdefault("type", "memory")
         metadata = _to_chroma_metadata(metadata)
@@ -324,6 +405,7 @@ class LongTermMemory:
         user_id: str | None = None,
     ) -> list[dict]:
         """Busca semântica otimizada."""
+        self.migrate_legacy()  # no-op quando ja migrou
         top_k = top_k or self._top_k
         query_embedding = self._embeddings.embed_query(query)
         
@@ -355,9 +437,12 @@ class LongTermMemory:
         
         return memories
     
-    def get(self, memory_id: str) -> dict | None:
-        """Recupera memória por ID."""
-        result = self._collection.get(ids=[memory_id], include=["documents", "metadatas"])
+    def get(self, memory_id: str, user_id: str | None = None) -> dict | None:
+        """Recupera memória por ID com isolamento multi-tenant (user_id)."""
+        where = {}
+        if user_id:
+            where["user_id"] = user_id
+        result = self._collection.get(ids=[memory_id], include=["documents", "metadatas"], where=where if where else None)
         if result["ids"]:
             return {
                 "id": result["ids"][0],
@@ -366,14 +451,16 @@ class LongTermMemory:
             }
         return None
     
-    def update(self, memory_id: str, content: str | None = None, metadata: dict | None = None) -> bool:
-        """Atualiza memória."""
-        existing = self.get(memory_id)
+    def update(self, memory_id: str, content: str | None = None, metadata: dict | None = None,
+               user_id: str | None = None) -> bool:
+        """Atualiza memória. Com user_id, so o dono consegue; o dono nunca muda pelo metadata."""
+        existing = self.get(memory_id, user_id=user_id)
         if not existing:
             return False
-        
+
         new_content = content or existing["content"]
-        new_metadata = {**existing["metadata"], **(metadata or {})}
+        safe_meta = {k: v for k, v in (metadata or {}).items() if k != "user_id"}
+        new_metadata = {**existing["metadata"], **safe_meta}
         new_metadata["updated_at"] = datetime.now().isoformat()
         new_metadata = _to_chroma_metadata(new_metadata)
         
@@ -387,22 +474,30 @@ class LongTermMemory:
         )
         return True
     
-    def delete(self, memory_id: str) -> bool:
-        """Remove memória."""
+    def delete(self, memory_id: str, user_id: str | None = None) -> bool:
+        """Remove memória com verificação de ownership (user_id)."""
+        # Primeiro verifica se a memória pertence ao usuário
+        existing = self.get(memory_id, user_id=user_id)
+        if not existing:
+            return False
         try:
             self._collection.delete(ids=[memory_id])
             return True
         except Exception:
             return False
     
-    def list_recent(self, limit: int = 20, filter_metadata: dict | None = None) -> list[dict]:
-        """Lista memórias recentes (por timestamp)."""
+    def list_recent(self, limit: int = 20, filter_metadata: dict | None = None, user_id: str | None = None) -> list[dict]:
+        """Lista memórias recentes (por timestamp) com isolamento multi-tenant."""
+        where = dict(filter_metadata or {})
+        if user_id:
+            where["user_id"] = user_id
+        # o Chroma devolve por ordem de insercao: busca ate 2000 do usuario e ordena por data
         results = self._collection.get(
-            where=filter_metadata,
+            where=where if where else None,
             include=["documents", "metadatas"],
-            limit=limit,
+            limit=2000,
         )
-        
+
         memories = []
         if results["ids"]:
             for i, mem_id in enumerate(results["ids"]):
@@ -412,8 +507,8 @@ class LongTermMemory:
                     "metadata": _from_chroma_metadata(results["metadatas"][i]),
                 })
         
-        memories.sort(key=lambda m: m["metadata"].get("timestamp", ""), reverse=True)
-        return memories
+        memories.sort(key=lambda m: str(m["metadata"].get("timestamp", "")), reverse=True)
+        return memories[:max(0, int(limit))]
     
     def health_check(self) -> dict:
         """Verifica saúde do backend ChromaDB (contagem + captura de erro)."""
@@ -427,9 +522,33 @@ class LongTermMemory:
             log.error("health_check chromadb falhou: %s", e)
             return {"status": "error", "backend": "chromadb", "error": str(e)}
 
-    def count(self) -> int:
-        """Total de memórias armazenadas."""
+    def count(self, user_id: str | None = None) -> int:
+        """Total de memórias armazenadas com filtro opcional por user_id (CIPHER-004 fix)."""
+        if user_id:
+            # Filtra por user_id no metadata (CIPHER-004)
+            try:
+                results = self._collection.get(
+                    where={"user_id": user_id},
+                    include=["metadatas"],
+                )
+                return len(results.get("ids", []))
+            except Exception:
+                # Fallback: retorna contagem global em caso de erro
+                return self._collection.count()
         return self._collection.count()
+
+
+
+def _needs_collection(fn):
+    @functools.wraps(fn)
+    def wrapper(self, *a, **kw):
+        self._ensure()
+        return fn(self, *a, **kw)
+    return wrapper
+
+
+for _name in ("add", "search", "get", "update", "delete", "list_recent", "count"):
+    setattr(LongTermMemory, _name, _needs_collection(getattr(LongTermMemory, _name)))
 
 
 class MemoryManager:
@@ -584,3 +703,68 @@ def _init_message_registry() -> None:
 
 
 
+
+
+# ---------------------------------------------------------------- trocar o motor da busca sem perder memorias
+def _probe(impl) -> bool:
+    try:
+        v = impl.embed_query("teste de conexao")
+        return bool(v) and len(v) >= 8
+    except EmbeddingsUnavailable:
+        return False
+
+
+def best_search_engine():
+    """(Choice, backend) do melhor motor funcionando agora, na ordem de preferencia; None se nenhum."""
+    from src.jefrey.core.embeddings import build_backend
+
+    for choice, key in default_candidates():
+        try:
+            impl = build_backend(choice, key)
+        except Exception:
+            continue
+        if _probe(impl):
+            return choice, impl
+    return None
+
+
+def search_engine_status() -> dict:
+    """Motor em uso, o melhor disponivel agora e se vale trocar. Nao altera nada."""
+    from src.jefrey.core.embeddings import load_choice
+
+    cur = load_choice()
+    best = best_search_engine()
+    return {"current": cur.model_id if cur else None, "best": best[0].model_id if best else None,
+            "can_upgrade": bool(best and (cur is None or cur.model_id != best[0].model_id))}
+
+
+def upgrade_search_engine() -> dict:
+    """Troca para o melhor motor disponivel e REINDEXA as memorias existentes no novo (nada se perde)."""
+    from src.jefrey.core.embeddings import load_choice, save_choice
+
+    cur = load_choice()
+    best = best_search_engine()
+    if best is None:
+        raise EmbeddingsUnavailable(UNAVAILABLE_MSG_UPGRADE)
+    choice, impl = best
+    if cur is not None and cur.model_id == choice.model_id:
+        return {"changed": False, "to": choice.model_id, "moved": 0}
+    base = get_settings().memory.long_term.collection_name
+    pool = ChromaConnectionPool()
+    new_col = pool.get_collection(collection_name_for(base, choice.model_id))
+    moved = 0
+    if cur is not None:
+        old_col = pool.get_collection(collection_name_for(base, cur.model_id))
+        moved = reindex_collection(old_col, new_col, impl.embed_documents)  # copia; a colecao antiga fica intacta
+    save_choice(choice)
+    emb = get_embeddings()
+    inner = getattr(emb, "_base", None)
+    if hasattr(inner, "reset"):
+        inner.reset()  # o AutoEmbeddings le a escolha gravada de novo
+    lt = get_memory_manager().long_term
+    if hasattr(lt, "rebind"):
+        lt.rebind()
+    return {"changed": True, "from": cur.model_id if cur else None, "to": choice.model_id, "moved": moved}
+
+
+UNAVAILABLE_MSG_UPGRADE = "Não há nenhum motor de busca disponível para trocar agora."

@@ -1,6 +1,7 @@
 """Skill: Busca Web via Tavily + DuckDuckGo fallback (P1.1 AXIOM+CIPHER)."""
 from __future__ import annotations
 from typing import Final
+import asyncio
 import os
 import time
 import logging
@@ -24,7 +25,7 @@ class WebSearchSkill(SkillBase):
     def __init__(self) -> None:
         super().__init__()
         self._client = None
-        self._cache: dict[str, tuple[float, di]] = {}
+        self._cache: dict[str, tuple[float, dict]] = {}
 
     def _cache_get(self, key: str) -> dict | None:
         item = self._cache.get(key)
@@ -32,8 +33,8 @@ class WebSearchSkill(SkillBase):
             try:
                 from src.jefrey.core.metrics import WEB_SEARCH_CACHE_HIT
                 WEB_SEARCH_CACHE_HIT.labels(mode="hit").inc()
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("ignorado (%s): %s", 'web_search.py', type(_e).__name__)
             return item[1]
         return None
 
@@ -52,8 +53,8 @@ class WebSearchSkill(SkillBase):
             try:
                 from src.jefrey.core.metrics import SKILL_INIT_TOTAL
                 SKILL_INIT_TOTAL.labels(skill="web_search", status="skip").inc()
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("ignorado (%s): %s", 'web_search.py', type(_e).__name__)
             # allow DDG fallback without Tavily
             self._client = None
           
@@ -63,16 +64,16 @@ class WebSearchSkill(SkillBase):
             try:
                 from src.jefrey.core.metrics import SKILL_INIT_TOTAL
                 SKILL_INIT_TOTAL.labels(skill="web_search", status="ok").inc()
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("ignorado (%s): %s", 'web_search.py', type(_e).__name__)
             return True
         except ImportError:
             logger.warning("tavily-python nao instalado: pip install tavily-python (usando fallback DuckDuckGo)")
             try:
                 from src.jefrey.core.metrics import SKILL_INIT_TOTAL
                 SKILL_INIT_TOTAL.labels(skill="web_search", status="skip").inc()
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("ignorado (%s): %s", 'web_search.py', type(_e).__name__)
             self._client = None
             return True
         except Exception as e:
@@ -81,28 +82,31 @@ class WebSearchSkill(SkillBase):
             try:
                 from src.jefrey.core.metrics import SKILL_INIT_TOTAL
                 SKILL_INIT_TOTAL.labels(skill="web_search", status="skip").inc()
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("ignorado (%s): %s", 'web_search.py', type(_e).__name__)
             return True
 
     def get_tools(self) -> list:
         # Always expose tools - fallback handles missing Tavily
         return [self.search, self.search_news, self.extract]
 
-    def _fallback_ddg(self, query: str, max_results: int = 5) -> dict:
+    def _fallback_ddg(self, query: str, max_results: int = 5, news: bool = False) -> dict:
+        """Busca sem chave (DuckDuckGo), em portugues do Brasil. Bloqueante: chame com asyncio.to_thread."""
         try:
             try:
-                from ddgs import DDDS  # type: ignore[import-not-found]  # renamed package (preferred)
+                from ddgs import DDGS  # type: ignore[import-not-found]  # renamed package (preferred)
             except ImportError:
                 from duckduckgo_search import DDGS  # type: ignore[import-not-found, no-redef]  # fallback compat
             with DDGS() as ddgs:
-                results = list(ddgs.text(query, max_results=max_results))
-            # normalize to Tavily-like format
-            norm = [{"title": r.get("title"), "url": r.get("href"), "content": r.get("body"), "score": 0.5} for r in results]
+                results = list(ddgs.news(query, region="br-pt", max_results=max_results) if news
+                               else ddgs.text(query, region="br-pt", max_results=max_results))
+            # normalize to Tavily-like format (com data quando houver: a resposta deve citar fonte e data)
+            norm = [{"title": r.get("title"), "url": r.get("href") or r.get("url"), "content": r.get("body"), "score": 0.5,
+                     "published": r.get("date"), "site": r.get("source")} for r in results]
             return {"query": query, "answer": None, "results": norm, "source": "duckduckgo"}
         except Exception as e:
             logger.warning(f"DuckDuckGo fallback falhou: {type(e).__name__}")
-            return {"error": str(e), "query": query, "results": []}
+            return {"error": "A busca na web nao respondeu agora.", "query": query, "results": []}
 
     @tool(description="Busca geral na web - retorna resposta direta + fontes")
     async def search(
@@ -158,9 +162,10 @@ class WebSearchSkill(SkillBase):
                 return out
             except Exception as e:
                 logger.warning(f"Tavily search falhou, fallback DDG: {type(e).__name__}")
-        # fallback
-        out = self._fallback_ddg(query, max_results=max_results)
-        self._cache_set(cache_key, out)
+        # fallback (em outra thread: a biblioteca bloqueia e travaria a API inteira)
+        out = await asyncio.to_thread(self._fallback_ddg, query, max_results)
+        if not out.get("error"):
+            self._cache_set(cache_key, out)
         return out
 
     @tool(description="Busca noticias recentes (ultimos 7 dias por padrao)")
@@ -203,24 +208,28 @@ class WebSearchSkill(SkillBase):
                 return out
             except Exception as e:
                 logger.warning(f"Tavily news falhou, fallback DDG: {type(e).__name__}")
-        out = self._fallback_ddg(query, max_results=max_results)
-        self._cache_set(cache_key, out)
+        out = await asyncio.to_thread(self._fallback_ddg, query, max_results, True)
+        if not out.get("results") and not out.get("error"):  # sem noticias recentes: tenta a busca comum
+            out = await asyncio.to_thread(self._fallback_ddg, query, max_results)
+        if not out.get("error"):
+            self._cache_set(cache_key, out)
         return out
 
-    @tool(description="Extrai conteudo completo de URLs (para ler artigos)")
+    @tool(description="Le o texto de paginas da web (ate 3 enderecos) para responder com base na fonte")
     async def extract(self, urls: list[str], user_id: str | None = None) -> dict:
-        """Extrai conteudo de URLs via Tavily ou erro se sem Tavily."""
-        _uid = user_id or "system"
-        if self._client:
+        """Le paginas com o leitor protegido (bloqueia enderecos internos, limita tamanho). Nao precisa de chave."""
+        from src.jefrey.core import webread
+
+        results, errors = [], []
+        for url in [u for u in (urls or []) if isinstance(u, str)][:3]:
             try:
-                try:
-                    result = self._client.extract(urls=urls, timeout=TIMEOUT_S)
-                except TypeError:
-                    result = self._client.extract(urls=urls)
-                return {"results": result.get("results", [])}
-            except Exception as e:
-                return {"error": str(e), "urls": urls}
-        return {"error": "Tavily nao configurado - extract indisponivel", "urls": urls}
+                p = await webread.fetch_page(url)
+                results.append({"url": p["url"], "title": p["title"], "content": p["text"][:6000], "date": p["fetched_at"]})
+            except webread.ReadError:
+                errors.append(url)
+        if not results:
+            return {"error": "Nao consegui ler essas paginas.", "urls": errors}
+        return {"results": results, "unreadable": errors}
 
 @skill("web_search", "Busca web via Tavily com fallback DuckDuckGo", tags=["web", "search"], requires_auth=True)
 class _WebSearchWrapper(WebSearchSkill):

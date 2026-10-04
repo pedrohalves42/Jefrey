@@ -1,0 +1,184 @@
+# =============================================================================
+# KUSTOMIZE PRODUCTION OVERLAY - Jefrey
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: jefrey
+
+bases:
+  - ../../base
+
+# Production-specific patches
+patches:
+  # Increase replicas for HA
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: jefrey-api
+        namespace: jefrey
+      spec:
+        replicas: 3
+    target:
+      kind: Deployment
+      name: jefrey-api
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: mcp-server
+        namespace: jefrey
+      spec:
+        replicas: 3
+    target:
+      kind: Deployment
+      name: mcp-server
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: frontend
+        namespace: jefrey
+      spec:
+        replicas: 3
+    target:
+      kind: Deployment
+      name: frontend
+
+  # Resource limits for production
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: jefrey-api
+        namespace: jefrey
+      spec:
+        template:
+          spec:
+            containers:
+              - name: api
+                resources:
+                  requests:
+                    cpu: "1000m"
+                    memory: "1Gi"
+                  limits:
+                    cpu: "4000m"
+                    memory: "4Gi"
+    target:
+      kind: Deployment
+      name: jefrey-api
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: mcp-server
+        namespace: jefrey
+      spec:
+        template:
+          spec:
+            containers:
+              - name: mcp
+                resources:
+                  requests:
+                    cpu: "1000m"
+                    memory: "1Gi"
+                  limits:
+                    cpu: "4000m"
+                    memory: "4Gi"
+    target:
+      kind: Deployment
+      name: mcp-server
+
+  # Production images
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: jefrey-api
+        namespace: jefrey
+      spec:
+        template:
+          spec:
+            containers:
+              - name: api
+                image: ghcr.io/your-org/jefrey-api:v1.6.0
+    target:
+      kind: Deployment
+      name: jefrey-api
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: mcp-server
+        namespace: jefrey
+      spec:
+        template:
+          spec:
+            containers:
+              - name: mcp
+                image: ghcr.io/your-org/jefrey-mcp:v1.6.0
+    target:
+      kind: Deployment
+      name: mcp-server
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: frontend
+        namespace: jefrey
+      spec:
+        template:
+          spec:
+            containers:
+              - name: frontend
+                image: ghcr.io/your-org/jefrey-frontend:v1.6.0
+    target:
+      kind: Deployment
+      name: frontend
+
+  # Enable Prometheus Operator ServiceMonitors (if using Prometheus Operator)
+  - patch: |-
+      apiVersion: monitoring.coreos.com/v1
+      kind: ServiceMonitor
+      metadata:
+        name: jefrey-api
+        namespace: monitoring
+      spec:
+        selector:
+          matchLabels:
+            app: jefrey
+            component: api
+        endpoints:
+          - port: http
+            path: /metrics
+            interval: 15s
+        namespaceSelector:
+          matchNames:
+            - jefrey
+    target:
+      kind: ServiceMonitor
+      name: jefrey-api
+
+# Common labels for production
+commonLabels:
+  environment: production
+  tier: frontend
+
+# Name prefix for production
+namePrefix: prod-
+
+# ConfigMap patches for production values
+configMapGenerator:
+  - name: jefrey-config
+    behavior: merge
+    literals:
+      - JEFREY_ENV=production
+      - JEFREY_DEBUG=false
+      - JEFREY_API__CORS_ORIGINS=https://jefrey.example.com
+      - JEFREY_TELEMETRY__ENABLED=true
+      - JEFREY_TELEMETRY__SAMPLE_RATE=0.1
+      - JEFREY_MCP_OAUTH_ENABLED=true
+
+# Secret generator (values injected via External Secrets Operator)
+# Don't commit actual secrets - use ExternalSecrets or SealedSecrets

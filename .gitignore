@@ -136,3 +136,25 @@ ui/tsconfig*.tsbuildinfo
 scripts/_*.py
 scripts/_*.json
 scripts/_audit_total.json
+
+# Segredos de producao e residuos locais
+.env.prod
+.env.*
+!.env.example
+*.ses
+*.bak
+tmp/
+evals/reports/
+config/llm.runtime.json
+backups/
+*.antes-da-restauracao-*
+dist/
+build/
+packaging/Output/
+*.spec
+
+# Chaves de assinatura (NUNCA no repositorio)
+update_private_key*
+*.pfx
+*.p12
+*.snk

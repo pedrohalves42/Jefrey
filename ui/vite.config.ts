@@ -10,8 +10,9 @@ export default defineConfig({
   plugins: [react()],
   resolve: { alias: { '@': path.resolve(__dirname, './src') } },
   server: {
-    port: 3001,
+    port: 5173,
     host: true,
+    strictPort: true,
     proxy: {
       '/health': 'http://localhost:8000',
       '/auth': 'http://localhost:8000',
@@ -22,11 +23,12 @@ export default defineConfig({
       '/stt': 'http://localhost:8000',
       '/tts': 'http://localhost:8000',
       '/connections': 'http://localhost:8000',
+      '/settings/llm': 'http://localhost:8000',
       '/ws': { target: 'ws://localhost:8000', ws: true }
     }
   },
   build: {
-    outDir: '../src/jefrey/static',
+    outDir: 'dist',
     emptyOutDir: true,
     chunkSizeWarningLimit: 600,
     rollupOptions: {
@@ -34,7 +36,6 @@ export default defineConfig({
         manualChunks: {
           vendor: ['react', 'react-dom', 'react-router-dom'],
           query: ['@tanstack/react-query'],
-          charts: ['recharts'],
           ui: ['clsx', 'tailwind-merge', 'class-variance-authority', 'lucide-react']
         }
       }

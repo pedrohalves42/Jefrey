@@ -1,0 +1,932 @@
+# =============================================================================
+# JEFREY — Production Docker Compose Stack (Phase 8)
+# =============================================================================
+# This file extends docker-compose.yml with production-hardened configuration:
+# - No source code mounts (uses baked images)
+# - Read-only root filesystems
+# - Resource limits & reservations
+# - Alertmanager for alert routing
+# - Automated backup (pg_dump + volume snapshots)
+# - Meta-monitoring (Prometheus monitoring Prometheus)
+# - Health check of health check (blackbox exporter)
+# - Security hardening (no-new-privileges, drop caps)
+# =============================================================================
+
+version: '3.8'
+
+name: jefrey-prod
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
+networks:
+  jefrey-internal:
+    name: jefrey-internal
+    driver: bridge
+    internal: true  # No external internet access
+    enable_ipv6: false
+  jefrey-external:
+    name: jefrey-external
+    driver: bridge
+    enable_ipv6: false
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
+volumes:
+  jefrey_pgdata:
+    name: jefrey_pgdata
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /var/lib/jefrey/postgres
+  jefrey_redisdata:
+    name: jefrey_redisdata
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /var/lib/jefrey/redis
+  jefrey_n8n_data:
+    name: jefrey_n8n_data
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /var/lib/jefrey/n8n
+  jefrey_prometheus_data:
+    name: jefrey_prometheus_data
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /var/lib/jefrey/prometheus
+  jefrey_grafana_data:
+    name: jefrey_grafana_data
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /var/lib/jefrey/grafana
+  jefrey_ollama:
+    name: jefrey_ollama
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /var/lib/jefrey/ollama
+  jefrey_alertmanager_data:
+    name: jefrey_alertmanager_data
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /var/lib/jefrey/alertmanager
+  jefrey_backup_data:
+    name: jefrey_backup_data
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /var/lib/jefrey/backups
+
+# =============================================================================
+# SECRETS (managed externally, e.g., Docker Swarm secrets or HashiCorp Vault)
+# =============================================================================
+secrets:
+  postgres_password:
+    external: true
+  redis_password:
+    external: true
+  api_secret_key:
+    external: true
+  hmac_key:
+    external: true
+  grafana_password:
+    external: true
+  oauth_client_secret:
+    external: true
+  eventbus_hmac_keys_json:
+    external: true
+
+# =============================================================================
+# CONFIGS (versioned configuration files)
+# =============================================================================
+configs:
+  prometheus_config:
+    file: ./docker/prometheus/prometheus.yml
+  prometheus_rules:
+    file: ./docker/prometheus/alerts.yml
+  prometheus_rules_jefrey_mcp:
+    file: ./prometheus/rules_jefrey_mcp.yaml
+  grafana_datasources:
+    file: ./docker/grafana/provisioning/datasources/datasource.yml
+  grafana_dashboards:
+    file: ./docker/grafana/provisioning/dashboards/dashboard.yml
+  grafana_dashboard_jefrey:
+    file: ./docker/grafana/dashboards/jefrey.json
+  alertmanager_config:
+    file: ./docker/alertmanager/alertmanager.yml
+  nginx_config:
+    file: ./docker/nginx/nginx.conf
+  blackbox_config:
+    file: ./docker/blackbox/blackbox.yml
+
+# =============================================================================
+# SERVICES
+# =============================================================================
+services:
+  # ---------------------------------------------------------------------------
+  # POSTGRESQL 16 + PGVECTOR (Primary Database)
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: ankane/pgvector:latest
+    container_name: jefrey-postgres
+    hostname: postgres
+    env_file: [.env.prod]
+    environment:
+      POSTGRES_USER: ${JEFREY_DATABASE__USER:-jefrey}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_DB: ${JEFREY_DATABASE__DB:-jefrey}
+    ports: []  # No exposed ports - internal network only
+    volumes:
+      - jefrey_pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${JEFREY_DATABASE__USER:-jefrey} -d ${JEFREY_DATABASE__DB:-jefrey}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+      - DAC_OVERRIDE
+    networks:
+      - jefrey-internal
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # REDIS 7 (Working Memory + Rate Limiting + Cache)
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7.2-alpine
+    container_name: jefrey-redis
+    hostname: redis
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - $${REDIS_PASSWORD}
+      - --maxmemory
+      - 512mb
+      - --maxmemory-policy
+      - allkeys-lru
+    env_file: [.env.prod]
+    environment:
+      REDIS_PASSWORD_FILE: /run/secrets/redis_password
+    ports: []
+    volumes:
+      - jefrey_redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $${REDIS_PASSWORD} ping | grep -q PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - jefrey-internal
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # JEFREY API (FastAPI on :8000)
+  # ---------------------------------------------------------------------------
+  jefrey-api:
+    image: ${JEFREY_API_IMAGE:-jefrey-api:prod}
+    container_name: jefrey-api
+    hostname: jefrey-api
+    working_dir: /app
+    env_file: [.env.prod]
+    environment:
+      JEFREY_DATABASE__URL: postgresql+psycopg://${JEFREY_DATABASE__USER:-jefrey}:$${POSTGRES_PASSWORD}@postgres:5432/${JEFREY_DATABASE__DB:-jefrey}
+      JEFREY_REDIS__URL: redis://:$${REDIS_PASSWORD}@redis:6379/0
+      JEFREY_DATABASE__HOST: postgres
+      JEFREY_REDIS__HOST: redis
+      JEFREY_API__SECRET_KEY_FILE: /run/secrets/api_secret_key
+      JEFREY_EVENTBUS__HMAC_KEY_FILE: /run/secrets/hmac_key
+      JEFREY_EVENTBUS__HMAC_KEYS_JSON_FILE: /run/secrets/eventbus_hmac_keys_json
+      JEFREY_OAUTH__CLIENT_SECRET_FILE: /run/secrets/oauth_client_secret
+      JEFREY_ENV: production
+      JEFREY_DEBUG: "false"
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    ports:
+      - "8000:8000"  # Only via external load balancer / ingress
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health',timeout=2).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        monitor: 30s
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+      - /app/.cache:size=1g,mode=1777
+    networks:
+      - jefrey-internal
+      - jefrey-external
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # MCP SERVER (Streamable-HTTP on :8001)
+  # ---------------------------------------------------------------------------
+  mcp-server:
+    image: ${JEFREY_MCP_IMAGE:-jefrey-mcp:prod}
+    container_name: jefrey-mcp
+    hostname: jefrey-mcp
+    working_dir: /app
+    env_file: [.env.prod]
+    environment:
+      JEFREY_DATABASE__URL: postgresql+psycopg://${JEFREY_DATABASE__USER:-jefrey}:$${POSTGRES_PASSWORD}@postgres:5432/${JEFREY_DATABASE__DB:-jefrey}
+      JEFREY_REDIS__URL: redis://:$${REDIS_PASSWORD}@redis:6379/0
+      JEFREY_DATABASE__HOST: postgres
+      JEFREY_REDIS__HOST: redis
+      JEFREY_MCP__HOST: 0.0.0.0
+      JEFREY_MCP__PORT: 8001
+      JEFREY_MCP__TRANSPORT: streamable-http
+      JEFREY_MCP__STATELESS_HTTP: "true"
+      JEFREY_MCP_OAUTH_ENABLED: "true"
+      JEFREY_EVENTBUS__HMAC_KEY_FILE: /run/secrets/hmac_key
+      JEFREY_EVENTBUS__HMAC_KEYS_JSON_FILE: /run/secrets/eventbus_hmac_keys_json
+      JEFREY_ENV: production
+      JEFREY_DEBUG: "false"
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    ports:
+      - "8001:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8001/health',timeout=2).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        monitor: 30s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+      - /app/.cache:size=1g,mode=1777
+    networks:
+      - jefrey-internal
+      - jefrey-external
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # OLLAMA (LLM Inference)
+  # ---------------------------------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: jefrey-ollama
+    hostname: ollama
+    ports: []
+    volumes:
+      - jefrey_ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - jefrey-internal
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # N8N (Workflow Automation)
+  # ---------------------------------------------------------------------------
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: jefrey-n8n
+    hostname: n8n
+    ports: []
+    env_file: [.env.prod]
+    environment:
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER_FILE: /run/secrets/n8n_basic_auth_user
+      N8N_BASIC_AUTH_PASSWORD_FILE: /run/secrets/n8n_basic_auth_password
+      N8N_HOST: "0.0.0.0"
+      N8N_PORT: "5678"
+      N8N_PROTOCOL: "http"
+      N8N_SECURE_COOKIE: "false"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_HEALTHY_CHECK_PATH: "/healthz"
+      WEBHOOK_URL: "https://${JEFREY_PUBLIC_DOMAIN:-jefrey.example.com}/n8n/"
+    volumes:
+      - jefrey_n8n_data:/home/node/.n8n
+    depends_on:
+      mcp-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:5678/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - jefrey-internal
+      - jefrey-external
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # PROMETHEUS (Metrics Collection)
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: jefrey-prometheus
+    hostname: prometheus
+    ports: []
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=90d'
+      - '--storage.tsdb.retention.size=50GB'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+      - '--web.route-prefix=/'
+    volumes:
+      - jefrey_prometheus_data:/prometheus
+      - prometheus_config:/etc/prometheus/prometheus.yml:ro
+      - prometheus_rules:/etc/prometheus/alerts.yml:ro
+      - prometheus_rules_jefrey_mcp:/etc/prometheus/rules_jefrey_mcp.yml:ro
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.25'
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    networks:
+      - jefrey-internal
+      - jefrey-external
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # ALERTMANAGER (Alert Routing & Deduplication)
+  # ---------------------------------------------------------------------------
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: jefrey-alertmanager
+    hostname: alertmanager
+    ports: []
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--data.retention=120d'
+      - '--web.route-prefix=/'
+    volumes:
+      - jefrey_alertmanager_data:/alertmanager
+      - alertmanager_config:/etc/alertmanager/alertmanager.yml:ro
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9093/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    networks:
+      - jefrey-internal
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # GRAFANA (Visualization)
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: jefrey-grafana
+    hostname: grafana
+    ports: []
+    env_file: [.env.prod]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD_FILE: /run/secrets/grafana_password
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/jefrey.json
+      GF_INSTALL_PLUGINS: grafana-piechart-panel
+      GF_SERVER_ROOT_URL: https://${JEFREY_PUBLIC_DOMAIN:-jefrey.example.com}/grafana/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+      - /app/.cache:size=128m,mode=1777
+    volumes:
+      - grafana_datasources:/etc/grafana/provisioning/datasources:ro
+      - grafana_dashboards:/etc/grafana/provisioning/dashboards:ro
+      - grafana_dashboard_jefrey:/var/lib/grafana/dashboards/jefrey.json:ro
+      - jefrey_grafana_data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - jefrey-internal
+      - jefrey-external
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # BLACKBOX EXPORTER (Health check of health check - meta-monitoring)
+  # ---------------------------------------------------------------------------
+  blackbox:
+    image: prom/blackbox-exporter:v0.25.0
+    container_name: jefrey-blackbox
+    hostname: blackbox
+    ports: []
+    command:
+      - '--config.file=/etc/blackbox/blackbox.yml'
+    volumes:
+      - blackbox_config:/etc/blackbox/blackbox.yml:ro
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9115/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.05'
+          memory: 32M
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    networks:
+      - jefrey-internal
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # NODE EXPORTER (Host metrics)
+  # ---------------------------------------------------------------------------
+  node-exporter:
+    image: prom/node-exporter:v1.8.0
+    container_name: jefrey-node-exporter
+    hostname: node-exporter
+    pid: host
+    network_mode: host
+    command:
+      - '--path.rootfs=/host'
+      - '--collector.systemd'
+      - '--collector.processes'
+      - '--no-collector.wifi'
+    volumes:
+      - /:/host:ro,rslave
+      - /proc:/host/proc:ro,rslave
+      - /sys:/host/sys:ro,rslave
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYS_RESOURCE
+      - CAP_DAC_READ_SEARCH
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # CADVISOR (Container metrics)
+  # ---------------------------------------------------------------------------
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.0
+    container_name: jefrey-cadvisor
+    hostname: cadvisor
+    ports: []
+    command:
+      - '--housekeeping_interval=30s'
+      - '--docker_only=true'
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    networks:
+      - jefrey-internal
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # BACKUP SERVICE (pg_dump + volume snapshots)
+  # ---------------------------------------------------------------------------
+  backup:
+    image: postgres:16-alpine
+    container_name: jefrey-backup
+    hostname: backup
+    env_file: [.env.prod]
+    environment:
+      PGPASSWORD_FILE: /run/secrets/postgres_password
+      BACKUP_RETENTION_DAYS: "30"
+      BACKUP_SCHEDULE: "0 2 * * *"  # Daily at 2 AM UTC
+      BACKUP_PATH: /backups
+    volumes:
+      - jefrey_backup_data:/backups
+      - ./scripts/backup.sh:/backup.sh:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        apk add --no-cache cronie gzip &&
+        echo "$BACKUP_SCHEDULE /backup.sh >> /backups/backup.log 2>&1" > /etc/crontabs/root &&
+        crond -f -L /dev/stdout
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - jefrey-internal
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # JEFREY BRAIN2 (Background processing)
+  # ---------------------------------------------------------------------------
+  jefrey-brain2:
+    image: ${JEFREY_API_IMAGE:-jefrey-api:prod}
+    container_name: jefrey-brain2
+    command: ["python", "-m", "src.jefrey.brain2.service"]
+    env_file: [.env.prod]
+    environment:
+      JEFREY_REDIS__URL: redis://:$${REDIS_PASSWORD}@redis:6379/0
+      JEFREY_REDIS__HOST: redis
+      JEFREY_LLM__MODEL: ${JEFREY_LLM__MODEL:-qwen3:1.7b}
+      JEFREY_LLM__BASE_URL: http://ollama:11434
+      JEFREY_EMBEDDINGS__BASE_URL: http://ollama:11434
+      JEFREY_ENV: production
+    depends_on:
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "grep -qa brain2 /proc/1/cmdline || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    networks:
+      - jefrey-internal
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # FRONTEND (Nginx static serving)
+  # ---------------------------------------------------------------------------
+  frontend:
+    image: ${JEFREY_FRONTEND_IMAGE:-jefrey-frontend:prod}
+    container_name: jefrey-frontend
+    hostname: frontend
+    ports: []
+    depends_on:
+      jefrey-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8080/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.05'
+          memory: 32M
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    networks:
+      - jefrey-internal
+      - jefrey-external
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # NGINX REVERSE PROXY (TLS termination, rate limiting, WAF)
+  # ---------------------------------------------------------------------------
+  nginx:
+    image: nginx:alpine
+    container_name: jefrey-nginx
+    hostname: nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - nginx_config:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./docker/certs:/etc/nginx/certs:ro
+      - ./docker/nginx/www:/var/www:ro
+    depends_on:
+      - jefrey-api
+      - frontend
+      - grafana
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+      - /var/cache/nginx:size=128m,mode=1777
+      - /var/run:size=64m,mode=1777
+    networks:
+      - jefrey-external
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"

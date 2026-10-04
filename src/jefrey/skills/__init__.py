@@ -103,8 +103,8 @@ class SkillRegistry:
             import asyncio
             try:
                 asyncio.run(skill.shutdown())
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("ignorado (%s): %s", '__init__.py', type(_e).__name__)
             for tool in skill.get_tools():
                 self._tools.pop(tool.name, None)
             del self._skills[name]
@@ -171,8 +171,8 @@ def tool(name: str | None = None, description: str | None = None):
                 if _mod is not None and not hasattr(_mod, "Any"):
                     setattr(_mod, "Any", Any)
                 schema.model_rebuild()
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("ignorado (%s): %s", '__init__.py', type(_e).__name__)
 
         # B1c fix: descriptor para bind correto de self (Fluent 19, SWE cap8)
         # Sem isto, @tool em metodo gera `missing 1 required positional argument: 'self'`
@@ -201,7 +201,9 @@ def tool(name: str | None = None, description: str | None = None):
 def load_skills() -> int:
     """Importa modulos de skills para trigger dos decorators. Idempotente."""
     mods = [
+        "src.jefrey.skills.essentials",
         "src.jefrey.skills.notes",
+        "src.jefrey.skills.reminders",
         "src.jefrey.skills.automation",
         "src.jefrey.skills.calendar",
         "src.jefrey.skills.email",

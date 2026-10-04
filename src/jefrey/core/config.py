@@ -1,17 +1,15 @@
 """Configuracao centralizada com Pydantic Settings v2."""
 from __future__ import annotations
 import threading
-from pathlib import Path
 from typing import Literal, Optional
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-import yaml
 
 class LLMSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="JEFREY_LLM__", extra="ignore")
     
     provider: Literal["openai", "anthropic", "ollama"] = "ollama"
-    model: str = "qwen2.5:0.5b"
+    model: str = "qwen3:1.7b"
     temperature: float = 0.7
     max_tokens: int = 4000
     base_url: Optional[str] = "http://ollama:11434"
@@ -30,7 +28,8 @@ class LLMSettings(BaseSettings):
 class EmbeddingsSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="JEFREY_EMBEDDINGS__", extra="ignore")
     
-    model: str = "nomic-embed-text"
+    provider: Literal["ollama", "openai"] = "ollama"
+    model: str = "embeddinggemma"
     base_url: str = "http://ollama:11434"
     api_key: str = ""
 
@@ -46,10 +45,10 @@ class MemoryLongTermSettings(BaseSettings):
     provider: Literal["chromadb", "sqlite-vec", "postgres", "postgresql"] = "chromadb"
     persist_directory: str = "data/chroma_db"
     collection_name: str = "jefrey_memory"
-    embedding_model: str = "nomic-embed-text"
+    embedding_model: str = "embeddinggemma"
     embedding_dim: int = 768  # nomic-embed-text via Ollama = 768 dims (1536 quebra pgvector)
     top_k: int = 5
-    similarity_threshold: float = 0.7
+    similarity_threshold: float = 0.5
 
 class MemorySettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="JEFREY_MEMORY__", extra="ignore")
@@ -93,6 +92,8 @@ class GoogleCalendarSettings(BaseSettings):
     enabled: bool = False
     credentials_file: str = "config/credentials/google_calendar.json"
     token_file: str = "config/tokens/google_calendar_token.json"
+    client_id: str = ""
+    client_secret: str = ""
 
 class GmailSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="JEFREY_INTEGRATIONS__GMAIL__", extra="ignore")
@@ -100,6 +101,8 @@ class GmailSettings(BaseSettings):
     enabled: bool = False
     credentials_file: str = "config/credentials/gmail.json"
     token_file: str = "config/tokens/gmail_token.json"
+    client_id: str = ""
+    client_secret: str = ""
 
 class GoogleDriveSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="JEFREY_INTEGRATIONS__GOOGLE_DRIVE__", extra="ignore")
@@ -107,6 +110,8 @@ class GoogleDriveSettings(BaseSettings):
     enabled: bool = False
     credentials_file: str = "config/credentials/google_drive.json"
     token_file: str = "config/tokens/google_drive_token.json"
+    client_id: str = ""
+    client_secret: str = ""
 
 class NotionSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="JEFREY_INTEGRATIONS__NOTION__", extra="ignore")
@@ -148,6 +153,61 @@ class LoggingSettings(BaseSettings):
     file: str = "logs/jefrey.log"
     format: str = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 
+
+# =============================================================================
+# TELEMETRY SETTINGS (P6.2 Diff 5) — OpenTelemetry / Prometheus
+# =============================================================================
+class TelemetrySettings(BaseSettings):
+    """Configuração de observabilidade (tracing + metrics)."""
+
+    model_config = SettingsConfigDict(env_prefix="JEFREY_TELEMETRY__", extra="ignore")
+
+    # OpenTelemetry
+    enabled: bool = False
+    service_name: str = "jefrey-mcp"
+    otlp_endpoint: str = ""          # ex: http://jaeger:4318/v1/traces
+    otlp_headers: str = ""           # JSON string: '{"Authorization": "Bearer xxx"}'
+    sample_rate: float = 1.0         # 0.0 a 1.0
+    enable_console: bool = False     # export to console (dev)
+
+    # Prometheus /metrics endpoint
+    metrics_enabled: bool = True
+    metrics_path: str = "/metrics"
+
+
+# =============================================================================
+# ALERTING SETTINGS (P6.3) — Thresholds for alerting rules
+# =============================================================================
+class AlertingSettings(BaseSettings):
+    """Thresholds and config for Prometheus alerting rules."""
+
+    model_config = SettingsConfigDict(env_prefix="JEFREY_ALERTING__", extra="ignore")
+
+    # Health thresholds
+    health_check_interval_sec: int = 30
+    service_down_for_sec: int = 60
+
+    # Performance thresholds
+    tool_latency_p95_warn_sec: float = 10.0
+    tool_latency_p95_crit_sec: float = 30.0
+    tool_error_rate_warn: float = 0.1      # 10%
+    throughput_drop_ratio: float = 0.01    # 99% drop
+
+    # Security thresholds
+    oauth_invalid_rate_warn_per_min: float = 10.0
+    oauth_missing_rate_warn_per_min: float = 20.0
+    rate_limit_deny_rate_warn_per_min: float = 5.0
+    tools_blocked_rate_warn_per_min: float = 5.0
+    hitl_pending_accumulation_warn: int = 10
+
+    # Operations thresholds
+    cache_hit_rate_warn: float = 0.5       # 50%
+    bridge_error_rate_warn_per_min: float = 2.0
+    bridge_timeout_rate_warn_per_min: float = 1.0
+    bridge_hitl_reject_rate_warn_per_min: float = 0.5
+    llm_latency_p95_warn_sec: float = 30.0
+    memory_latency_p95_warn_sec: float = 5.0
+
 class DatabaseSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="JEFREY_DATABASE__", extra="ignore")
 
@@ -158,7 +218,8 @@ class DatabaseSettings(BaseSettings):
     # SECURITY NOTE: password default e 'jefrey' para DEV. Em producao, via env var.
     # Senha obrigatoria — definir via JEFREY_DATABASE__PASSWORD no .env.
     # Sem ela, o middleware de auth recusa todas as requests (CIPHER-018/025).
-    password: str = Field(alias="JEFREY_DATABASE__PASSWORD")
+    # Vazia e aceita SO quando `url` (SQLite local) esta definida; para Postgres o dsn exige senha (fail-closed).
+    password: str = Field(default="", alias="JEFREY_DATABASE__PASSWORD")
     db: str = "jefrey"
     pool_size: int = 10
     max_overflow: int = 20
@@ -168,6 +229,8 @@ class DatabaseSettings(BaseSettings):
     def dsn(self) -> str:
         if self.url:
             return self.url
+        if not self.password:
+            raise ValueError("JEFREY_DATABASE__PASSWORD e obrigatoria para usar PostgreSQL (defina no .env)")
         return f"postgresql+psycopg://{self.user}:{self.password}@{self.host}:{self.port}/{self.db}"
 
 class RedisSettings(BaseSettings):
@@ -240,7 +303,8 @@ class AgentSettings(BaseSettings):
 class MCPServerSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="JEFREY_MCP__", extra="ignore")
 
-    host: str = "0.0.0.0"
+    # fora do Docker o MCP escuta so neste computador (127.0.0.1); dentro do container precisa de 0.0.0.0
+    host: str = "0.0.0.0" if __import__("os").path.exists("/.dockerenv") else "127.0.0.1"
     port: int = 8001
     transport: str = "streamable-http"
     path: str = "/mcp"
@@ -308,7 +372,7 @@ class AppSettings(BaseSettings):
     # Reproducao C1a: JEFREY_ENV=prod JEFREY_EVENTBUS__HMAC_KEY= python -c "from src.jefrey.eventbus.signing import _get_hmac_key; _get_hmac_key()" -> RuntimeError
     env: Literal["dev", "prod"] = Field(default="dev", validation_alias="JEFREY_ENV")
     name: str = "Jefrey"
-    version: str = "0.1.0"
+    version: str = "0.9.0"
     user_name: str = "Usuario"
     debug: bool = Field(default=False, validation_alias="JEFREY_DEBUG")
 
@@ -349,6 +413,8 @@ class AppSettings(BaseSettings):
     api: APISettings = APISettings()
     mcp: MCPServerSettings = MCPServerSettings()
     mcp_client: MCPClientSettings = MCPClientSettings()
+    telemetry: TelemetrySettings = TelemetrySettings()
+    alerting: AlertingSettings = AlertingSettings()
     avatar: AvatarSettings = AvatarSettings()
 
 # Instancia global (lazy) -- thread-safe

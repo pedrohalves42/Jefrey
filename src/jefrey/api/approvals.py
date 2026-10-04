@@ -42,6 +42,12 @@ _PENDING_FIELDS = (
 # DEFAULT para requests sem X-User-Id (compatibilidade com clientes legados)
 _DEFAULT_USER = "anonymous"
 
+def _parent_authenticated(request: Request) -> bool:
+    """True se o FastAPIAuthMiddleware (pai) ja validou o Bearer desta requisicao."""
+    return bool(getattr(request.state, "oauth2_client", None)) and getattr(request.state, "user_id", None) not in (
+        None, "", "anonymous", "system")
+
+
 class _UserContextMiddleware(BaseHTTPMiddleware):
     """Extrai user_id do header X-User-Id e injeta no request.state.
 
@@ -51,6 +57,11 @@ class _UserContextMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next):
+        # Se o servidor principal ja autenticou um usuario (JWT/OAuth2), essa identidade
+        # vale e o header X-User-Id e IGNORADO (evita personificacao). Apenas o token de
+        # servico (chave configurada: n8n/CLI) age em nome de X-User-Id.
+        if _parent_authenticated(request) and getattr(request.state, "oauth2_client", None) != "configured-secret":
+            return await call_next(request)
         request.state.user_id = request.headers.get("X-User-Id", _DEFAULT_USER)
         return await call_next(request)
 
@@ -58,6 +69,9 @@ class _AuthMiddleware(BaseHTTPMiddleware):
     """CIPHER-019: exige Bearer token em TODAS as rotas do app de aprovacoes."""
 
     async def dispatch(self, request, call_next):
+        # Identidade ja validada pelo servidor principal (JWT/OAuth2/chave de servico).
+        if _parent_authenticated(request):
+            return await call_next(request)
         secret = get_settings().api.secret_key
         auth = request.headers.get("Authorization", "")
         # SECURITY (CIPHER-003): comparacao timing-safe para evitar timing attack
@@ -105,8 +119,8 @@ async def decide(request):
             _risk = getattr(_row, "risk_level", None) or (isinstance(_row, dict) and _row.get("risk_level"))
             if _risk in ("high", "critical"):
                 logger.warning("CIPHER-111: auto-approval %s risk=%s by user_id=%s (review RBAC)", approval_id, _risk, user_id)
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.debug("ignorado (%s): %s", 'approvals.py', type(_e).__name__)
     ok = ApprovalManager().decide(approval_id, decision, decided_by, user_id=user_id)
     if not ok:
         return JSONResponse(

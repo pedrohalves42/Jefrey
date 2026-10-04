@@ -1,0 +1,163 @@
+# =============================================================================
+# ALERTMANAGER CONFIGURATION - Jefrey Production
+# Routes alerts to receivers with deduplication, grouping, and inhibition
+# =============================================================================
+
+global:
+  resolve_timeout: 5m
+  # SMTP settings for email notifications (configure via secrets)
+  smtp_smarthost: '${SMTP_HOST:-smtp.example.com}:587'
+  smtp_from: 'alerts@jefrey.example.com'
+  smtp_auth_username: '${SMTP_USER:-alerts@jefrey.example.com}'
+  smtp_auth_password: '${SMTP_PASSWORD}'
+  smtp_require_tls: true
+
+  # Slack webhook (configure via secret)
+  # slack_api_url: '${SLACK_WEBHOOK_URL}'
+
+# Templates for notification formatting
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# Root route - all alerts enter here
+route:
+  group_by: ['alertname', 'job', 'severity']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: 'default'
+  routes:
+    # Critical alerts - immediate notification, no grouping delay
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      group_wait: 0s
+      group_interval: 1m
+      repeat_interval: 1h
+      continue: true
+
+    # Security alerts - dedicated receiver
+    - match:
+        slo: security
+      receiver: 'security-alerts'
+      group_wait: 10s
+      group_interval: 5m
+      repeat_interval: 2h
+      continue: true
+
+    # Performance alerts - lower urgency
+    - match:
+        slo: latency
+      receiver: 'performance-alerts'
+      group_wait: 1m
+      group_interval: 10m
+      repeat_interval: 6h
+
+    # Availability alerts
+    - match:
+        slo: availability
+      receiver: 'critical-alerts'
+      group_wait: 0s
+      group_interval: 2m
+      repeat_interval: 30m
+
+    # Rate limit alerts
+    - match:
+        slo: rate_limit
+      receiver: 'performance-alerts'
+      group_wait: 1m
+      group_interval: 10m
+      repeat_interval: 6h
+
+    # EventBus alerts
+    - match:
+        slo: eventbus
+      receiver: 'performance-alerts'
+      group_wait: 1m
+      group_interval: 10m
+      repeat_interval: 6h
+
+    # Config alerts
+    - match:
+        slo: config
+      receiver: 'critical-alerts'
+      group_wait: 0s
+      group_interval: 1m
+      repeat_interval: 1h
+
+# Inhibition rules - suppress redundant alerts
+inhibit_rules:
+  # If service is down, don't fire latency/error alerts for that service
+  - source_match:
+      alertname: 'JefreyServiceDown'
+    target_match_re:
+      alertname: 'Jefrey.*'
+    equal: ['job', 'instance']
+
+  # If config is invalid, suppress other config-related alerts
+  - source_match:
+      alertname: 'JefreyConfigInvalid'
+    target_match_re:
+      alertname: 'JefreyConfig.*'
+    equal: ['job']
+
+# Receivers
+receivers:
+  # Default receiver - all alerts
+  - name: 'default'
+    email_configs:
+      - to: '${ALERT_EMAIL_DEFAULT:-ops@jefrey.example.com}'
+        send_resolved: true
+        headers:
+          subject: '[Jefrey] {{ .GroupLabels.alertname }} - {{ .Status }}'
+    # slack_configs:
+    #   - api_url: '${SLACK_WEBHOOK_URL}'
+    #     channel: '#jefrey-alerts'
+    #     send_resolved: true
+    #     title: 'Jefrey Alert'
+    #     text: '{{ range .Alerts }}{{ .Annotations.summary }}\n{{ end }}'
+
+  # Critical alerts - page on-call
+  - name: 'critical-alerts'
+    email_configs:
+      - to: '${ALERT_EMAIL_CRITICAL:-oncall@jefrey.example.com}'
+        send_resolved: true
+        headers:
+          subject: '[CRITICAL] [Jefrey] {{ .GroupLabels.alertname }} - {{ .Status }}'
+    # slack_configs:
+    #   - api_url: '${SLACK_WEBHOOK_URL_CRITICAL}'
+    #     channel: '#jefrey-critical'
+    #     send_resolved: true
+    #     title: '[CRITICAL] Jefrey Alert'
+    # pagerduty_configs:
+    #   - service_key: '${PAGERDUTY_KEY}'
+    #     severity: critical
+
+  # Security alerts - security team
+  - name: 'security-alerts'
+    email_configs:
+      - to: '${ALERT_EMAIL_SECURITY:-security@jefrey.example.com}'
+        send_resolved: true
+        headers:
+          subject: '[SECURITY] [Jefrey] {{ .GroupLabels.alertname }} - {{ .Status }}'
+    # slack_configs:
+    #   - api_url: '${SLACK_WEBHOOK_URL_SECURITY}'
+    #     channel: '#jefrey-security'
+    #     send_resolved: true
+
+  # Performance alerts - ops team (batched)
+  - name: 'performance-alerts'
+    email_configs:
+      - to: '${ALERT_EMAIL_PERFORMANCE:-ops@jefrey.example.com}'
+        send_resolved: true
+        headers:
+          subject: '[PERFORMANCE] [Jefrey] {{ .GroupLabels.alertname }} - {{ .Status }}'
+    # slack_configs:
+    #   - api_url: '${SLACK_WEBHOOK_URL}'
+    #     channel: '#jefrey-performance'
+    #     send_resolved: true
+
+# Silence webhook for external silencing (e.g., from CI/CD during deployments)
+webhook_configs:
+  - url: 'http://alertmanager:9093/api/v1/silences'
+    send_resolved: true

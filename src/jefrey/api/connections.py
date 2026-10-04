@@ -1,7 +1,6 @@
 """Connections 1-clique — F6-3 (Axiom #1 FAIL-CLOSED, #2 ISOLAMENTO, #4 PERSISTENCIA, CIPHER-032)"""
 from __future__ import annotations
 import os
-from urllib.parse import urlparse
 import re
 import logging
 import httpx
@@ -10,17 +9,8 @@ from fastapi import APIRouter, Request, HTTPException
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/connections", tags=["connections"])
 
-_BLOCKED_HOSTS = ("127.", "10.", "172.", "192.168.", "169.254.", "::1", "localhost", "postgres", "jefrey-", "host.docker.internal")
-
-def _is_blocked_url(url: str) -> bool:
-    try:
-        # CIPHER-118b: http://::1/ sem [] tem hostname None, mas eh SSRF local -> bloqueia pelo raw
-        if "::1" in url.lower():
-            return True
-        host = (urlparse(url).hostname or "").lower()
-        return any(host == b.rstrip(".") or host.startswith(b) or b in host for b in _BLOCKED_HOSTS)
-    except Exception:
-        return True
+# CIPHER-306: implementacao unica (por IP resolvido) em core/connections.py
+from src.jefrey.core.connections import _is_blocked_url  # noqa: E402
 
 _URL_RE = re.compile(r"^https?://[^\s]+$", re.IGNORECASE)
 
@@ -53,8 +43,8 @@ async def browse(request: Request):
     try:
         from src.jefrey.core.audit import get_audit_logger
         get_audit_logger().log(thread_id="connections", tool_name="browse", actor_role="user", risk="low", decision="allow", user_id=user_id, detail={"url": url, "via": "direct"})
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.debug("ignorado (%s): %s", 'connections.py', type(_e).__name__)
     return {"ok": True, "url": url, "message": f"Navegar: {url} — abra em nova aba (MCP browser_control pronto quando workflow n8n configurado)", "via": "direct"}
 
 @router.post("/send")
@@ -130,8 +120,8 @@ async def search(request: Request):
                     r2 = await fn(query) if callable(fn) else None
                     if r2:
                         return {"ok": True, "query": query, "results": r2 if isinstance(r2, list) else [r2]}
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("ignorado (%s): %s", 'connections.py', type(_e).__name__)
         logger.warning(f"connections/search falhou: {e}")
         raise HTTPException(status_code=502, detail=f"web_search falhou: {e}")
 
@@ -214,8 +204,8 @@ async def n8n_trigger(request: Request):
                 try:
                     MCP_LATENCY.labels(server="n8n").observe(elapsed)
                     MCP_CALLS.labels(server="n8n", status="success" if r.status_code < 400 else "error").inc()
-                except Exception:
-                    pass
+                except Exception as _e:
+                    logger.debug("ignorado (%s): %s", 'connections.py', type(_e).__name__)
             try:
                 data = r.json()
             except Exception:
@@ -227,8 +217,8 @@ async def n8n_trigger(request: Request):
                     risk="low", decision="allow", user_id=user_id,
                     detail={"event_type": event_type, "n8n_status": r.status_code, "elapsed": round(elapsed, 3)}
                 )
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("ignorado (%s): %s", 'connections.py', type(_e).__name__)
             if r.status_code >= 400:
                 if r.status_code == 404:
                     raise HTTPException(status_code=502, detail=f"n8n webhook nao encontrado em {n8n_url} - workflow 'Jefrey Event Router' inativo. Importe n8n/workflows/jefrey-event-router.json em http://localhost:5678")
@@ -242,8 +232,8 @@ async def n8n_trigger(request: Request):
             try:
                 MCP_LATENCY.labels(server="n8n").observe(elapsed)
                 MCP_CALLS.labels(server="n8n", status="error").inc()
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("ignorado (%s): %s", 'connections.py', type(_e).__name__)
         logger.warning(f"n8n/trigger falhou ({n8n_url}): {e}")
         if "jefrey-n8n" in n8n_url:
             try:
@@ -257,8 +247,8 @@ async def n8n_trigger(request: Request):
                     try: data2 = r2.json()
                     except: data2 = {"raw": r2.text[:1000]}
                     return {"ok": r2.status_code < 400, "status": r2.status_code, "data": data2, "elapsed": round(elapsed2, 3), "via": "n8n-fallback"}
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("ignorado (%s): %s", 'connections.py', type(_e).__name__)
         raise HTTPException(status_code=502, detail=f"n8n indisponivel ({n8n_url}): {e} - verifique docker compose up n8n e workflow jefrey-events ativo")
 
 @router.get("/n8n/health")

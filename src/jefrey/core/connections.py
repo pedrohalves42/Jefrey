@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from fastapi import HTTPException
+
 import logging
 import re
-from typing import Optional
 
 from urllib.parse import urlparse
 
@@ -33,50 +34,59 @@ _BLOCKED_HOSTS = (
 _URL_RE = re.compile(r"^https?://")
 
 
+# Nomes de servico do docker-compose e aliases internos (nao resolvem fora da rede docker,
+# mas resolvem DENTRO do container -> precisam ser bloqueados por nome tambem).
+_BLOCKED_NAMES = {
+    "localhost", "postgres", "redis", "ollama", "mcp-server", "api", "frontend", "brain2",
+    "n8n", "grafana", "prometheus", "alertmanager", "host.docker.internal", "gateway.docker.internal",
+    "metadata", "metadata.google.internal",
+}
+_BLOCKED_SUFFIXES = (".localhost", ".local", ".internal", ".lan", ".home.arpa")
+
+
+def _ip_is_internal(ip) -> bool:
+    return (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
+            or ip.is_multicast or ip.is_unspecified
+            or (getattr(ip, "ipv4_mapped", None) is not None and _ip_is_internal(ip.ipv4_mapped)))
+
+
 def _is_blocked_url(url: str) -> bool:
-    """Check if URL should be blocked for SSRF prevention.
+    """CIPHER-306: bloqueio SSRF por IP RESOLVIDO (nao por prefixo de texto).
 
-    Returns True if URL matches any blocked pattern.
-    Fail-closed: if URL parsing fails, block it.
+    Antes: comparacao de strings deixava passar 0.0.0.0, IP decimal (2130706433), nomes de
+    servico (redis, ollama, mcp-server) e DNS que aponta para 127.0.0.1 (localtest.me), e
+    bloqueava IPs publicos como 172.217.x (Google) por engano.
+    Fail-closed: erro de parse/resolucao -> bloqueia.
     """
+    import ipaddress
+    import socket
+
     try:
-        # Normalize: strip ::1 with brackets for ::1 check
-        lower = url.lower()
-        if "::1" in lower:
+        if "::1" in url.lower():
             return True
-
         parsed = urlparse(url)
-        host = (parsed.hostname or "").lower()
+        if parsed.scheme not in ("http", "https"):
+            return True
+        host = (parsed.hostname or "").lower().rstrip(".")
         if not host:
-            return True  # No hostname → block
-
-        # Check against blocked patterns
-        for pattern in _BLOCKED_HOSTS:
-            # Exact match or prefix match for dotted octets
-            if host == pattern.rstrip("."):
+            return True
+        if host in _BLOCKED_NAMES or host.startswith("jefrey-") or host.endswith(_BLOCKED_SUFFIXES):
+            return True
+        if "." not in host and ":" not in host and not host.isdigit():
+            return True  # nome curto = rede interna/docker
+        try:
+            infos = socket.getaddrinfo(host, parsed.port or (443 if parsed.scheme == "https" else 80),
+                                       proto=socket.IPPROTO_TCP)
+        except (socket.gaierror, UnicodeError):
+            return True
+        if not infos:
+            return True
+        for info in infos:
+            ip = ipaddress.ip_address(info[4][0].split("%")[0])
+            if _ip_is_internal(ip):
                 return True
-            if host.startswith(pattern):
-                return True
-            if pattern in host:
-                return True
-
-        # Also block if port suggests internal service
-        if parsed.port:
-            # Common internal ports
-            internal_ports = (22, 23, 25, 53, 67, 68, 110, 143, 443, 993, 995, 3306, 5432, 6379, 8080, 27017)
-            if parsed.port in internal_ports:
-                # Additional check: is the host an internal IP?
-                try:
-                    import ipaddress
-                    ip = ipaddress.ip_address(host.split(".")[0] + "." + host.split(".")[1] + "." + host.split(".")[2] + "." + host.split(".")[3] if "." in host else host)
-                    # This is a simplistic check; real implementation would be more robust
-                    pass
-                except ValueError:
-                    pass
-
         return False
     except Exception:
-        # Fail-closed: if anything goes wrong, block the URL
         return True
 
 

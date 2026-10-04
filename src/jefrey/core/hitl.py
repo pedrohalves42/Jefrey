@@ -15,7 +15,6 @@ import logging
 import time
 import uuid
 import datetime
-from typing import Any
 
 from src.jefrey.core.rbac import as_role  # noqa: F401  (mantém API simétrica)
 from src.jefrey.core.metrics import APPROVALS_CREATED, APPROVALS_DECIDED
@@ -42,7 +41,6 @@ class ApprovalManager:
     ) -> str:
         from src.jefrey.core.db import get_db
         from src.jefrey.core.models import Approval
-        from sqlalchemy import func
 
         aid = str(uuid.uuid4())
         now = datetime.datetime.now(datetime.timezone.utc)
@@ -128,16 +126,19 @@ class ApprovalManager:
         now = datetime.datetime.now(datetime.timezone.utc)
         count = 0
         with get_db() as s:
-            rows = s.query(Approval).filter(
-                Approval.status == "pending",
-                Approval.expires_at.isnot(None),
-                Approval.expires_at < now,
-            ).all()
-            for r in rows:
-                r.status = "expired"
-                r.decided_at = now
-                APPROVALS_DECIDED.labels(decision="expired", tool_name=r.tool_name).inc()
-                count += 1
+            try:
+                rows = s.query(Approval).filter(
+                    Approval.status == "pending",
+                    Approval.expires_at.isnot(None),
+                    Approval.expires_at < now,
+                ).all()
+                for r in rows:
+                    r.status = "expired"
+                    r.decided_at = now
+                    APPROVALS_DECIDED.labels(decision="expired", tool_name=r.tool_name).inc()
+                    count += 1
+            except Exception as e:
+                logger.warning("expire_due failed: %s", e)
         if count:
             logger.info("approval(s) expirada(s): %d", count)
         return count

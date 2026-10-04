@@ -1,139 +1,53 @@
-# Jefrey – Assistente Pessoal de IA Avançado
+# Jefrey
 
-> **P1.1 READY 2026-08-31 - docs/JEFREY-AUDIT/acceptance_p1.1.md - 92.0%/67.2%/60.4% - Skills READY (drive.file + web_search fallback + OAuth hardening)**
+Assistente pessoal de IA que **roda no seu computador (Windows)**, feito para que **uma pessoa de 70 anos** instale, configure e use sozinha.
+Conversa **por voz** (um botão grande: toque, fale, ouça), lembra de você, faz lembretes que avisam no Windows, **aprende** o que é importante
+(você revisa), **estuda sozinho** os assuntos do seu interesse e pode **responder o seu WhatsApp** (extensão do Chrome) nas conversas que você liberar.
+Para pensar, usa a **nuvem** (OpenRouter, Claude ou ChatGPT, com um botão que leva ao site e volta) ou um **modelo local**.
 
-> **P0 Accepted 2026-08-31 - docs/JEFREY-AUDIT/acceptance_p0_to_p1.md - 86.0%/62.8%/56.5% - gate P0->P1 PASS**
+> Estado, o que foi verificado e o que só você pode testar: [docs/COMO_O_JEFREY_FUNCIONA.md](docs/COMO_O_JEFREY_FUNCIONA.md) e [docs/PLANO_EXECUCAO_SESSOES.md](docs/PLANO_EXECUCAO_SESSOES.md).
 
-## Visão Geral
+## Instalar (para quem usa)
+Baixe e execute **Jefrey-Setup.exe** (não precisa de administrador, nem de Docker). Leia e aceite os termos, diga o seu nome, aperte **Conectar com 1 clique** e fale.
+Atalho para chamar de qualquer programa: **Ctrl+Alt+J**.
 
-**Jefrey** é um assistente pessoal de IA projetado para profissionais e empreendedores que precisam de um agente inteligente capaz de:
-- Conversar em linguagem natural (texto ou voz)
-- Manter memória de curto e longo prazo com buscas semânticas
-- Executar tarefas automatizadas via *tools* (notas, buscas na web, calendário, e‑mail, workflows)
-- Integrar facilmente com serviços externos (Google Calendar, Gmail, Notion, Composio, etc.)
-- Ser extensível via um registro de *skills* plug‑and‑play
+## Rodar em desenvolvimento
+Python **3.12** (`C:\Users\Pedro\jv312` neste projeto) e Node 20+.
 
-O projeto está estruturado para **escalabilidade**, **performance** e **facilidade de implantação** (Docker, CI/CD). Ideal para ser comercializado como SaaS ou como solução on‑premise.
-
----
-
-## Principais Funcionalidades
-
-| Área | Funcionalidade |
-|------|----------------|
-| **Conversação** | Interface CLI com streaming, suporte a voz (opcional) via Whisper/Porcupine |
-| **Memória** | Curto‑prazo (buffer de mensagens) + longo prazo (ChromaDB + embeddings cache) |
-| **Skills** | Notas, Busca Web (Tavily), Calendário (Google), E‑mail (Gmail), Automação (workflows) |
-| **Orquestração** | LangGraph State Machine com checkpoints, tracing via `langsmith` |
-| **Eventos** | Bus de eventos assíncrono para logging, hooks e extensibilidade |
-| **Deploy** | Docker multi‑stage, `docker‑compose`, CI básico (GitHub Actions) |
-
----
-
-## Instalação Rápida
-
-> **Requisitos**: Python 3.11+, `git`, Docker (opcional)
-
-1. **Clone o repositório**
-   ```bash
-   git clone https://github.com/pedro/jefrey.git
-   cd jefrey
-   ```
-2. **Instale dependências**
-   ```bash
-   # Ambiente virtual opcional
-   python -m venv .venv && source .venv/bin/activate
-   pip install -r requirements.txt   # produção
-   pip install -r requirements-dev.txt   # desenvolvimento
-   ```
-3. **Configure variáveis de ambiente**
-   ```bash
-   cp .env.example .env
-   # Edite .env e adicione suas chaves (OpenAI, Tavily, Google, etc.)
-   ```
-4. **Suba a infra e valide - Tracer Bullet 6.4 (fresh machine)**
-   ```bash
-   python scripts/setup.py --dev --non-interactive --force
-   docker compose up -d --wait
-   python scripts/run_tests.py --quick   # 2 PASS ~40s (smoke)
-   # ou completo:
-   python scripts/run_tests.py --ci      # 5 PASS ~115s
-   python scripts/compute_readiness.py   # 86.0% impl (P0) / 92.0% com --status '{"Skills":"READY"}' (P1.1) / 62.8% prod / 56.5% comercial
-   ```
-   > Aceite: `docs/JEFREY-AUDIT/acceptance_p0_to_p1.md` - gate P0->P1 PASS
-5. **Inicie o assistente**
-   ```bash
-   jefrey chat   # comando instalado pelo pyproject
-   # ou
-   python -m src.jefrey.interfaces.cli chat
-   ```
-
----
-
-## Configuração detalhada
-
-O arquivo principal de configuração é `config/settings.yaml`. Ele pode ser customizado ou sobrescrito via variáveis de ambiente (`JEFREY_...`).
-
-- **LLM** – escolha entre `openai`, `anthropic` ou `ollama`.
-- **Memória** – `chromadb` (persistente) ou `sqlite-vec`.
-- **Voice** – habilite STT/TTS e *wake word*.
-- **Integrações** – habilite Google Calendar e Gmail (necessita OAuth, veja o script `setup.py`).
-
----
-
-## Uso Básico (CLI)
-
-```text
-/jefrey> Olá, quem é você?
-🤖 Jefrey: Você é o Jefrey, um assistente pessoal avançado...
-
-/jefrey> Salva nota: título 'Reunião', conteúdo 'Discutir Q4', tags ['#trabalho']
-✅ Nota salva com ID: a1b2c3d4...
-
-/jefrey> Busca na web: últimas novidades IA generativa
-[resposta da busca] ...
-
-/jefrey> /skills   # lista skills e ferramentas disponíveis
-
-/jefrey> /health   # verifica saúde do LLM e da memória
+```bash
+python -m src.jefrey.native                 # servidor + tela + bandeja (http://127.0.0.1:8000)
+cd ui && npm ci && npm run build:api        # reconstrói a tela servida pelo programa
 ```
 
----
-
-## Arquitetura do Projeto
-
-```
- jefrey/
- ├─ config/                 # YAML de settings + prompts
- ├─ data/
- │   ├─ chroma_db/          # Persistência da memória vetorial
- │   └─ workflows/          # JSON de workflows de automação
- ├─ logs/                    # Logs estruturados (JSON opcional)
- ├─ src/
- │   ├─ jefrey/
- │   │   ├─ core/          # Config, memória, eventos, agente
- │   │   ├─ skills/        # Implementação de skills
- │   │   └─ interfaces/    # CLI, (futuro: UI, API)
- ├─ scripts/                # setup, smoke_test, CI helpers
- ├─ Dockerfile               # Build multi‑stage
- ├─ docker-compose.yml       # Orquestração simples
- ├─ pyproject.toml           # Build system + dependências
- └─ README.md                # Este documento
+## Testes
+```bash
+python -m pytest tests -q --ignore=tests/e2e --ignore=tests/smoke     # servidor (hermético: SQLite + Redis em memória)
+cd ui && npm test && npx tsc --noEmit -p .                             # interface e extensão do WhatsApp (página simulada)
+python evals/run_evals.py --only leigos                                # bateria de 17 pedidos de pessoa comum (precisa de cérebro de nuvem)
 ```
 
----
+## Gerar o instalador
+`packaging\build_exe.bat C:\caminho\python3.12.exe` (assina se `JEFREY_SIGN_PFX`/`JEFREY_SIGN_PASS` existirem). Veja [docs/DISTRIBUICAO.md](docs/DISTRIBUICAO.md).
 
-## Roadmap de Funcionalidades Pagas
+## Estrutura
+```
+src/jefrey/
+  api/        rotas (chat, conexões, aprendizado, estudos, resumo, WhatsApp, privacidade, atualizações, voz)
+  core/       agente, persona, aprendizado, recordação, estudos, leitor protegido, WhatsApp, atualização assinada, privacidade
+  native/     lançador, bandeja, atalho global
+  legal/      termos de uso e política de privacidade (rascunhos para revisão)
+  skills/     notas, essenciais, agenda, e-mail, web, Drive, automação
+extensions/whatsapp/   extensão do Chrome (WhatsApp Web)
+ui/           interface (React), testes com vitest
+evals/        avaliação do produto rodando (inclui a bateria de leigos)
+packaging/    PyInstaller + Inno Setup
+site/         página de apresentação (a preencher)
+```
 
-| Versão | Feature | Descrição |
-|--------|---------|-----------|
-| **1.0** | **Assistente Comercial** | Interface web com autenticação SSO, multi‑usuário e billing por token. |
-| **1.1** | **Integrações Premium** | Notion, Asana, Zapier (via Composio). |
-| **1.2** | **Voice Premium** | TTS via ElevenLabs, wake‑word avançado com modelo customizado. |
-| **2.0** | **Fine‑tuning** | Fine‑tune modelo LLM interno (Ollama) por cliente. |
-
----
+## Documentação
+[Como funciona](docs/COMO_O_JEFREY_FUNCIONA.md) · [Plano por sessões](docs/PLANO_EXECUCAO_SESSOES.md) · [Distribuição e venda](docs/DISTRIBUICAO.md) ·
+[Google](docs/GOOGLE.md) · [Extensão do WhatsApp](extensions/whatsapp/README.md) · [Auditoria de segurança](docs/AUDITORIA_CIPHER_2026-10.md) ·
+[Licenças de terceiros](docs/LICENCAS_TERCEIROS.md) · [Modelos locais](docs/MODELOS.md) · [Modelo de ameaças](docs/THREAT_MODEL.md)
 
 ## Licença
-
-Este projeto está licenciado sob a **MIT License** – veja o arquivo `LICENSE` para detalhes.
+O repositório está sob MIT; **a decisão de licença para a venda é do dono** (ver [docs/DISTRIBUICAO.md](docs/DISTRIBUICAO.md), item 5).

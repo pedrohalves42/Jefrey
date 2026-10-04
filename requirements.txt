@@ -10,21 +10,17 @@ pyyaml>=6.0,<7
 python-dotenv>=1.0,<2
 
 # LLM & Agent Framework
-langchain-core>=0.2,<1
-langchain-openai>=0.1,<1
-langchain-anthropic>=0.1,<1
-langchain-ollama>=0.1,<1
-langgraph>=0.2,<1
+langchain-core>=1.2.22,<2
 
 # Memory & Embeddings
-chromadb>=0.5,<1
-langchain-chroma>=0.1,<1
+chromadb>=1.0,<2
 tiktoken>=0.7,<1
 
 # Database & Vector Store (Fase P1)
 sqlalchemy>=2.0,<3
 pgvector>=0.2,<1
 psycopg[binary]>=3.1,<4
+asyncpg>=0.29,<1
 redis>=5.0,<6
 alembic>=1.13,<2
 
@@ -44,7 +40,6 @@ orjson>=3.9,<4
 
 # Fase 2 - OpenAI Agents SDK & Responses API + checkpointer Postgres
 openai-agents>=0.1,<2
-langgraph-checkpoint-postgres>=2,<4
 
 # Observabilidade (logging estruturado JSON)
 # Nota: o pacote no PyPI é 'python-json-logger' (fornece o módulo 'pythonjsonlogger').
@@ -61,8 +56,6 @@ google-auth-oauthlib>=1.1
 google-auth>=2.0
 duckduckgo-search>=6.0
 ddgs>=9.0  # N1 rename fallback
-langchain>=0.2.0
-langchain-community>=0.2.0
 asyncio-mqtt>=0.13.0
 click>=8.0.0
 uvicorn>=0.34.0
@@ -80,3 +73,5 @@ elevenlabs>=1.12.0
 pyttsx3>=2.90
 onnxruntime>=1.17.0
 av>=10.0.0
+pystray>=0.19; sys_platform == "win32"  # icone na bandeja (LGPL-3.0, ligacao dinamica)
+pillow>=10

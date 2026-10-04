@@ -4,14 +4,14 @@ build-backend = "poetry.core.masonry.api"
 
 [project]
 name = "jefrey"
-version = "0.1.0"
+version = "0.9.0"
 description = "Jefrey - Assistente pessoal IA com memória avançada e habilidades orientadas a eventos"
 authors = [
     {name = "Jefrey Team", email = "contato@jefrey.ai"}
 ]
 license = {text = "MIT"}
+requires-python = ">=3.12,<3.13"
 readme = "README.md"
-requires-python = "==3.12"
 keywords = ["AI", "LLM", "assistant", "memory", "agent", "skills"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -25,16 +25,10 @@ classifiers = [
 ]
 
 dependencies = [
-    "langgraph>=0.2.0",
-    "langchain>=0.2.0",
-    "langchain-community>=0.2.0",
-    "langchain-openai>=0.2.0",
-    "langchain-anthropic>=0.2.0",
-    "langchain-ollama>=0.2.0",
     "pydantic>=2.8.0",
     "pydantic-settings>=2.8.0",
     "python-dotenv>=1.0.0",
-    "chromadb>=0.5.0",
+    "chromadb>=1.0,<2",
     "pyyaml>=6.0",
     "python-json-logger>=2.0.7",
     "asyncio-mqtt>=0.13.0",
@@ -75,8 +69,8 @@ dev = [
 ]
 
 [project.scripts]
-jefrey = "src.jefrey.cli:main"
-jefrey-cli = "src.jefrey.cli:main"
+jefrey = "src.jefrey.cli:app"
+jefrey-cli = "src.jefrey.cli:app"
 
 [tool.poetry]
 package-dir = "src"
@@ -120,11 +114,6 @@ profile = "black"
 line_length = 100
 target_version = "py312"
 
-[tool.vercel]
-# Força Python EXATAMENTE 3.12 — sem ranges, sem ">= 3.12"
-python = "3.12"
-entrypoint = "src.jefrey.api.main:app"
-
 [tool.pytest.ini_options]
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "function"
@@ -153,16 +142,10 @@ test = ["pytest", "pytest-asyncio", "pytest-cov"]
 lint = ["ruff", "mypy", "black", "isort"]
 format = ["black", "isort"]
 all = [
-    "langgraph",
-    "langchain",
-    "langchain-community",
-    "langchain-openai",
-    "langchain-anthropic",
-    "langchain-ollama",
     "pydantic",
     "pydantic-settings",
     "python-dotenv",
-    "chromadb",
+    "chromadb>=1.0,<2",
     "pyyaml",
     "python-json-logger",
     "asyncio-mqtt",

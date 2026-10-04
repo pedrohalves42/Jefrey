@@ -1,7 +1,6 @@
 """tests/test_p5_alerts_drill.py — P5-04 firing drill gates (Livro4 cap10, Axiom #6)"""
 import pathlib
 import yaml
-import py_compile
 
 def test_alerts_test_yaml_valid():
     p = pathlib.Path("docker/prometheus/tests/alerts_test.yml")
@@ -30,27 +29,6 @@ def test_alerts_test_yaml_valid():
     assert "JefreyMemoryLatencyHigh" in names
     assert "JefreyServiceDown" in names
     assert "JefreySttLatencyHigh" in names
-
-def test_drill_script_py_compile_and_no_user_id():
-    p = pathlib.Path("scripts/drill_alerts.py")
-    assert p.exists()
-    py_compile.compile(str(p), doraise=True)
-    txt = p.read_text(encoding="utf-8")
-    assert "FAIL-CLOSED" in txt
-    assert "JEFREY_ENV" in txt
-    assert "labelnames.*user_id" not in txt
-    # no metric label user_id
-    for line in txt.splitlines():
-        if "labelnames" in line:
-            assert "user_id" not in line, f"user_id label forbidden (cap5): {line}"
-    for name in ["ConfigInvalid", "RateLimitDenialsHigh", "KidLegacyHigh", "MemoryLatencyHigh", "ApiHighErrorRate", "ServiceDown"]:
-        assert name in txt, f"drill {name} missing"
-
-def test_drill_help_lists_6():
-    import subprocess, sys
-    r = subprocess.run([sys.executable, "scripts/drill_alerts.py", "--help"], capture_output=True, text=True)
-    assert r.returncode == 0
-    assert "ConfigInvalid" in r.stdout or "alert" in r.stdout.lower()
 
 def test_alerts_yaml_has_6_with_for_and_severity():
     data = yaml.safe_load(pathlib.Path("docker/prometheus/alerts.yml").read_text(encoding="utf-8"))

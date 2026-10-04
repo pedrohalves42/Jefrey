@@ -34,7 +34,7 @@ memory:
     collection_name: "jefrey_memory"
     embedding_model: "text-embedding-3-small"
     top_k: 5
-    similarity_threshold: 0.7
+    similarity_threshold: 0.5
 
 # Interface de Voz
 voice:

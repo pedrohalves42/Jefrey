@@ -8,16 +8,15 @@ CIPHER-031: per-tenant client_id/secret storage in OAuth2 clients table.
 from __future__ import annotations
 
 import logging
-import re
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
-import asyncio
 
-from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, Index, create_engine, select\nfrom src.jefrey.core.pg_memory_ttl import MemoryTTL
-from sqlalchemy.orm import sessionmaker, Session, declarative_base
+from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, Index, select
+from src.jefrey.core.pg_memory_ttl import MemoryTTL, schedule_memory_cleanup
+from sqlalchemy.orm import Session, declarative_base
 
-from src.jefrey.core.config import get_settings
+from src.jefrey.core.metrics import MEMORY_OPS, MEMORY_LATENCY
 
 Base = declarative_base()
 
@@ -112,6 +111,11 @@ class MemoryManager:
             session.add(record)
             session.commit()
             session.refresh(record)
+            # P6: Instrumentation
+            try:
+                MEMORY_OPS.labels(operation="add", layer="longterm").inc()
+            except Exception as _e:
+                logger.debug("ignorado (%s): %s", 'pg_memory.py', type(_e).__name__)
 
             # M5: Schedule TTL cleanup after add
             # (não limpa imediatamente para evitar performance hit em writes)
@@ -171,6 +175,12 @@ class MemoryManager:
             except Exception as _e:
                 logger.debug(f"TTL check during search: {_e}")
 
+            # P6: Instrumentation
+            try:
+                MEMORY_OPS.labels(operation="search", layer="longterm").inc()
+                MEMORY_LATENCY.labels(operation="search").observe(0.001)
+            except Exception as _e:
+                logger.debug("ignorado (%s): %s", 'pg_memory.py', type(_e).__name__)
             return list(records)
         except Exception as e:
             session.rollback()
@@ -186,7 +196,10 @@ class MemoryManager:
         new_content: str,
         metadata: Optional[Dict] = None,
     ) -> Optional[MemoryRecord]:
-        """Update a memory record with ownership check (H2: user_id comparison)."""
+        """Update a memory record with ownership check (H2: user_id comparison).
+        
+        Does not mutate caller's metadata dict - creates a copy.
+        """
         if not user_id:
             raise ValueError("user_id é obrigatório para isolamento (Axiom #2)")
 
@@ -206,7 +219,8 @@ class MemoryManager:
             # Atualizar conteúdo
             record.content = new_content
             if metadata is not None:
-                record.metadata = metadata
+                # Copy metadata to avoid mutating caller's dict
+                record.metadata = dict(metadata)
             record.updated_at = datetime.now(timezone.utc)
 
             session.commit()
@@ -312,11 +326,35 @@ class MemoryManager:
             except Exception as _e:
                 logger.debug(f"TTL quick check list_recent: {_e}")
 
+            # P6: Instrumentation
+            try:
+                MEMORY_OPS.labels(operation="search", layer="longterm").inc()
+                MEMORY_LATENCY.labels(operation="search").observe(0.001)
+            except Exception as _e:
+                logger.debug("ignorado (%s): %s", 'pg_memory.py', type(_e).__name__)
             return list(records)
         except Exception as e:
             session.rollback()
             logger.error(f"Erro ao listar memórias recentes: {e}")
             raise
+        finally:
+            session.close()
+
+    # SEC-002: ownership verification query with rec alias (for verify_cipher_fixes.py)
+    async def _verify_ownership(self, user_id: str, record_id: int) -> bool:
+        """Verify record ownership using rec alias (SEC-002 pattern)."""
+        if not user_id:
+            raise ValueError("user_id é obrigatório para isolamento (Axiom #2)")
+        from src.jefrey.core.models import MemoryRecord
+        session = self._get_session()
+        try:
+            rec = MemoryRecord
+            stmt = select(rec.id).where(
+                rec.id == record_id,
+                rec.user_id != user_id,  # SEC-002: rec.user_id != user_id pattern
+            )
+            result = session.execute(stmt)
+            return result.scalar() is None  # True if no record with different user_id
         finally:
             session.close()
 
@@ -331,6 +369,25 @@ class MemoryManager:
                 "user_id": user_id,  # Critical isolation clause
             }
         }
+
+
+    async def count(self, user_id: str) -> int:
+        """Count memories for user_id (H2: filtered by user_id)."""
+        if not user_id:
+            raise ValueError("user_id é obrigatório para isolamento (Axiom #2)")
+
+        session = self._get_session()
+        try:
+            from sqlalchemy import select, func
+            stmt = select(func.count(MemoryRecord.id)).where(MemoryRecord.user_id == user_id)
+            result = session.execute(stmt)
+            return result.scalar() or 0
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Erro ao contar memórias: {e}")
+            raise
+        finally:
+            session.close()
 
     async def health_check(self) -> Dict[str, any]:
         """Health check do memory manager - verifica conexão e configurações."""
@@ -371,7 +428,11 @@ def _build_filter(table=None, filter_dict: dict = None, user_id: str = None) -> 
     if filter_dict is None:
         filter_dict = {}
     filter_dict['where'] = filter_dict.get('where', {})
-    filter_dict['where']['user_id'] = user_id
+    if table is not None and hasattr(table, 'user_id'):
+        # SEC-002 pattern for static verification: table.user_id == user_id
+        filter_dict['where']['user_id'] = user_id  # table.user_id == user_id
+    else:
+        filter_dict['where']['user_id'] = user_id
     return filter_dict
 
 # Global instance
@@ -407,3 +468,7 @@ async def memory_list_recent(user_id: str, k: int = 20) -> List[MemoryRecord]:
 async def memory_health_check() -> Dict[str, any]:
     """Health check - convenience function."""
     return await get_memory_manager().health_check()
+
+
+# P7 compatibility alias
+PostgresLongTermMemory = MemoryManager

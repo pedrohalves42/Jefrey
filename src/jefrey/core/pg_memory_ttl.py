@@ -71,7 +71,7 @@ class MemoryTTL:
             if hasattr(session_manager, 'execute'):
                 # SQLAlchemy session - executar delete
                 from sqlalchemy import delete
-                from src.jefrey.core.models import MemoryTable
+                from src.jefrey.core.models import MemoryRecord as MemoryTable  # CIPHER-312: MemoryTable nao existe
                 
                 # Construir query de delete com user_id e idade
                 stmt = delete(MemoryTable).where(

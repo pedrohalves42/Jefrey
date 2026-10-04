@@ -1,0 +1,165 @@
+# =============================================================================
+# KUSTOMIZE STAGING OVERLAY - Jefrey
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: jefrey
+
+bases:
+  - ../../base
+
+# Staging-specific patches
+patches:
+  # Reduced replicas for cost
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: jefrey-api
+        namespace: jefrey
+      spec:
+        replicas: 1
+    target:
+      kind: Deployment
+      name: jefrey-api
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: mcp-server
+        namespace: jefrey
+      spec:
+        replicas: 1
+    target:
+      kind: Deployment
+      name: mcp-server
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: frontend
+        namespace: jefrey
+      spec:
+        replicas: 1
+    target:
+      kind: Deployment
+      name: frontend
+
+  # Smaller resource limits for staging
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: jefrey-api
+        namespace: jefrey
+      spec:
+        template:
+          spec:
+            containers:
+              - name: api
+                resources:
+                  requests:
+                    cpu: "250m"
+                    memory: "256Mi"
+                  limits:
+                    cpu: "1000m"
+                    memory: "1Gi"
+    target:
+      kind: Deployment
+      name: jefrey-api
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: mcp-server
+        namespace: jefrey
+      spec:
+        template:
+          spec:
+            containers:
+              - name: mcp
+                resources:
+                  requests:
+                    cpu: "250m"
+                    memory: "256Mi"
+                  limits:
+                    cpu: "1000m"
+                    memory: "1Gi"
+    target:
+      kind: Deployment
+      name: mcp-server
+
+  # Staging images (latest dev build)
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: jefrey-api
+        namespace: jefrey
+      spec:
+        template:
+          spec:
+            containers:
+              - name: api
+                image: ghcr.io/your-org/jefrey-api:dev-latest
+    target:
+      kind: Deployment
+      name: jefrey-api
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: mcp-server
+        namespace: jefrey
+      spec:
+        template:
+          spec:
+            containers:
+              - name: mcp
+                image: ghcr.io/your-org/jefrey-mcp:dev-latest
+    target:
+      kind: Deployment
+      name: mcp-server
+
+  # Disable OAuth in staging for easier testing
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: mcp-server
+        namespace: jefrey
+      spec:
+        template:
+          spec:
+            containers:
+              - name: mcp
+                env:
+                  - name: JEFREY_MCP_OAUTH_ENABLED
+                    value: "false"
+    target:
+      kind: Deployment
+      name: mcp-server
+
+# Common labels for staging
+commonLabels:
+  environment: staging
+  tier: frontend
+
+# Name prefix for staging
+namePrefix: staging-
+
+# ConfigMap patches for staging values
+configMapGenerator:
+  - name: jefrey-config
+    behavior: merge
+    literals:
+      - JEFREY_ENV=staging
+      - JEFREY_DEBUG=true
+      - JEFREY_API__CORS_ORIGINS=https://staging.jefrey.example.com,http://localhost:3000
+      - JEFREY_TELEMETRY__ENABLED=true
+      - JEFREY_TELEMETRY__SAMPLE_RATE=1.0
+      - JEFREY_MCP_OAUTH_ENABLED=false
+
+# Secret generator (uses staging secrets)
+# Staging secrets stored in separate Vault path or SealedSecrets

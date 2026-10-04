@@ -1,2 +1,4 @@
-"""CLI client para a API do Jefrey (Fase P5)."""
-from __future__ import annotations
+"""Jefrey CLI package."""
+from src.jefrey.cli.main import app
+
+__all__ = ["app"]

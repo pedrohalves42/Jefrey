@@ -1,5 +1,0 @@
-{
-  "python": {
-    "entrypoint": "src.jefrey.api.main:app"
-  }
-}

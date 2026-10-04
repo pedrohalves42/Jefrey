@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +28,9 @@ class RateLimiter:
     async def _get_redis(self):
         if self._redis is None:
             try:
-                import redis.asyncio as redis
+                from src.jefrey.core.redis_factory import async_client
 
-                self._redis = redis.from_url(
+                self._redis = async_client(
                     self.redis_url, socket_connect_timeout=2, socket_timeout=2
                 )
                 await self._redis.ping()
@@ -44,9 +43,9 @@ class RateLimiter:
     def _get_redis_sync(self):
         if self._redis_sync is None:
             try:
-                import redis as redis_sync
+                from src.jefrey.core.redis_factory import sync_client
 
-                self._redis_sync = redis_sync.from_url(
+                self._redis_sync = sync_client(
                     self.redis_url, socket_connect_timeout=2, socket_timeout=2
                 )
                 self._redis_sync.ping()

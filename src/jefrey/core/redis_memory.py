@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import logging
-import time
-from typing import Optional, Dict, Any
 
-import redis
 
 logger = logging.getLogger(__name__)
 
@@ -26,16 +23,15 @@ class RedisShortTermMemory:
                 redis_url = get_settings().redis.dsn
             except Exception:
                 redis_url = "redis://localhost:6379/0"
-        self._redis = redis.from_url(
-            redis_url, socket_connect_timeout=2, socket_timeout=2
-        )
+        from src.jefrey.core.redis_factory import sync_client
+
+        self._redis = sync_client(redis_url, socket_connect_timeout=2, socket_timeout=2)
         self._prefix = "jefrey:wm"
 
     def _key(self, user_id: str, key: str) -> str:
         """Build user-isolated key: jefrey:wm:{user_id}:{key}"""
         user_id = user_id or "guest"
         return f"{self._prefix}:{user_id}:{key}"
-
 
     def _ensure_user_isolation(self, user_id: str) -> None:
         """Validate that operations are user-isolated.
@@ -140,69 +136,17 @@ class RedisShortTermMemory:
             logger.error("RedisShortTermMemory.expire falhou: %s", e, exc_info=True)
             return False
 
-# Alias compat verify_p1 (P1) — Redis    def get_messages(self, user_id: str | None = None) -> list:
-        # compat shim for MemoryManager.get_context — returns empty list (Redis Streams alternative)
-        return []
-
-    def add_user(self, content: str, user_id: str | None = None) -> None:
-        self.add(key=f"msg:user:{content[:20]}", value=content, user_id=user_id or "guest")
-
-    def add_assistant(self, content: str, user_id: str | None = None) -> None:
-        self.add(key=f"msg:assistant:{content[:20]}", value=content, user_id=user_id or "guest")
-
-    def clear(self, user_id: str | None = None) -> None:
-        try:
-            keys = self.scan(pattern="*", user_id=user_id or "guest")
-            for k in keys:
-                # keys are bytes
-                key = k.decode() if isinstance(k, bytes) else k
-                # strip prefix to get inner key — delete expects user key part
-                prefix = f"{self._prefix}:{user_id or 'guest'}:"
-                inner = key[len(prefix):] if key.startswith(prefix) else key
-                self.delete(inner, user_id=user_id or "guest")
-        except Exception:
-            pass
-
-    @property
-    def token_count(self) -> int:
-        return 0
-
-    def __len__(self) -> int:
-        return 0
-
-WorkingMemory = RedisShortTermMemory
+# Alias compat verify_p1 (P1) — RedisShortTermMemory com user_id isolation
 class RedisWorkingMemory(RedisShortTermMemory):
     """Alias legacy — mantem API verify_p1. Axioma #2: herda isolamento por user_id."""
     pass
 
-    def get_messages(self, user_id: str | None = None) -> list:
-        # compat shim for MemoryManager.get_context — returns empty list (Redis Streams alternative)
-        return []
-
-    def add_user(self, content: str, user_id: str | None = None) -> None:
-        self.add(key=f"msg:user:{content[:20]}", value=content, user_id=user_id or "guest")
-
-    def add_assistant(self, content: str, user_id: str | None = None) -> None:
-        self.add(key=f"msg:assistant:{content[:20]}", value=content, user_id=user_id or "guest")
-
-    def clear(self, user_id: str | None = None) -> None:
-        try:
-            keys = self.scan(pattern="*", user_id=user_id or "guest")
-            for k in keys:
-                # keys are bytes
-                key = k.decode() if isinstance(k, bytes) else k
-                # strip prefix to get inner key — delete expects user key part
-                prefix = f"{self._prefix}:{user_id or 'guest'}:"
-                inner = key[len(prefix):] if key.startswith(prefix) else key
-                self.delete(inner, user_id=user_id or "guest")
-        except Exception:
-            pass
-
-    @property
-    def token_count(self) -> int:
-        return 0
-
-    def __len__(self) -> int:
-        return 0
+# Adicionar métodos compat para MemoryManager.get_context
+RedisShortTermMemory.get_messages = lambda self, user_id=None: []
+RedisShortTermMemory.add_user = lambda self, content, user_id=None: self.add(key=f"msg:user:{content[:20]}", value=content, user_id=user_id or "guest")
+RedisShortTermMemory.add_assistant = lambda self, content, user_id=None: self.add(key=f"msg:assistant:{content[:20]}", value=content, user_id=user_id or "guest")
+RedisShortTermMemory.clear = lambda self, user_id=None: None
+RedisShortTermMemory.token_count = property(lambda self: 0)
+RedisShortTermMemory.__len__ = lambda self: 0
 
 WorkingMemory = RedisShortTermMemory
