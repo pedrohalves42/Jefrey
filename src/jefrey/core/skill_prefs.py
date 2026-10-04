@@ -45,9 +45,9 @@ def set_enabled(name: str, enabled: bool) -> set[str]:
     return disabled
 
 
-def enabled_tools(skills: list, catalog: dict) -> dict:
-    """{nome: ferramenta} so das skills ligadas e das ferramentas classificadas no catalogo."""
-    off = load_disabled()
+def enabled_tools(skills: list, catalog: dict, unavailable: "set[str] | None" = None) -> dict:
+    """{nome: ferramenta} so das skills ligadas, utilizaveis e classificadas no catalogo."""
+    off = load_disabled() | set(unavailable or ())
     out: dict = {}
     for sk in skills:
         if sk.metadata.name in off:

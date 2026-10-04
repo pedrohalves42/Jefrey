@@ -77,6 +77,10 @@ CATALOG: dict[str, ToolPolicy] = {
     "files_list": _p("low", "Listar arquivos locais"),
     "files_read": _p("low", "Ler arquivo local"),
     "files_write": _p("medium", "Gravar arquivo local"),
+    # lembretes (dados do proprio usuario)
+    "set_reminder": _p("medium", "Criar lembrete"),
+    "list_reminders": _p("low", "Listar lembretes"),
+    "cancel_reminder": _p("medium", "Cancelar lembrete"),
 }
 
 

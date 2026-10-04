@@ -111,6 +111,8 @@ def run_checks(p: Optional[Probes] = None) -> list[Check]:
             essential = {"postgres", "redis", "ollama"}
             for key, label in names.items():
                 s = (body.get(key) or {}).get("status") if isinstance(body.get(key), dict) else None
+                if s == "off":
+                    continue  # nao faz parte deste modo (ex.: Redis/MCP no modo nativo)
                 if s == "ok":
                     add(Check(key, label, OK, "ok"))
                 else:

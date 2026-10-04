@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom"
 import { StatusPill } from "@/components/StatusPill"
+import { ReminderBanner } from "@/components/ReminderBanner"
 
 const ITEMS = [
   { to: "/", label: "Conversa", end: true, icon: "M4 5h16v11H8l-4 4V5z" },
@@ -20,6 +21,7 @@ function Icon({ d }: { d: string }) {
 export function AppShell() {
   return (
     <div className="flex h-dvh flex-col md:flex-row">
+      <ReminderBanner />
       {/* barra lateral (desktop) */}
       <nav className="jf-panel m-3 mr-0 hidden w-56 shrink-0 flex-col p-3 md:flex" aria-label="Principal">
         <div className="mb-5 flex items-center gap-2 px-2 pt-1">

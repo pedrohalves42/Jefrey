@@ -16,7 +16,7 @@ services:
       POSTGRES_PASSWORD: ${JEFREY_DATABASE__PASSWORD:?required}
       POSTGRES_DB: ${JEFREY_DATABASE__DB:-jefrey}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - jefrey_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -34,7 +34,7 @@ services:
     environment:
       JEFREY_REDIS__PASSWORD: ${JEFREY_REDIS__PASSWORD:?required}
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - jefrey_redisdata:/data
     healthcheck:
@@ -90,7 +90,7 @@ services:
       HF_HUB_CACHE: /tmp/hf-cache/hub
       HF_HUB_OFFLINE: "0"
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -147,7 +147,7 @@ services:
       JEFREY_API__CORS_ORIGINS: ${JEFREY_API__CORS_ORIGINS:-}
       JEFREY_DEBUG: "false"
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -169,7 +169,7 @@ services:
     image: ollama/ollama:latest
     container_name: jefrey-ollama
     ports:
-      - "11434:11434"
+      - "127.0.0.1:11434:11434"
     environment:
       OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-30m}   # evita 15-20s de carga a frio a cada pausa
       OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-1} # menos RAM em maquinas modestas
@@ -189,7 +189,7 @@ services:
     container_name: jefrey-n8n
     profiles: ["full"]  # modo completo: docker compose --profile full up -d
     ports:
-      - "5678:5678"
+      - "127.0.0.1:5678:5678"
     environment:
       N8N_BASIC_AUTH_ACTIVE: "false"
       N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER}
@@ -220,7 +220,7 @@ services:
     container_name: jefrey-prometheus
     profiles: ["full"]  # modo completo: docker compose --profile full up -d
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./docker/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
@@ -242,7 +242,7 @@ services:
     container_name: jefrey-grafana
     profiles: ["full"]  # modo completo: docker compose --profile full up -d
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     env_file: [.env]
     environment:
       GF_SECURITY_ADMIN_USER: admin
@@ -302,7 +302,7 @@ services:
     container_name: jefrey-frontend
     profiles: ["full"]  # modo completo: docker compose --profile full up -d
     ports:
-      - "3001:8080"
+      - "127.0.0.1:3001:8080"
     depends_on:
       jefrey-api:
         condition: service_healthy

@@ -21,6 +21,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMe
 from src.jefrey.core.config import get_settings
 
 logger = logging.getLogger(__name__)
+logging.getLogger("chromadb.telemetry.product.posthog").setLevel(logging.CRITICAL)  # bug conhecido do Chroma: so polui o log
 
 # Ativa logging estruturado (JSON) ao carregar o subsistema de memória.
 import src.jefrey.core.logging  # noqa: F401

@@ -65,12 +65,21 @@ def _key_file() -> Path:
     return _config_dir() / "credentials" / "llm_api_key"
 
 
+DOCKER_OLLAMA_URL = "http://ollama:11434"  # nome do servico DENTRO do docker-compose; so existe la
+
+
 def load_override() -> dict:
     try:
         data = json.loads(_override_file().read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
         return {}
+    if not isinstance(data, dict):
+        return {}
+    # O endereco padrao do Ollama local e decidido pelo ambiente (docker ou nativo), nunca pelo arquivo:
+    # arquivos antigos que guardaram o nome do container quebravam o chat fora do Docker.
+    if (data.get("provider") or "ollama") == "ollama" and str(data.get("base_url") or "").rstrip("/") == DOCKER_OLLAMA_URL:
+        data.pop("base_url", None)
+    return data
 
 
 def load_saved_key() -> Optional[str]:
@@ -93,7 +102,10 @@ def save_override(provider: str, model: str, base_url: Optional[str],
     LLMClient(LLMConfig(provider, model.strip(), _normalize_base(provider, (base_url or "").strip()),
                         api_key=prospective_key))
     _config_dir().mkdir(parents=True, exist_ok=True)
-    data = {"provider": provider, "model": model.strip(), "base_url": (base_url or "").strip() or None}
+    saved_base = (base_url or "").strip().rstrip("/") or None
+    if provider == "ollama" and saved_base in (None, DOCKER_OLLAMA_URL):
+        saved_base = None  # padrao: o ambiente decide
+    data = {"provider": provider, "model": model.strip(), "base_url": saved_base}
     if temperature is not None:
         data["temperature"] = max(0.0, min(2.0, float(temperature)))
     _override_file().write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")

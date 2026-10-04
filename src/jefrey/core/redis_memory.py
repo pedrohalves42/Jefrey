@@ -26,9 +26,9 @@ class RedisShortTermMemory:
                 redis_url = get_settings().redis.dsn
             except Exception:
                 redis_url = "redis://localhost:6379/0"
-        self._redis = redis.from_url(
-            redis_url, socket_connect_timeout=2, socket_timeout=2
-        )
+        from src.jefrey.core.redis_factory import sync_client
+
+        self._redis = sync_client(redis_url, socket_connect_timeout=2, socket_timeout=2)
         self._prefix = "jefrey:wm"
 
     def _key(self, user_id: str, key: str) -> str:

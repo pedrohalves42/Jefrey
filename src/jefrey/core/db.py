@@ -120,8 +120,11 @@ def get_engine():
         with _engine_lock:
             if _engine is None:
                 s = get_settings().database
+                # banco fora do ar nao pode pendurar a aplicacao: falha rapido e a tela mostra o erro
+                connect_args = {"timeout": 15} if str(s.dsn).startswith("sqlite") else {"connect_timeout": 3}
                 _engine = create_engine(
                     s.dsn,
+                    connect_args=connect_args,
                     pool_pre_ping=True,
                     pool_recycle=3600,
                     pool_size=s.pool_size,

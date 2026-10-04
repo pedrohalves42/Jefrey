@@ -83,6 +83,8 @@ def stringify(result: Any) -> str:
         return result
     if isinstance(result, dict) and isinstance(result.get("content"), str):
         return result["content"]
+    if isinstance(result, dict) and isinstance(result.get("message"), str):
+        return result["message"]
     if isinstance(result, list):
         if not result:
             return "Nenhum resultado encontrado."
@@ -91,9 +93,12 @@ def stringify(result: Any) -> str:
             for r in result:
                 title = (r.get("metadata") or {}).get("title") if isinstance(r.get("metadata"), dict) else None
                 sim = r.get("similarity")
-                head = (f"{title}: " if title else "")
+                body = r["content"].strip()
+                if title and body.startswith(str(title) + "\n"):  # o titulo ja foi indexado junto: nao repete
+                    body = body[len(str(title)) + 1:].strip()
+                head = (f"{title}: " if title and body != str(title) else "")
                 tail = f" (parecido {round(sim * 100)}%)" if isinstance(sim, (int, float)) else ""
-                lines.append(f"- {head}{r['content'].strip()}{tail}")
+                lines.append(f"- {head}{body}{tail}")
             return "\n".join(lines)
     try:
         return json.dumps(result, ensure_ascii=False, default=str)

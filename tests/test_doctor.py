@@ -118,3 +118,11 @@ def test_todo_problema_ou_aviso_traz_uma_correcao(tmp_path):
 def test_summarize():
     cs = [Check("a", "A", OK, ""), Check("b", "B", WARN, ""), Check("c", "C", FAIL, ""), Check("d", "D", OK, "")]
     assert summarize(cs) == (2, 1, 1)
+
+
+def test_componentes_fora_do_modo_nao_sao_problema(tmp_path):
+    """No modo nativo (sem Docker) Redis e MCP vem como 'off': nao devem virar aviso nem problema."""
+    st = {**GOOD_STATUS, "redis": {"status": "off"}, "mcp": {"status": "off"}}
+    c = by_id(run_checks(probes(tmp_path, status=st)))
+    assert "redis" not in c and "mcp" not in c
+    assert all(x.status == OK for x in c.values())

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -50,8 +50,17 @@ def describe_skills() -> list[dict]:
 
 
 @router.get("")
-async def list_skills():
+async def list_skills(request: Request):
     skills = describe_skills()
+    uid = getattr(request.state, "user_id", None)
+    if uid:  # por usuario: diz o que falta conectar (ex.: conta Google)
+        from src.jefrey.core.availability import unavailable_skills
+
+        missing = unavailable_skills(uid)
+        for sk in skills:
+            sk["available"] = sk["name"] not in missing
+            if sk["name"] in missing:
+                sk["unavailable_reason"] = missing[sk["name"]]
     return {"skills": skills, "count": len(skills), "tool_count": sum(len(s["tools"]) for s in skills)}
 
 

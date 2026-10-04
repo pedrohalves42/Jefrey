@@ -72,7 +72,7 @@ class NotesSkill(SkillBase):
             "id": note_id,
             "title": title,
             "saved": True,
-            "message": f"✅ Nota salva com ID: {note_id[:8]}...",
+            "message": f"Anotado! Guardei na sua memória: “{(title or content).strip()[:80]}”.",
         }
     
     @tool(description="Busca notas por similaridade semântica (linguagem natural)")

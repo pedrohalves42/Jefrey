@@ -70,6 +70,10 @@ def _is_prod() -> bool:
 
 def _get_redis():
     """Lazy Redis — fail-closed em prod (CIPHER-031)."""
+    from src.jefrey.core.redis_factory import sync_client, use_local
+
+    if use_local():  # modo sem Docker: Redis local em memoria (sem esperar timeout de rede)
+        return sync_client("", decode_responses=True)
     import redis as redis_lib
     url = os.getenv("JEFREY_REDIS__URL", "")
     host = os.getenv("JEFREY_REDIS__HOST", "")

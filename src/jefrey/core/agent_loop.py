@@ -34,7 +34,8 @@ def _norm(text: str) -> str:
 # Sem sinal na mensagem = nenhuma ferramenta oferecida: conversa e conhecimento geral ficam
 # sem ferramentas (modelos pequenos chamam ferramenta a toa ou ficam inseguros quando ha varias).
 GROUPS: list[tuple[tuple[str, ...], list[str]]] = [
-    (("anote", "anota", "anotei", "guarde", "guardei", "salve", "salvei", "lembre", "lembra", "nota", "anotac",
+    (("lembrete", "me lembr", "me avis", "avise-me", "me acorde"), ["set_reminder", "list_reminders", "cancel_reminder"]),
+    (("anote", "anota", "anotei", "guarde", "guarda", "guardei", "salve", "salvei", "lembre", "lembra", "nota", "anotac",
       "o que eu te disse", "o que voce sabe", "registre"), ["save_note", "search_notes"]),
     (("hora", "data", "hoje", "amanha", "ontem", "dia da semana", "que dia"), ["current_time"]),
     (("calcul", "quanto e", "quanto da", "porcento", "raiz", "soma", "somar", "multiplic", "dividid", "vezes", "%"), ["calculator"]),
@@ -92,10 +93,47 @@ _RECALL = [
 SUMMARIZE_TOOLS = {"search_notes"}
 
 
+_LIST_REMINDERS = re.compile(r"^(?:quais|mostre|liste|me mostre|ver|veja|tenho)\s*(?:sao\s+)?(?:os\s+|meus\s+|algum\s+)*lembretes?(?:\s+(?:que\s+)?(?:eu\s+)?(?:tenho|pendentes?))?$"
+                             r"|^meus lembretes$|^tem(?:os)? lembretes?$")
+
+
+_VERBS = r"(?:guarda|guarde|anota|anote|salva|salve|registra|registre|memoriza|memorize)"
+_SAVE_TRAIL = re.compile(rf"^(.{{3,400}}?)[.,;!]?\s*(?:por favor,?\s*)?{_VERBS}\s+(?:isso|ai|isso ai|essa informacao|essa info)$")
+_SAVE_LEAD = re.compile(rf"^(?:por favor,?\s*)?{_VERBS}(?:\s+ai)?\s*[:,-]\s*(.{{3,600}})$")
+_LIST_NOTES = re.compile(r"^(?:o que|oque)\s+(?:eu\s+)?(?:anotei|guardei|salvei)(?:\s+ate\s+agora)?$"
+                         r"|^(?:minhas|mostre minhas|me mostre minhas|liste minhas|ver minhas|quais sao minhas|quais as minhas)\s+(?:notas|anotacoes)$")
+
+
+def _save_request(orig: str, msg: str) -> Optional[str]:
+    """'Meu nome e Carla. Guarda isso.' -> 'Meu nome e Carla'  (conteudo vem da propria mensagem)."""
+    same = len(orig) == len(msg)
+    for pat in (_SAVE_TRAIL, _SAVE_LEAD):
+        m = pat.match(msg)
+        if m and m.group(1).strip():
+            content = (orig[m.start(1):m.end(1)] if same else m.group(1)).strip()
+            if _norm(content) not in ("isso", "ai", "isso ai"):
+                return content
+    return None
+
+
 def route_intent(message: str) -> Optional[tuple[str, dict]]:
     """Pedidos triviais que NAO precisam do modelo. None = deixa o modelo decidir."""
     orig = message.strip().rstrip("?!. ")
     msg = _norm(orig)
+    if len(msg) > 700:
+        return None
+    if _LIST_REMINDERS.match(msg):
+        return "list_reminders", {}
+    if _LIST_NOTES.match(msg):
+        return "list_notes", {}
+    fact = _save_request(orig, msg)
+    if fact:
+        return "save_note", {"title": fact[:60], "content": fact}
+    from src.jefrey.core.reminders import parse_request
+    rq = parse_request(message)
+    if rq is not None:
+        # o horario e interpretado pelo codigo (modelo pequeno erra datas); a ferramenta repete o texto bruto
+        return "set_reminder", {"text": rq.text, "when": " ".join(msg.split())}
     if len(msg) > 120:
         return None
     if _TIME.match(msg):

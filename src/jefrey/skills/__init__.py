@@ -203,6 +203,7 @@ def load_skills() -> int:
     mods = [
         "src.jefrey.skills.essentials",
         "src.jefrey.skills.notes",
+        "src.jefrey.skills.reminders",
         "src.jefrey.skills.automation",
         "src.jefrey.skills.calendar",
         "src.jefrey.skills.email",

@@ -179,6 +179,17 @@ def create_app() -> FastAPI:
             expose_headers=["*"],
         )
 
+    # Modo local (sem Docker): so este PC e a propria tela falam com a API. Adicionado por ULTIMO = mais externo,
+    # entao roda antes da autenticacao e do CORS.
+    from src.jefrey.api.local_guard import LocalGuardMiddleware, local_guard_enabled
+
+    if local_guard_enabled():
+        app.add_middleware(
+            LocalGuardMiddleware,
+            extra_hosts=(os.getenv("JEFREY_ALLOWED_HOSTS") or "").split(","),
+            extra_origins=(os.getenv("JEFREY_ALLOWED_ORIGINS") or "").split(","),
+        )
+
     # P6: Observability -- Prometheus metrics endpoint (PUBLICO, sem auth)
     SERVICE_HEALTH.labels(component="api").set(1)
     try:
@@ -210,9 +221,13 @@ def create_app() -> FastAPI:
         except Exception:
             pass
 
+        native = (os.getenv("JEFREY_MODE", "") or "").lower() == "native"  # sem Docker: SQLite + memoria local
+
         # Check Redis
         redis_ok = False
         try:
+            if native:
+                raise RuntimeError("modo nativo: sem Redis")
             import redis as _redis
             r = _redis.Redis.from_url(cfg.redis.dsn or 'redis://localhost:6379')
             r.ping()
@@ -223,6 +238,13 @@ def create_app() -> FastAPI:
         # Check Postgres (simple connectivity - Axiom #1 fail-closed)
         postgres_ok = False
         try:
+            if str(cfg.database.dsn or "").startswith("sqlite"):
+                from sqlalchemy import text as _sqltext
+                from src.jefrey.core.db import get_engine
+                with get_engine().connect() as _c:
+                    _c.execute(_sqltext("SELECT 1"))
+                postgres_ok = True
+                raise StopIteration  # banco local verificado
             # Try asyncpg first (faster async), fallback to psycopg
             try:
                 import asyncpg
@@ -238,18 +260,23 @@ def create_app() -> FastAPI:
                 conn = psycopg.connect(dsn)
                 conn.close()
                 postgres_ok = True
+        except StopIteration:
+            pass
         except Exception as e:
             logger.warning("Postgres health check failed: %s", e)
 
         # Check MCP Gateway (antes era fixo em "starting" - nunca refletia o estado real)
-        mcp_status = "down"
+        mcp_status = "off" if native else "down"
         try:
+            if native:
+                raise RuntimeError("modo nativo: sem servidor MCP")
             _mcp_url = os.getenv("JEFREY_MCP_HEALTH_URL") or f"http://mcp-server:{cfg.mcp.port}/health"
             async with _f3_httpx.AsyncClient(timeout=2) as c:
                 r = await c.get(_mcp_url)
                 mcp_status = "ok" if r.status_code == 200 else "degraded"
         except Exception as e:
-            logger.warning("MCP health check failed: %s", e)
+            if not native:
+                logger.warning("MCP health check failed: %s", e)
 
         # Update metrics
         try:
@@ -263,7 +290,7 @@ def create_app() -> FastAPI:
             "tts": {"status": "ok"},  # Already verified via /tts/health
             "mcp": {"status": mcp_status},  # MCP service health (probe real)
             "ollama": {"status": "ok" if ollama_ok else "degraded"},
-            "redis": {"status": "ok" if redis_ok else "degraded"},
+            "redis": {"status": "off" if native else ("ok" if redis_ok else "degraded")},
             "postgres": {"status": "ok" if postgres_ok else "degraded"},
             "timestamp": __import__("datetime").datetime.utcnow().isoformat() + "Z"
         }
@@ -319,6 +346,8 @@ def create_app() -> FastAPI:
     app.include_router(llm_settings_router)
     from src.jefrey.api.skills_routes import router as skills_router
     app.include_router(skills_router)
+    from src.jefrey.api.reminders_routes import router as reminders_router
+    app.include_router(reminders_router)
     from src.jefrey.api.whatsapp_routes import router as whatsapp_router
     app.include_router(whatsapp_router)
     app.include_router(memory_router)
@@ -363,8 +392,8 @@ def main():
     cfg = get_settings()
     uvicorn.run(
         "src.jefrey.api.main:app",
-        host="0.0.0.0",
-        port=8000,
+        host=os.getenv("JEFREY_API_HOST", "0.0.0.0"),  # modo local (sem Docker) usa 127.0.0.1
+        port=int(os.getenv("JEFREY_API_PORT", "8000")),
         reload=False  # docker read_only fix: watchfiles /app/.cache Permission denied (Axiom 1),
     )
 

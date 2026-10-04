@@ -33,6 +33,7 @@ export function parseStatus(json: unknown): Status["services"] {
   for (const [id, v] of Object.entries(json as Record<string, unknown>)) {
     if (id === "timestamp" || !v || typeof v !== "object") continue
     const st = (v as { status?: unknown }).status
+    if (st === "off") continue // componente que nao faz parte deste modo (ex.: Redis sem Docker)
     out.push({ id, label: LABELS[id] ?? id, state: st === "ok" ? "ok" : "down" })
   }
   return out

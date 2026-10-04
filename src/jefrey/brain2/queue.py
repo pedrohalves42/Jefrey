@@ -33,10 +33,10 @@ class Brain2Queue:
         if self._redis is not None:
             return self._redis
         try:
-            import redis  # type: ignore
+            from src.jefrey.core.redis_factory import sync_client
 
             # sync redis for enqueue (usado dentro do FastAPI sync/async boundary)
-            self._redis = redis.from_url(self._url, decode_responses=True)
+            self._redis = sync_client(self._url, decode_responses=True)
             return self._redis
         except Exception as e:
             logger.debug("Brain2Queue redis unavailable: %s", e)

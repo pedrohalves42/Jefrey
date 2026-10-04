@@ -220,7 +220,8 @@ class DatabaseSettings(BaseSettings):
     # SECURITY NOTE: password default e 'jefrey' para DEV. Em producao, via env var.
     # Senha obrigatoria — definir via JEFREY_DATABASE__PASSWORD no .env.
     # Sem ela, o middleware de auth recusa todas as requests (CIPHER-018/025).
-    password: str = Field(alias="JEFREY_DATABASE__PASSWORD")
+    # Vazia e aceita SO quando `url` (SQLite local) esta definida; para Postgres o dsn exige senha (fail-closed).
+    password: str = Field(default="", alias="JEFREY_DATABASE__PASSWORD")
     db: str = "jefrey"
     pool_size: int = 10
     max_overflow: int = 20
@@ -230,6 +231,8 @@ class DatabaseSettings(BaseSettings):
     def dsn(self) -> str:
         if self.url:
             return self.url
+        if not self.password:
+            raise ValueError("JEFREY_DATABASE__PASSWORD e obrigatoria para usar PostgreSQL (defina no .env)")
         return f"postgresql+psycopg://{self.user}:{self.password}@{self.host}:{self.port}/{self.db}"
 
 class RedisSettings(BaseSettings):

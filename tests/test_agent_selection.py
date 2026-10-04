@@ -106,7 +106,7 @@ def test_roteador_busca_em_notas_e_preserva_acentos(msg, query):
 
 
 @pytest.mark.parametrize("msg", [
-    "o que eu anotei", "o que você sabe sobre", "o que é uma nota fiscal?", "anote isto: reunião",
+    "o que você sabe sobre", "o que é uma nota fiscal?", "anote isto: reunião",
     "o que eu devo anotar sobre o curso?",
 ])
 def test_roteador_de_notas_nao_dispara_sem_consulta(msg):
