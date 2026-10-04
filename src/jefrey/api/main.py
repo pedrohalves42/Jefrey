@@ -397,6 +397,8 @@ def create_app() -> FastAPI:
     app.include_router(privacy_router)
     from src.jefrey.api.update_routes import router as update_router
     app.include_router(update_router)
+    from src.jefrey.api.brains_routes import router as brains_router
+    app.include_router(brains_router)
 
     # Monta a sub-aplicacao de aprovacoes Starlette (mantem CIPHER-019, 020, 024 intactos)
     # FIX: mount em /approvals (nao /) para evitar conflito com outros routers.

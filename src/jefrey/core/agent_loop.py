@@ -49,6 +49,10 @@ GROUPS: list[tuple[tuple[str, ...], list[str]]] = [
     (("arquivo", "pasta", "documento", "txt"), ["files_list", "files_read", "files_write"]),
     (("nota", "anot", "lembre", "guarde", "salve", "apague"), ["list_notes", "get_note", "update_note", "delete_note"]),
     (("automa", "workflow", "rotina"), ["list_workflows", "get_workflow", "create_workflow", "plan_task"]),
+    (("abre ", "abra ", "abrir", "abri ", "inicia", "iniciar", "executa", "programa", "aplicativo", "app "), ["open_app", "open_folder", "open_website"]),
+    (("site", "youtube", "gmail", "pagina", "navegador", "internet"), ["open_website"]),
+    (("pasta", "downloads", "documentos", "area de trabalho", "fotos", "imagens"), ["open_folder"]),
+    (("volume", "som ", "mudo", "silenci", "aumenta", "diminui", "mais alto", "mais baixo"), ["set_volume"]),
 ]
 
 

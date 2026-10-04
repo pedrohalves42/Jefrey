@@ -224,6 +224,16 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 }
 
 
+/* Painel Jarvis: molduras ciano com cantos, como num HUD */
+.jf-hudpanel {
+  position: relative; padding: 12px 14px; border: 1px solid hsl(var(--hue) 80% 60% / 0.28); border-radius: 4px;
+  background: linear-gradient(180deg, hsl(var(--hue) 80% 50% / 0.07), transparent);
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+.jf-hudpanel::before, .jf-hudpanel::after { content: ""; position: absolute; width: 10px; height: 10px; border: 2px solid hsl(var(--hue) 90% 62%); }
+.jf-hudpanel::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+.jf-hudpanel::after { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
+
 /* Modo Fácil: letra maior, mais contraste e alvos de toque grandes (pensado para quem nao e tecnico) */
 html[data-easy="1"] { font-size: 118%; }
 html[data-easy="1"] body { color: #fff; }

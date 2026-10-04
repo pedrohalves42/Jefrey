@@ -13,6 +13,7 @@ import { useEasy } from "@/lib/easy"
 import { useActivity } from "@/hooks/useActivity"
 import { ambientLabel } from "@/lib/briefing"
 import BriefingCard from "@/components/BriefingCard"
+import JarvisHud from "@/components/hud/JarvisHud"
 import { SentenceBuffer } from "@/lib/voice/sentences"
 import { authedFetch, ensureSession } from "@/lib/session"
 import {
@@ -101,6 +102,7 @@ export default function Conversa() {
   })
   const listeningNow = listener.state === "listening" || listener.state === "hearing"
   // ---- chamar pelo nome ("Jefrey, ...") e pelo atalho do Windows (Ctrl+Alt+J) ----
+  const [hud, setHud] = useState(() => readFlag("jefrey_hud", true))
   const [wakeOn, setWakeOn] = useState(() => readFlag("jefrey_wake", false))
   const startVoiceRef = useRef<(first?: string) => Promise<void>>(async () => {})
   const wakeListener = useListener({
@@ -429,12 +431,19 @@ export default function Conversa() {
         </div>
 
         <BriefingCard />
-        <div className="jf-hud">
-          <span className="pointer-events-none absolute right-3 top-2 z-10 text-xs tabular-nums tracking-widest text-[hsl(var(--hue)_80%_75%)] opacity-70">
-            {clock.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-          </span>
-          <BrainStage state={brainState} level={micLevel} note={streaming || listeningNow ? null : note} className={empty ? "h-[34vh] min-h-[200px]" : "h-[22vh] min-h-[130px]"} />
-        </div>
+        {(() => {
+          const stage = (
+            <div className="jf-hud">
+              <span className="pointer-events-none absolute right-3 top-2 z-10 text-xs tabular-nums tracking-widest text-[hsl(var(--hue)_80%_75%)] opacity-70">
+                {clock.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+              </span>
+              <BrainStage state={brainState} level={micLevel} note={streaming || listeningNow ? null : note} className={empty ? "h-[34vh] min-h-[200px]" : "h-[22vh] min-h-[130px]"} />
+            </div>
+          )
+          return hud ? (
+            <JarvisHud messages={active.messages} activity={activity} level={micLevel} speaking={speaker.speaking}>{stage}</JarvisHud>
+          ) : stage
+        })()}
 
         <div className="min-h-0 flex-1 overflow-y-auto px-1" role="log" aria-live="polite" aria-label="Mensagens">
           {empty && (
@@ -615,6 +624,10 @@ export default function Conversa() {
                 Falar as respostas
               </label>
             )}
+            <label className="flex cursor-pointer items-center gap-1.5" title="Mostra os medidores e o registro de atividade ao redor do avatar (telas largas)">
+              <input type="checkbox" checked={hud} onChange={e => { setHud(e.target.checked); writeFlag("jefrey_hud", e.target.checked) }} />
+              Painel Jarvis
+            </label>
             {listener.supported && (
               <label className="flex cursor-pointer items-center gap-1.5" title="O microfone fica ligado e eu só entendo o que você fala quando começa com 'Jefrey'. Nada é guardado nem enviado para a internet.">
                 <input type="checkbox" checked={wakeOn} onChange={() => void toggleWake()} />

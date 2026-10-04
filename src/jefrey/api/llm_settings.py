@@ -191,7 +191,13 @@ async def openrouter_callback(request: Request, code: str = "", state: str = "")
             key = str(r.json().get("key") or "")
         if not key:
             raise ValueError("sem chave")
-        save_override("openai", OPENROUTER_DEFAULT_MODEL, OPENROUTER_BASE, None, key)
+        from src.jefrey.core import brains
+
+        try:
+            brains.attach_oneclick("openrouter", key)  # vira o principal; o cerebro anterior (se havia) vira reserva
+        except Exception as e:
+            logger.info("openrouter: reserva nao aplicada (%s); gravando so o principal", type(e).__name__)
+            save_override("openai", OPENROUTER_DEFAULT_MODEL, OPENROUTER_BASE, None, key)
     except Exception as e:  # nunca registra codigo nem chave
         logger.warning("openrouter callback falhou: %s", type(e).__name__)
         return RedirectResponse("/bem-vindo?erro=openrouter", status_code=303)

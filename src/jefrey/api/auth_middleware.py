@@ -78,7 +78,7 @@ def _native_mode() -> bool:
     return (os.getenv("JEFREY_MODE", "") or "").strip().lower() == "native"
 
 
-_USER_RL_EXEMPT =("/system/wake", "/system/activity", "/wa/pending")  # so leitura, baratas, perguntadas de poucos em poucos segundos
+_USER_RL_EXEMPT = ("/system/wake", "/system/activity", "/system/telemetry", "/wa/pending")  # so leitura, baratas, perguntadas de poucos em poucos segundos
 _rl_buckets: dict[str, tuple[float, float]] = {}
 
 

@@ -202,6 +202,7 @@ def load_skills() -> int:
     """Importa modulos de skills para trigger dos decorators. Idempotente."""
     mods = [
         "src.jefrey.skills.essentials",
+        "src.jefrey.skills.computer",
         "src.jefrey.skills.notes",
         "src.jefrey.skills.reminders",
         "src.jefrey.skills.automation",
