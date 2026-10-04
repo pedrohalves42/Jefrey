@@ -5,6 +5,9 @@ import { useSpeaker } from "@/hooks/useSpeaker"
 import { greeting } from "@/lib/greeting"
 import { getProfile } from "@/lib/llm"
 import { useListener } from "@/hooks/useListener"
+import { useVoiceReady } from "@/hooks/useVoiceReady"
+import { voiceView } from "@/lib/voiceMode"
+import { useEasy } from "@/lib/easy"
 import { SentenceBuffer } from "@/lib/voice/sentences"
 import { authedFetch, ensureSession } from "@/lib/session"
 import {
@@ -19,11 +22,13 @@ const SUGGESTIONS = [
   "O que você consegue fazer por mim?",
 ]
 
-function readFlag(key: string): boolean {
+/** Preferencia salva; sem escolha ainda, usa o padrao (voz ligada: o caminho principal e falar e ouvir). */
+function readFlag(key: string, fallback = true): boolean {
   try {
-    return localStorage.getItem(key) === "1"
+    const v = localStorage.getItem(key)
+    return v === null ? fallback : v === "1"
   } catch {
-    return false
+    return fallback
   }
 }
 
@@ -61,6 +66,9 @@ export default function Conversa() {
   const [micOn, setMicOn] = useState(false)
   const [micLevel, setMicLevel] = useState(0)
   const speaker = useSpeaker()
+  const voiceReady = useVoiceReady()
+  const [easy] = useEasy()
+  const [unclear, setUnclear] = useState(false)
   const [myName, setMyName] = useState<string | null>(null)
   const [clock, setClock] = useState(() => new Date())
   useEffect(() => {
@@ -75,10 +83,15 @@ export default function Conversa() {
   const sendRef = useRef<(t?: string) => Promise<void>>(async () => {})
   const listener = useListener({
     onTranscript: t => {
+      setUnclear(false)
       if (!continuousRef.current) setMicOn(false)
       void sendRef.current(t)
     },
-    onSpeechStart: () => speaker.cancel(), // falar por cima interrompe o Jefrey
+    onUnclear: () => setUnclear(true),
+    onSpeechStart: () => {
+      setUnclear(false)
+      speaker.cancel() // falar por cima interrompe o Jefrey
+    },
     onLevel: setMicLevel,
   })
   const listeningNow = listener.state === "listening" || listener.state === "hearing"
@@ -220,6 +233,27 @@ export default function Conversa() {
     void listener.start()
   }
 
+  /** Botao grande: liga (ou desliga) a conversa por voz inteira: ouvir, responder falando e ouvir de novo. */
+  async function toggleVoiceMode() {
+    if (speaker.speaking) {
+      speaker.cancel() // tocar enquanto ele fala interrompe e ja passa a ouvir
+    } else if (micOn || listener.state !== "idle") {
+      setMicOn(false)
+      listener.stop()
+      return
+    }
+    setUnclear(false)
+    if (!(await voiceReady.ensure())) return
+    setVoiceReplyState(true)
+    writeFlag("jefrey_voice_reply", true)
+    setContinuousState(true)
+    writeFlag("jefrey_voice_continuous", true)
+    setMicOn(true)
+    void listener.start()
+  }
+
+  const view = voiceView({ micOn, listener: listener.state, streaming, speaking: speaker.speaking, preparing: voiceReady.preparing })
+
   function retry() {
     const lastUser = [...active.messages].reverse().find(m => m.role === "user")
     if (!lastUser) return
@@ -289,7 +323,7 @@ export default function Conversa() {
     <div className="flex h-full min-h-0 gap-3">
       {/* lista de conversas */}
       <aside
-        className={`jf-panel absolute inset-y-0 left-0 z-20 w-72 shrink-0 flex-col p-3 md:static md:flex ${showList ? "flex" : "hidden"}`}
+        className={`jf-panel absolute inset-y-0 left-0 z-20 w-72 shrink-0 flex-col p-3 md:static ${easy ? "hidden" : `md:flex ${showList ? "flex" : "hidden"}`}`}
         aria-label="Conversas"
       >
         <button type="button" onClick={startNew} disabled={streaming} className="jf-btn jf-focus mb-3 px-3 py-2 text-sm">
@@ -329,7 +363,7 @@ export default function Conversa() {
 
       {/* conversa */}
       <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="mb-2 flex items-center gap-2 md:hidden">
+        <div className={`mb-2 items-center gap-2 md:hidden ${easy ? "hidden" : "flex"}`}>
           <button type="button" onClick={() => setShowList(v => !v)} className="jf-btn jf-focus px-3 py-1.5 text-sm">
             Conversas
           </button>
@@ -431,6 +465,31 @@ export default function Conversa() {
             <button type="button" onClick={retry} className="jf-btn jf-focus mb-2 px-3 py-1 text-sm">
               Tentar de novo
             </button>
+          )}
+          {listener.supported && (
+            <div className="mb-3 flex flex-col items-center gap-1">
+              <button
+                type="button"
+                onClick={() => void toggleVoiceMode()}
+                disabled={voiceReady.preparing}
+                aria-pressed={view.tone === "listening" || view.tone === "hearing"}
+                className={`jf-btn jf-focus flex min-h-[3.5rem] w-full max-w-md items-center justify-center gap-3 rounded-full px-6 py-3 text-lg font-medium ${
+                  view.tone === "hearing" ? "ring-2 ring-white/60" : ""
+                }`}
+              >
+                <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 3a3 3 0 00-3 3v6a3 3 0 006 0V6a3 3 0 00-3-3zM6 11a6 6 0 0012 0M12 17v4" />
+                </svg>
+                <span aria-live="polite">{view.label}</span>
+              </button>
+              {view.hint && <p className="text-sm text-white/65">{view.hint}</p>}
+              {unclear && view.tone === "listening" && <p role="status" className="text-base text-amber-200">Não entendi. Pode repetir, devagar?</p>}
+              {voiceReady.error && (
+                <p role="alert" className="text-center text-base text-red-200">
+                  {voiceReady.error}
+                </p>
+              )}
+            </div>
           )}
           <div className="jf-panel flex items-end gap-2 p-2">
             <textarea

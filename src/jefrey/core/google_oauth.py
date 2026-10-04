@@ -1,0 +1,157 @@
+"""Conectar a conta Google (Agenda, Gmail, Drive) com um botao: vai ao site do Google, a pessoa entra e volta.
+
+- credenciais do app (client id/secret) vem do ambiente ou de config/google_oauth.json (cliente "Aplicativo para computador");
+- o `state` e o PKCE ficam no servidor, presos a PESSOA que clicou e de uso unico;
+- os tokens sao gravados com o provedor que cada skill procura (gmail, google_calendar, google_drive) e protegidos pelo Windows;
+- nenhum token volta ao navegador.
+"""
+from __future__ import annotations
+
+import base64
+import hashlib
+import json
+import logging
+import os
+import secrets
+import time
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Optional
+from urllib.parse import urlencode
+
+logger = logging.getLogger(__name__)
+
+AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+TOKEN_URL = "https://oauth2.googleapis.com/token"
+USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
+REVOKE_URL = "https://oauth2.googleapis.com/revoke"
+STATE_TTL_S = 600
+MAX_PENDING = 30
+
+BASE_SCOPES = ["openid", "email", "profile"]
+SERVICES: dict[str, dict] = {
+    "calendar": {"label": "Agenda", "provider": "google_calendar", "scope": "https://www.googleapis.com/auth/calendar.events"},
+    "email": {"label": "E-mail (Gmail)", "provider": "gmail", "scope": "https://www.googleapis.com/auth/gmail.modify"},
+    "drive": {"label": "Arquivos (Drive)", "provider": "google_drive", "scope": "https://www.googleapis.com/auth/drive.file"},
+}
+
+_pending: dict[str, dict] = {}
+
+
+def _config_file() -> Path:
+    return Path(os.getenv("JEFREY_CONFIG_DIR", "config")) / "google_oauth.json"
+
+
+def credentials() -> Optional[dict]:
+    """{client_id, client_secret} do app Google, ou None se este programa ainda nao foi configurado."""
+    cid, sec = os.getenv("JEFREY_OAUTH__CLIENT_ID", ""), os.getenv("JEFREY_OAUTH__CLIENT_SECRET", "")
+    if cid and sec:
+        return {"client_id": cid, "client_secret": sec}
+    try:
+        d = json.loads(_config_file().read_text(encoding="utf-8"))
+        d = d.get("installed") or d.get("web") or d  # aceita o arquivo baixado do Google Cloud
+        if d.get("client_id") and d.get("client_secret"):
+            return {"client_id": str(d["client_id"]), "client_secret": str(d["client_secret"])}
+    except (OSError, ValueError, AttributeError):
+        pass
+    return None
+
+
+def scopes_for(services: list[str]) -> list[str]:
+    bad = [s for s in services if s not in SERVICES]
+    if bad or not services:
+        raise ValueError("escolha pelo menos um servico valido")
+    return BASE_SCOPES + [SERVICES[s]["scope"] for s in dict.fromkeys(services)]
+
+
+def begin(user_id: str, services: list[str], redirect_uri: str) -> str:
+    """Endereco do Google para a pessoa autorizar. Guarda state/PKCE preso a `user_id`."""
+    creds = credentials()
+    if creds is None:
+        raise LookupError("google nao configurado")
+    scopes = scopes_for(services)
+    now = time.time()
+    state, verifier = secrets.token_urlsafe(24), secrets.token_urlsafe(48)
+    _pending[state] = {"verifier": verifier, "user": user_id, "services": list(dict.fromkeys(services)),
+                       "redirect": redirect_uri, "exp": now + STATE_TTL_S}
+    for k in [k for k, v in _pending.items() if v["exp"] < now]:
+        _pending.pop(k, None)
+    while len(_pending) > MAX_PENDING:
+        _pending.pop(next(iter(_pending)))
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    q = urlencode({"client_id": creds["client_id"], "redirect_uri": redirect_uri, "response_type": "code",
+                   "scope": " ".join(scopes), "access_type": "offline", "prompt": "consent", "include_granted_scopes": "true",
+                   "state": state, "code_challenge": challenge, "code_challenge_method": "S256"})
+    return f"{AUTH_URL}?{q}"
+
+
+def consume_state(state: str) -> Optional[dict]:
+    entry = _pending.pop(state or "", None)
+    return entry if entry and entry["exp"] >= time.time() else None
+
+
+def _table_model():
+    from src.jefrey.core.models import OAuthToken
+    return OAuthToken
+
+
+def save_tokens(user_id: str, services: list[str], token_data: dict, email: Optional[str]) -> list[str]:
+    """Grava (protegido) o token para cada servico escolhido. Devolve os provedores gravados."""
+    from src.jefrey.core.db import get_db
+    from src.jefrey.core.secret_store import protect
+
+    OAuthToken = _table_model()
+    expires = token_data.get("expires_in")
+    expires_at = (datetime.now(timezone.utc) + timedelta(seconds=int(expires))).replace(tzinfo=None) if expires else None
+    scopes = str(token_data.get("scope", "")).split()
+    saved: list[str] = []
+    with get_db() as s:
+        for svc in services:
+            prov = SERVICES[svc]["provider"]
+            s.query(OAuthToken).filter(OAuthToken.user_id == user_id, OAuthToken.provider == prov).delete()
+            s.add(OAuthToken(user_id=user_id, provider=prov, access_token=protect(str(token_data["access_token"])),
+                             refresh_token=protect(str(token_data["refresh_token"])) if token_data.get("refresh_token") else None,
+                             token_type=token_data.get("token_type", "Bearer"), expires_at=expires_at, scopes=scopes, email=email))
+            saved.append(prov)
+    return saved
+
+
+def status(user_id: str) -> dict:
+    """Estado da conexao da pessoa: nunca devolve tokens."""
+    from src.jefrey.core.db import get_db
+
+    OAuthToken = _table_model()
+    out = {"configured": credentials() is not None, "connected": False, "email": None, "services": []}
+    try:
+        with get_db() as s:
+            rows = s.query(OAuthToken).filter(OAuthToken.user_id == user_id).all()
+            by_provider = {r.provider: r for r in rows}
+            for key, meta in SERVICES.items():
+                r = by_provider.get(meta["provider"])
+                if r is not None:
+                    out["services"].append(key)
+                    out["email"] = out["email"] or r.email
+    except Exception as e:
+        logger.warning("google status falhou: %s", type(e).__name__)
+    out["connected"] = bool(out["services"])
+    return out
+
+
+def delete_tokens(user_id: str) -> list[str]:
+    """Remove os tokens da pessoa; devolve os refresh tokens (ja abertos) para revogar no Google."""
+    from src.jefrey.core.db import get_db
+    from src.jefrey.core.secret_store import unprotect
+
+    OAuthToken = _table_model()
+    providers = [m["provider"] for m in SERVICES.values()]
+    revoke: list[str] = []
+    with get_db() as s:
+        rows = s.query(OAuthToken).filter(OAuthToken.user_id == user_id, OAuthToken.provider.in_(providers)).all()
+        for r in rows:
+            tok = r.refresh_token or r.access_token
+            try:
+                revoke.append(unprotect(tok))
+            except Exception:
+                pass
+            s.delete(r)
+    return list(dict.fromkeys(revoke))

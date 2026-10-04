@@ -224,6 +224,15 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 }
 
 
+/* Modo Fácil: letra maior, mais contraste e alvos de toque grandes (pensado para quem nao e tecnico) */
+html[data-easy="1"] { font-size: 118%; }
+html[data-easy="1"] body { color: #fff; }
+html[data-easy="1"] .jf-panel { background: rgb(255 255 255 / 0.07); border-color: hsl(var(--hue) 80% 60% / 0.35); }
+html[data-easy="1"] .jf-btn { min-height: 3rem; border-width: 2px; }
+html[data-easy="1"] button, html[data-easy="1"] a, html[data-easy="1"] input, html[data-easy="1"] select { min-height: 2.75rem; }
+html[data-easy="1"] .text-white\/50, html[data-easy="1"] .text-white\/55, html[data-easy="1"] .text-white\/60 { color: rgb(255 255 255 / 0.78); }
+html[data-easy="1"] .text-white\/65, html[data-easy="1"] .text-white\/70 { color: rgb(255 255 255 / 0.88); }
+
 /* Moldura estilo HUD (cantos) ao redor do avatar */
 .jf-hud { position: relative; }
 .jf-hud::before, .jf-hud::after {

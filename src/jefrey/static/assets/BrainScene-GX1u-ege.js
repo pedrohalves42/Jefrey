@@ -1,4 +1,4 @@
-import{j as gl}from"./query-C0AKnesJ.js";import{r as br}from"./vendor-YQHdp9RR.js";/**
+import{j as gl}from"./query-BqvwJbBN.js";import{r as br}from"./vendor-DewGL0xb.js";/**
  * @license
  * Copyright 2010-2026 Three.js Authors
  * SPDX-License-Identifier: MIT

@@ -36,7 +36,7 @@ export default function NameField({ compact = false }: { compact?: boolean }) {
       {!compact && <h2 className="text-lg font-medium text-white">Como posso te chamar?</h2>}
       <div className="mt-2 flex gap-2">
         <input
-          className="w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/30"
+          className="w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-base text-white placeholder:text-white/30"
           value={name}
           maxLength={40}
           placeholder="Seu nome ou apelido"
@@ -44,7 +44,7 @@ export default function NameField({ compact = false }: { compact?: boolean }) {
           onChange={e => setName(e.target.value)}
           onKeyDown={e => e.key === "Enter" && void save()}
         />
-        <button type="button" onClick={() => void save()} disabled={busy || !name.trim()} className="jf-btn jf-focus px-4 py-2 text-sm">
+        <button type="button" onClick={() => void save()} disabled={busy || !name.trim()} className="jf-btn jf-focus px-4 py-2 text-base">
           Salvar
         </button>
       </div>

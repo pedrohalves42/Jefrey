@@ -12,6 +12,16 @@ passando e commit. Tudo o que já foi conversado está aqui; nada ficou de fora.
   volta; sem pedir para entender "chave de API" quando houver alternativa.
 - **WhatsApp:** pelo navegador (não pela API oficial), ler e responder; envio automático, com pop-up de aprovação quando necessário.
 
+- **Critério de produto (MVP vendável):** uma pessoa de **70 anos** instala, configura e usa **sozinha**, **por voz**, sem ver as
+  palavras "chave", "API", "token", "modelo". Toda sessão é aprovada também por este teste (ver "Teste do idoso" abaixo).
+- **Voz primeiro:** falar com o Jefrey e ouvir a resposta é o caminho principal; o teclado é o reserva.
+
+## Teste do idoso (vale para toda sessão)
+Letra grande (modo "Fácil" ligado por padrão), contraste alto, um botão grande por tela, frases curtas e sem jargão, nenhum erro
+técnico na tela (sempre "o que houve" + "o que fazer" + botão), configuração guiada falando e ouvindo, tudo desfazível, e um
+"Ajuda" que explica a tela em voz alta. Roteiro de teste: instalar, dizer o nome, conectar o assistente, pedir um lembrete por voz,
+ouvir a resposta, e tudo isso sem ajuda.
+
 ## Referências usadas (lidas na fonte)
 | Tema | Referência | O que adotamos |
 |---|---|---|
@@ -39,6 +49,15 @@ controles de varredura, falhas, apagar fundo e inverter; moldura HUD, relógio, 
 explicação completa do funcionamento (`COMO_O_JEFREY_FUNCIONA.md`).
 **Pronto quando:** imagem enviada vira holograma animado e persiste; testes das funções do efeito passam; verificado no navegador.
 **Continua nas próximas sessões:** estados "estudando/aprendendo" no avatar (Sessão 7) e página "Como funciona" dentro do programa.
+
+## Sessão 2B: Voz primeiro e modo Fácil (passa à frente das demais)
+**Entregas:** conversa por voz **contínua** (fala, detecta o fim da frase por silêncio, responde falando, escuta de novo; interrupção
+ao falar por cima); botão de microfone grande e único; **primeira execução falada** ("Oi, eu sou o Jefrey. Como você se chama?");
+palavra de ativação "Jefrey" com aviso de que usa o reconhecimento do navegador; som de confirmação real (hoje toca um arquivo de
+imagem); resposta falada completa (hoje corta em 4 frases) e voz mais natural quando houver; **modo Fácil** (fonte grande,
+contraste, menu reduzido a Conversa/Conexões/Ajuda; "Avançado" escondido); mensagens de erro humanas (sem "Sem token, vá em
+Settings"; o login do aparelho é automático); instruções por voz nas telas de conexão.
+**Pronto quando:** pedir um lembrete falando e ouvir a confirmação, sem tocar no teclado; teste do idoso passa.
 
 ## Sessão 3: Conexões para leigos
 **Entregas:** tela **Conexões** com cartões (sem jargão): Assistente (1 clique), Google (Agenda/Gmail), WhatsApp. Cada cartão: botão que

@@ -11,6 +11,16 @@ logger = logging.getLogger(__name__)
 
 SCOPES: Final[list[str]] = ["https://www.googleapis.com/auth/drive.file"]
 
+
+def _unprotect(v):
+    from src.jefrey.core.secret_store import unprotect
+    return unprotect(v)
+
+
+def _protect(v):
+    from src.jefrey.core.secret_store import protect
+    return protect(v)
+
 class DriveFile(TypedDict, total=False):
     id: str
     name: str
@@ -71,8 +81,8 @@ class DriveSkill(SkillBase):
                     return self._get_fallback_credentials()
                 
                 creds = Credentials(
-                    token=token_record.access_token,
-                    refresh_token=token_record.refresh_token,
+                    token=_unprotect(token_record.access_token),
+                    refresh_token=_unprotect(token_record.refresh_token) if token_record.refresh_token else None,
                     token_uri="https://oauth2.googleapis.com/token",
                     client_id=self._get_client_id(),
                     client_secret=self._get_client_secret(),
@@ -85,7 +95,7 @@ class DriveSkill(SkillBase):
                 if creds and creds.expired and creds.refresh_token:
                     try:
                         creds.refresh(self._get_request())
-                        token_record.access_token = creds.token
+                        token_record.access_token = _protect(creds.token)
                         token_record.expires_at = creds.expiry
                         session.commit()
                         logger.info("CIPHER-001: Token OAuth2 refresh + atualizado no PostgreSQL user_id=%s", user_id)
@@ -100,6 +110,13 @@ class DriveSkill(SkillBase):
             return self._get_fallback_credentials()
     
     def _get_client_id(self):
+        from src.jefrey.core.google_oauth import credentials as _gc
+        _c = _gc()
+        if _c:
+            return _c['client_id']
+        return self._get_client_id_settings()
+
+    def _get_client_id_settings(self):
         try:
             from src.jefrey.core.config import get_settings
             return get_settings().integrations.google_drive.client_id
@@ -108,6 +125,13 @@ class DriveSkill(SkillBase):
             return os.getenv("JEFREY_OAUTH__CLIENT_ID", "")
     
     def _get_client_secret(self):
+        from src.jefrey.core.google_oauth import credentials as _gc
+        _c = _gc()
+        if _c:
+            return _c['client_secret']
+        return self._get_client_secret_settings()
+
+    def _get_client_secret_settings(self):
         try:
             from src.jefrey.core.config import get_settings
             return get_settings().integrations.google_drive.client_secret

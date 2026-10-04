@@ -77,7 +77,7 @@ class WhisperSTTEngine(STTEngine):
 
         try:
             if hasattr(self._model, "transcribe"):  # faster-whisper
-                segments, info = self._model.transcribe(tmp_path, language=self._language, beam_size=5)
+                segments, info = self._model.transcribe(tmp_path, language=self._language, beam_size=3, vad_filter=True)
                 text = " ".join(seg.text for seg in segments).strip()
             else:  # openai-whisper
                 result = self._model.transcribe(tmp_path, language=self._language)
@@ -219,6 +219,9 @@ def get_stt_engine() -> STTEngine:
     provider = getattr(cfg.voice.stt, "provider", "whisper")
     model = getattr(cfg.voice.stt, "model", "base")
     language = getattr(cfg.voice.stt, "language", "pt")
+    if provider == "whisper":
+        from src.jefrey.core.voice_ready import pick_model
+        model = pick_model(model)
 
     if provider == "whisper":
         _stt_engine = WhisperSTTEngine(model=model, language=language)

@@ -17,8 +17,8 @@ function rmsOf(buf: Float32Array): number {
 
 export function micErrorMessage(e: unknown): string {
   const name = e instanceof DOMException ? e.name : ""
-  if (name === "NotAllowedError" || name === "SecurityError") return "O navegador bloqueou o microfone. Libere nas permissões do site."
-  if (name === "NotFoundError" || name === "OverconstrainedError") return "Não encontrei nenhum microfone neste computador."
+  if (name === "NotAllowedError" || name === "SecurityError") return "O navegador bloqueou o microfone. Clique no cadeado ao lado do endereço, escolha Microfone e marque Permitir."
+  if (name === "NotFoundError" || name === "OverconstrainedError") return "Não encontrei nenhum microfone neste computador. Conecte um fone com microfone ou escreva a sua mensagem."
   if (name === "NotReadableError") return "O microfone está em uso por outro programa."
   return "Não consegui usar o microfone."
 }
@@ -30,20 +30,22 @@ type Options = {
   onSpeechStart?: () => void
   /** nivel de voz 0-1 para animar a visualizacao */
   onLevel?: (level: number) => void
+  /** o audio nao rendeu texto (ruido, fala curta): a tela pode dizer "nao entendi, pode repetir?" */
+  onUnclear?: () => void
 }
 
 /**
  * Ouve pelo microfone, detecta o fim da fala no proprio navegador (nada e enviado antes disso) e
  * transcreve com o Whisper LOCAL do servidor. Sem Web Speech API (que mandaria o audio ao Google).
  */
-export function useListener({ onTranscript, onSpeechStart, onLevel }: Options) {
+export function useListener({ onTranscript, onSpeechStart, onLevel, onUnclear }: Options) {
   const supported = typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== "undefined"
   const [state, setState] = useState<ListenerState>("idle")
   const [error, setError] = useState<string | null>(null)
   const cleanup = useRef<(() => void) | null>(null)
   const starting = useRef(false)
-  const cb = useRef({ onTranscript, onSpeechStart, onLevel })
-  cb.current = { onTranscript, onSpeechStart, onLevel }
+  const cb = useRef({ onTranscript, onSpeechStart, onLevel, onUnclear })
+  cb.current = { onTranscript, onSpeechStart, onLevel, onUnclear }
 
   const stop = useCallback(() => {
     cleanup.current?.()
@@ -58,6 +60,12 @@ export function useListener({ onTranscript, onSpeechStart, onLevel }: Options) {
       const fd = new FormData()
       fd.append("audio", blob, "voz.webm")
       const r = await authedFetch("/stt", { method: "POST", body: fd })
+      if (r.status === 400) {
+        // ruido ou fala que nao deu para entender: nao e erro, e so pedir de novo
+        setState("idle")
+        cb.current.onUnclear?.()
+        return
+      }
       if (!r.ok) {
         setError(r.status === 429 ? "Muitos pedidos de voz seguidos. Espere um pouco." : "Não consegui transcrever o áudio agora.")
         setState("error")

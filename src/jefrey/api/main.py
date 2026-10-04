@@ -360,6 +360,8 @@ def create_app() -> FastAPI:
     app.include_router(stt_router)
     app.include_router(tts_router)
     app.include_router(connections_router)
+    from src.jefrey.api.google_connect import router as google_connect_router
+    app.include_router(google_connect_router)
 
     # Monta a sub-aplicacao de aprovacoes Starlette (mantem CIPHER-019, 020, 024 intactos)
     # FIX: mount em /approvals (nao /) para evitar conflito com outros routers.

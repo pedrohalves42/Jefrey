@@ -2,15 +2,19 @@ import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Navigate, NavLink, Outlet, useLocation, useSearchParams } from "react-router-dom"
 import { getConfig, needsWelcome, welcomeSkipped } from "@/lib/llm"
+import { useEasy, visibleItems, type NavItem } from "@/lib/easy"
 import { StatusPill } from "@/components/StatusPill"
 import { ReminderBanner } from "@/components/ReminderBanner"
 
-const ITEMS = [
-  { to: "/", label: "Conversa", end: true, icon: "M4 5h16v11H8l-4 4V5z" },
+// easy: aparece no modo Fácil (padrao): so o essencial para quem nao e tecnico
+const ITEMS: NavItem[] = [
+  { to: "/", label: "Conversa", end: true, icon: "M4 5h16v11H8l-4 4V5z", easy: true },
+  { to: "/conexoes", label: "Conexões", icon: "M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1", easy: true },
   { to: "/memoria", label: "Memória", icon: "M12 3a7 7 0 00-4 12.7V19h8v-3.3A7 7 0 0012 3zm-2 18h4" },
   { to: "/skills", label: "Skills", icon: "M13 2L4 14h6l-1 8 9-12h-6l1-8z" },
   { to: "/configuracoes", label: "Configurações", icon: "M12 8a4 4 0 100 8 4 4 0 000-8zm0-5v3m0 12v3M3 12h3m12 0h3" },
   { to: "/avancado", label: "Avançado", icon: "M4 6h16M4 12h16M4 18h10" },
+  { to: "/ajuda", label: "Ajuda", icon: "M9.5 9a2.5 2.5 0 115 0c0 1.7-2.5 2-2.5 4M12 17h.01M12 3a9 9 0 100 18 9 9 0 000-18z", easy: true },
 ]
 
 function Icon({ d }: { d: string }) {
@@ -36,6 +40,8 @@ function ConnectedNotice() {
 
 export function AppShell() {
   const loc = useLocation()
+  const [easy] = useEasy()
+  const items = visibleItems(ITEMS, easy)
   const cfg = useQuery({ queryKey: ["llm-config"], queryFn: async () => (await getConfig()).data, staleTime: 30_000, retry: 1 })
   if (loc.pathname !== "/bem-vindo" && needsWelcome(cfg.data, welcomeSkipped())) return <Navigate to="/bem-vindo" replace />
   return (
@@ -49,7 +55,7 @@ export function AppShell() {
           <span className="text-lg font-semibold tracking-tight text-white">Jefrey</span>
         </div>
         <ul className="space-y-1">
-          {ITEMS.map(i => (
+          {items.map(i => (
             <li key={i.to}>
               <NavLink
                 to={i.to}
@@ -77,7 +83,7 @@ export function AppShell() {
 
       {/* barra inferior (celular) */}
       <nav className="jf-panel m-2 mt-0 flex items-center justify-around p-1 md:hidden" aria-label="Principal">
-        {ITEMS.map(i => (
+        {items.map(i => (
           <NavLink
             key={i.to}
             to={i.to}
