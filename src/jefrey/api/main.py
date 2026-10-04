@@ -12,6 +12,8 @@ import logging
 import os
 # CIPHER-313: chromadb tenta enviar telemetria (posthog) e loga ERROR a cada operacao
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
+from src.jefrey.core import logredact as _logredact
+_logredact.install()  # chaves e tokens nunca aparecem em registro
 import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -399,6 +401,8 @@ def create_app() -> FastAPI:
     app.include_router(update_router)
     from src.jefrey.api.brains_routes import router as brains_router
     app.include_router(brains_router)
+    from src.jefrey.api.alexa_routes import router as alexa_router
+    app.include_router(alexa_router)
 
     # Monta a sub-aplicacao de aprovacoes Starlette (mantem CIPHER-019, 020, 024 intactos)
     # FIX: mount em /approvals (nao /) para evitar conflito com outros routers.

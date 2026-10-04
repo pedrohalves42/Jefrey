@@ -13,7 +13,8 @@ import { useEasy } from "@/lib/easy"
 import { useActivity } from "@/hooks/useActivity"
 import { ambientLabel } from "@/lib/briefing"
 import BriefingCard from "@/components/BriefingCard"
-import JarvisHud from "@/components/hud/JarvisHud"
+import { HudOverlay, Wave } from "@/components/hud/JarvisHud"
+import { useVoicePulse } from "@/hooks/useVoicePulse"
 import { SentenceBuffer } from "@/lib/voice/sentences"
 import { authedFetch, ensureSession } from "@/lib/session"
 import {
@@ -103,6 +104,9 @@ export default function Conversa() {
   const listeningNow = listener.state === "listening" || listener.state === "hearing"
   // ---- chamar pelo nome ("Jefrey, ...") e pelo atalho do Windows (Ctrl+Alt+J) ----
   const [hud, setHud] = useState(() => readFlag("jefrey_hud", true))
+  const [drawer, setDrawer] = useState(false)
+  const [opts, setOpts] = useState(false)
+  const stageRef = useRef<HTMLDivElement>(null)
   const [wakeOn, setWakeOn] = useState(() => readFlag("jefrey_wake", false))
   const startVoiceRef = useRef<(first?: string) => Promise<void>>(async () => {})
   const wakeListener = useListener({
@@ -135,8 +139,11 @@ export default function Conversa() {
 
   const activity = useActivity()
   const note = ambientLabel(activity)
+  useVoicePulse(stageRef, speaker.speaking)
   const brainState: BrainState = pendingApproval !== undefined
     ? "approval"
+    : speaker.speaking
+      ? "responding"
     : streaming
       ? gotToken ? "responding" : "thinking"
       : listeningNow ? "listening" : note ? "thinking" : "idle"
@@ -380,16 +387,66 @@ export default function Conversa() {
   const empty = active.messages.length === 0
   const lastIsError = active.messages.length > 0 && active.messages[active.messages.length - 1]!.error
 
+  const lastAi = [...active.messages].reverse().find(m => m.role === "assistant")
+  const lastUser = [...active.messages].reverse().find(m => m.role === "user")
+  const caption = lastAi?.content ? lastAi.content.replace(/\s+/g, " ").trim() : ""
+
+  const messageList = (
+    <ul className="space-y-3 py-2">
+      {active.messages.map((m, idx) => {
+        const isLast = idx === active.messages.length - 1
+        const typing = streaming && isLast && m.role === "assistant" && !m.content && !(m.tools && m.tools.length)
+        return (
+          <li key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+            <div className={`max-w-[88%] rounded-2xl px-4 py-2.5 text-[15px] leading-relaxed ${m.role === "user" ? "jf-bubble-user" : m.error ? "jf-bubble-err" : "jf-bubble-ai"}`}>
+              {typing ? (
+                <span className="jf-typing" aria-label="Jefrey está pensando"><span /><span /><span /></span>
+              ) : (
+                <>
+                  {m.tools && m.tools.length > 0 && (
+                    <div className="mb-1.5 flex flex-wrap gap-1.5">
+                      {m.tools.map((t, i) => (
+                        <span
+                          key={i}
+                          title={t.summary || t.label}
+                          className={`rounded-full border px-2 py-0.5 text-xs ${
+                            t.state === "ok" ? "border-emerald-400/30 text-emerald-200"
+                            : t.state === "failed" ? "border-red-400/30 text-red-200"
+                            : t.state === "waiting" ? "border-amber-400/40 text-amber-200"
+                            : "border-white/20 text-white/60"
+                          }`}
+                        >
+                          {t.state === "ok" ? "✓ " : t.state === "failed" ? "✗ " : t.state === "waiting" ? "⏳ " : "… "}
+                          {t.label}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <MessageText text={m.content} />
+                  {m.recall && m.recall.length > 0 && (
+                    <p className="mt-2 border-t border-white/10 pt-2 text-sm text-white/65">
+                      <span className="jf-accent">Lembrei de: </span>
+                      {m.recall.map(r => r.text).join(" · ")}{" "}
+                      <Link to="/aprendi" className="underline hover:text-white">ver tudo</Link>
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          </li>
+        )
+      })}
+    </ul>
+  )
+
   return (
     <div className="flex h-full min-h-0 gap-3">
-      {/* lista de conversas */}
+      {/* lista de conversas (so fora do modo Facil) */}
       <aside
-        className={`jf-panel absolute inset-y-0 left-0 z-20 w-72 shrink-0 flex-col p-3 md:static ${easy ? "hidden" : `md:flex ${showList ? "flex" : "hidden"}`}`}
+        className={`jf-panel absolute inset-y-0 left-0 z-20 w-72 shrink-0 flex-col p-3 ${easy || !showList ? "hidden" : "flex"}`}
         aria-label="Conversas"
       >
-        <button type="button" onClick={startNew} disabled={streaming} className="jf-btn jf-focus mb-3 px-3 py-2 text-sm">
-          + Nova conversa
-        </button>
+        <button type="button" onClick={startNew} disabled={streaming} className="jf-btn jf-focus mb-3 px-3 py-2 text-sm">+ Nova conversa</button>
         <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto">
           {threads.map(t => (
             <li key={t.id} className="group flex items-center gap-1">
@@ -403,171 +460,134 @@ export default function Conversa() {
                   }
                 }}
                 aria-current={t.id === activeId}
-                className={`jf-focus min-w-0 flex-1 truncate rounded-lg px-3 py-2 text-left text-sm ${
-                  t.id === activeId ? "bg-white/10 text-white" : "text-white/65 hover:bg-white/5"
-                }`}
+                className={`jf-focus min-w-0 flex-1 truncate rounded-lg px-3 py-2 text-left text-sm ${t.id === activeId ? "bg-white/10 text-white" : "text-white/65 hover:bg-white/5"}`}
               >
                 {t.title}
               </button>
-              <button
-                type="button"
-                onClick={() => removeThread(t.id)}
-                aria-label={`Apagar conversa ${t.title}`}
-                className="jf-focus rounded px-2 py-1 text-white/30 opacity-0 hover:text-red-300 group-hover:opacity-100 focus:opacity-100"
-              >
-                ×
-              </button>
+              <button type="button" onClick={() => removeThread(t.id)} aria-label={`Apagar conversa ${t.title}`} className="jf-focus rounded px-2 py-1 text-white/30 opacity-0 hover:text-red-300 group-hover:opacity-100 focus:opacity-100">×</button>
             </li>
           ))}
         </ul>
       </aside>
 
-      {/* conversa */}
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className={`mb-2 items-center gap-2 md:hidden ${easy ? "hidden" : "flex"}`}>
-          <button type="button" onClick={() => setShowList(v => !v)} className="jf-btn jf-focus px-3 py-1.5 text-sm">
-            Conversas
-          </button>
+      {/* palco: o avatar ocupa quase toda a tela e as opcoes ficam pequenas por cima */}
+      <section className="jf-stage relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-2xl" aria-label="Conversa com o Jefrey">
+        <div className="jf-rings" aria-hidden="true" />
+        <div ref={stageRef} className="jf-stage-core absolute inset-0 will-change-transform">
+          <BrainStage state={brainState} level={speaker.speaking ? Math.max(micLevel, 0.55) : micLevel} note={streaming || listeningNow ? null : note} className="h-full w-full" />
         </div>
+        <span className="jf-corner jf-corner-tl" /><span className="jf-corner jf-corner-tr" /><span className="jf-corner jf-corner-bl" /><span className="jf-corner jf-corner-br" />
 
-        <BriefingCard />
-        {(() => {
-          const stage = (
-            <div className="jf-hud">
-              <span className="pointer-events-none absolute right-3 top-2 z-10 text-xs tabular-nums tracking-widest text-[hsl(var(--hue)_80%_75%)] opacity-70">
-                {clock.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-              </span>
-              <BrainStage state={brainState} level={micLevel} note={streaming || listeningNow ? null : note} className={empty ? "h-[34vh] min-h-[200px]" : "h-[22vh] min-h-[130px]"} />
-            </div>
-          )
-          return hud ? (
-            <JarvisHud messages={active.messages} activity={activity} level={micLevel} speaking={speaker.speaking}>{stage}</JarvisHud>
-          ) : stage
-        })()}
+        {/* topo: relogio, estado e atalhos */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between p-3">
+          <button type="button" onClick={() => setShowList(v => !v)} className={`jf-focus pointer-events-auto rounded-md border border-white/15 bg-black/40 px-2.5 py-1 text-xs text-white/75 md:hidden ${easy ? "hidden" : ""}`}>Conversas</button>
+          <span className="ml-auto text-xs tabular-nums tracking-[0.3em] text-[hsl(var(--hue)_80%_75%)] opacity-80">
+            {clock.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+          </span>
+        </div>
+        <div className="pointer-events-none absolute inset-x-0 top-10 z-20 mx-auto w-full max-w-lg px-3"><div className="pointer-events-auto"><BriefingCard /></div></div>
+        {hud && <HudOverlay messages={active.messages} activity={activity} />}
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-1" role="log" aria-live="polite" aria-label="Mensagens">
-          {empty && (
-            <div className="mx-auto mt-2 max-w-xl text-center">
-              <h2 className="text-xl font-semibold text-white">{greeting(clock.getHours(), myName)}</h2>
-              <p className="mt-1 text-sm text-white/60">
-                {myName ? "O que vamos resolver agora?" : "Eu sou o Jefrey. Como posso te chamar?"} Seus dados ficam no seu computador.
+        {/* aprovacao de acao de risco */}
+        {pendingApproval !== undefined && (
+          <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/55 p-4" role="alertdialog" aria-label="Aprovação necessária">
+            <div className="jf-panel w-full max-w-md border-amber-400/40 bg-[#07141b] p-5">
+              <p className="text-lg font-medium text-amber-200">Preciso da sua aprovação</p>
+              <p className="mt-1 text-base text-white/75">
+                {pendingApproval.label ? <>Ação: <b>{pendingApproval.label}</b>. </> : null}Pode ter efeitos reais. Você autoriza?
               </p>
-              <div className="mt-4 flex flex-wrap justify-center gap-2">
+              <div className="mt-4 flex gap-2">
+                <button type="button" onClick={() => void decide("approved")} className="jf-btn jf-focus px-5 py-2.5 text-base">Aprovar</button>
+                <button type="button" onClick={() => void decide("rejected")} className="jf-focus rounded-lg border border-white/20 px-5 py-2.5 text-base text-white/85 hover:bg-white/5">Negar</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* base: legenda, voz, texto e opcoes */}
+        <div className="absolute inset-x-0 bottom-0 z-30 flex flex-col items-center gap-2 bg-gradient-to-t from-black/75 via-black/35 to-transparent px-3 pb-3 pt-16">
+          {empty && (
+            <div className="max-w-xl text-center">
+              <h2 className="text-lg font-semibold text-white">{greeting(clock.getHours(), myName)}</h2>
+              <p className="text-sm text-white/65">{myName ? "O que vamos resolver agora?" : "Eu sou o Jefrey. Como posso te chamar?"}</p>
+              <div className="mt-2 flex flex-wrap justify-center gap-1.5">
                 {SUGGESTIONS.map(s => (
-                  <button key={s} type="button" onClick={() => void send(s)} className="jf-btn jf-focus px-3 py-1.5 text-sm">
-                    {s}
-                  </button>
+                  <button key={s} type="button" onClick={() => void send(s)} className="jf-focus rounded-full border border-white/20 bg-black/30 px-3 py-1 text-xs text-white/80 hover:bg-white/10">{s}</button>
                 ))}
               </div>
             </div>
           )}
 
-          <ul className="mx-auto max-w-3xl space-y-3 py-2">
-            {active.messages.map((m, idx) => {
-              const isLast = idx === active.messages.length - 1
-              const typing = streaming && isLast && m.role === "assistant" && !m.content && !(m.tools && m.tools.length)
-              return (
-                <li key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-[15px] leading-relaxed ${
-                      m.role === "user" ? "jf-bubble-user" : m.error ? "jf-bubble-err" : "jf-bubble-ai"
-                    }`}
-                  >
-                    {typing ? (
-                      <span className="jf-typing" aria-label="Jefrey está pensando">
-                        <span />
-                        <span />
-                        <span />
-                      </span>
-                    ) : (
-                      <>
-                        {m.tools && m.tools.length > 0 && (
-                          <div className="mb-1.5 flex flex-wrap gap-1.5">
-                            {m.tools.map((t, i) => (
-                              <span
-                                key={i}
-                                title={t.summary || t.label}
-                                className={`rounded-full border px-2 py-0.5 text-xs ${
-                                  t.state === "ok" ? "border-emerald-400/30 text-emerald-200"
-                                  : t.state === "failed" ? "border-red-400/30 text-red-200"
-                                  : t.state === "waiting" ? "border-amber-400/40 text-amber-200"
-                                  : "border-white/20 text-white/60"
-                                }`}
-                              >
-                                {t.state === "ok" ? "✓ " : t.state === "failed" ? "✗ " : t.state === "waiting" ? "⏳ " : "… "}
-                                {t.label}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        <MessageText text={m.content} />
-                        {m.recall && m.recall.length > 0 && (
-                          <p className="mt-2 border-t border-white/10 pt-2 text-sm text-white/65">
-                            <span className="jf-accent">Lembrei de: </span>
-                            {m.recall.map(r => r.text).join(" · ")}{" "}
-                            <Link to="/aprendi" className="underline hover:text-white">ver tudo</Link>
-                          </p>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
-
-          {pendingApproval !== undefined && (
-            <div className="jf-panel mx-auto my-3 max-w-xl border-amber-400/40 p-4" role="alertdialog" aria-label="Aprovação necessária">
-              <p className="font-medium text-amber-200">Preciso da sua aprovação</p>
-              <p className="mt-1 text-sm text-white/70">
-                {pendingApproval.label ? <>Ação: <b>{pendingApproval.label}</b>. </> : null}Pode ter efeitos reais. Você autoriza?
-              </p>
-              <div className="mt-3 flex gap-2">
-                <button type="button" onClick={() => void decide("approved")} className="jf-btn jf-focus px-4 py-1.5 text-sm">
-                  Aprovar
-                </button>
-                <button type="button" onClick={() => void decide("rejected")} className="jf-focus rounded-lg border border-white/15 px-4 py-1.5 text-sm text-white/80 hover:bg-white/5">
-                  Negar
-                </button>
-              </div>
+          {!empty && (caption || streaming) && (
+            <div className="jf-glass relative max-w-2xl rounded-xl px-4 py-2.5 text-center" aria-live="polite">
+              {lastUser && <p className="mb-1 truncate text-xs text-white/45">Você: {lastUser.content}</p>}
+              {streaming && !caption ? (
+                <span className="jf-typing" aria-label="Jefrey está pensando"><span /><span /><span /></span>
+              ) : (
+                <p className={`text-[15px] leading-snug ${lastAi?.error ? "text-red-200" : "text-white/95"} line-clamp-4`}>{caption}</p>
+              )}
+              {lastAi?.recall && lastAi.recall.length > 0 && <p className="mt-1 text-xs text-white/55"><span className="jf-accent">Lembrei:</span> {lastAi.recall.map(r => r.text).join(" · ")}</p>}
+              {caption.length > 220 && <button type="button" onClick={() => setDrawer(true)} className="jf-focus mt-1 text-xs text-[hsl(var(--hue)_80%_75%)] underline">ver tudo</button>}
             </div>
           )}
-          <div ref={endRef} />
-        </div>
 
-        {/* campo de mensagem */}
-        <div className="mx-auto w-full max-w-3xl pb-1 pt-2">
           {lastIsError && !streaming && (
-            <button type="button" onClick={retry} className="jf-btn jf-focus mb-2 px-3 py-1 text-sm">
-              Tentar de novo
-            </button>
+            <button type="button" onClick={retry} className="jf-btn jf-focus px-3 py-1 text-sm">Tentar de novo</button>
           )}
+
           {listener.supported && (
-            <div className="mb-3 flex flex-col items-center gap-1">
+            <div className="flex w-full flex-col items-center gap-1">
               <button
                 type="button"
                 onClick={() => void toggleVoiceMode()}
                 disabled={voiceReady.preparing}
                 aria-pressed={view.tone === "listening" || view.tone === "hearing"}
-                className={`jf-btn jf-focus flex min-h-[3.5rem] w-full max-w-md items-center justify-center gap-3 rounded-full px-6 py-3 text-lg font-medium ${
-                  view.tone === "hearing" ? "ring-2 ring-white/60" : ""
-                }`}
+                className={`jf-btn jf-focus flex min-h-[3rem] items-center justify-center gap-2.5 rounded-full px-7 py-2 text-base font-medium ${view.tone === "hearing" || view.tone === "speaking" ? "ring-2 ring-white/50" : ""}`}
               >
-                <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M12 3a3 3 0 00-3 3v6a3 3 0 006 0V6a3 3 0 00-3-3zM6 11a6 6 0 0012 0M12 17v4" />
                 </svg>
                 <span aria-live="polite">{view.label}</span>
               </button>
-              {view.hint && <p className="text-sm text-white/65">{view.hint}</p>}
-              {unclear && view.tone === "listening" && <p role="status" className="text-base text-amber-200">Não entendi. Pode repetir, devagar?</p>}
-              {voiceReady.error && (
-                <p role="alert" className="text-center text-base text-red-200">
-                  {voiceReady.error}
-                </p>
-              )}
+              {view.hint && <p className="text-xs text-white/60">{view.hint}</p>}
+              {unclear && view.tone === "listening" && <p role="status" className="text-sm text-amber-200">Não entendi. Pode repetir, devagar?</p>}
+              {voiceReady.error && <p role="alert" className="text-center text-sm text-red-200">{voiceReady.error}</p>}
             </div>
           )}
-          <div className="jf-panel flex items-end gap-2 p-2">
+          <Wave level={micLevel} speaking={speaker.speaking} className="max-w-md opacity-80" />
+
+          <div className="flex w-full max-w-2xl items-end gap-1.5">
+            <div className="relative">
+              <button type="button" onClick={() => setOpts(v => !v)} aria-expanded={opts} aria-label="Opções" className="jf-focus rounded-lg border border-white/20 bg-black/40 px-2.5 py-2 text-sm text-white/75 hover:bg-white/10">⚙</button>
+              {opts && (
+                <div className="jf-glass absolute bottom-11 left-0 z-40 w-64 space-y-2 rounded-xl p-3 text-sm text-white/80">
+                  {speaker.supported && (
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <input type="checkbox" checked={voiceReply} onChange={e => { setVoiceReplyState(e.target.checked); writeFlag("jefrey_voice_reply", e.target.checked); if (!e.target.checked) speaker.cancel() }} />
+                      Falar as respostas
+                    </label>
+                  )}
+                  {listener.supported && (
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <input type="checkbox" checked={continuous} onChange={e => { setContinuousState(e.target.checked); writeFlag("jefrey_voice_continuous", e.target.checked) }} />
+                      Conversa contínua
+                    </label>
+                  )}
+                  {listener.supported && (
+                    <label className="flex cursor-pointer items-center gap-2" title="O microfone fica ligado e eu só entendo o que você fala quando começa com 'Jefrey'. Nada é guardado nem enviado para a internet.">
+                      <input type="checkbox" checked={wakeOn} onChange={() => void toggleWake()} />
+                      Chamar pelo nome ("Jefrey, …")
+                    </label>
+                  )}
+                  <label className="flex cursor-pointer items-center gap-2" title="Medidores e registro sobre o avatar (telas largas)">
+                    <input type="checkbox" checked={hud} onChange={e => { setHud(e.target.checked); writeFlag("jefrey_hud", e.target.checked) }} />
+                    Painel Jarvis
+                  </label>
+                </div>
+              )}
+            </div>
+            {!easy && <button type="button" onClick={() => setShowList(v => !v)} aria-pressed={showList} aria-label="Minhas conversas" className="jf-focus rounded-lg border border-white/20 bg-black/40 px-2.5 py-2 text-sm text-white/75 hover:bg-white/10">Conversas</button>}
+            <button type="button" onClick={() => setDrawer(true)} aria-label="Histórico da conversa" className="jf-focus rounded-lg border border-white/20 bg-black/40 px-2.5 py-2 text-sm text-white/75 hover:bg-white/10">Histórico</button>
             <textarea
               ref={taRef}
               value={input}
@@ -575,86 +595,38 @@ export default function Conversa() {
               onKeyDown={onKey}
               rows={1}
               maxLength={10000}
-              placeholder="Escreva uma mensagem…"
+              placeholder="Ou escreva aqui…"
               aria-label="Mensagem para o Jefrey"
-              className="jf-focus max-h-40 min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2 text-[15px] outline-none placeholder:text-white/35"
+              className="jf-focus max-h-28 min-h-[38px] flex-1 resize-none rounded-lg border border-white/15 bg-black/45 px-3 py-2 text-sm outline-none placeholder:text-white/35"
               style={{ height: "auto" }}
               onInput={e => {
                 const el = e.currentTarget
                 el.style.height = "auto"
-                el.style.height = Math.min(el.scrollHeight, 160) + "px"
+                el.style.height = Math.min(el.scrollHeight, 112) + "px"
               }}
             />
-            {listener.supported && (
-              <button
-                type="button"
-                onClick={toggleMic}
-                aria-pressed={micOn || listener.state !== "idle"}
-                aria-label={micOn || listener.state !== "idle" ? "Parar de ouvir" : "Falar com o Jefrey"}
-                title={listener.state === "hearing" ? "Ouvindo você…" : listener.state === "transcribing" ? "Transcrevendo…" : "Falar com o Jefrey"}
-                className={`jf-focus rounded-lg border px-3 py-2 text-sm ${
-                  micOn || listener.state !== "idle" ? "border-white/40 bg-white/15 text-white" : "border-white/15 text-white/70 hover:bg-white/5"
-                }`}
-              >
-                {listener.state === "transcribing" ? "…" : listener.state === "hearing" ? "●" : "🎙"}
-              </button>
-            )}
             {streaming ? (
-              <button type="button" onClick={stop} className="jf-focus rounded-lg border border-white/20 px-4 py-2 text-sm text-white/85 hover:bg-white/5">
-                Parar
-              </button>
+              <button type="button" onClick={stop} className="jf-focus rounded-lg border border-white/25 bg-black/40 px-3 py-2 text-sm text-white/85 hover:bg-white/10">Parar</button>
             ) : (
-              <button type="button" onClick={() => void send()} disabled={!input.trim()} className="jf-btn jf-focus px-4 py-2 text-sm">
-                Enviar
-              </button>
+              <button type="button" onClick={() => void send()} disabled={!input.trim()} className="jf-btn jf-focus px-3 py-2 text-sm">Enviar</button>
             )}
           </div>
-          <div className="mt-1 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm text-white/65">
-            {speaker.supported && (
-              <label className="flex cursor-pointer items-center gap-1.5">
-                <input
-                  type="checkbox"
-                  checked={voiceReply}
-                  onChange={e => {
-                    setVoiceReplyState(e.target.checked)
-                    writeFlag("jefrey_voice_reply", e.target.checked)
-                    if (!e.target.checked) speaker.cancel()
-                  }}
-                />
-                Falar as respostas
-              </label>
-            )}
-            <label className="flex cursor-pointer items-center gap-1.5" title="Mostra os medidores e o registro de atividade ao redor do avatar (telas largas)">
-              <input type="checkbox" checked={hud} onChange={e => { setHud(e.target.checked); writeFlag("jefrey_hud", e.target.checked) }} />
-              Painel Jarvis
-            </label>
-            {listener.supported && (
-              <label className="flex cursor-pointer items-center gap-1.5" title="O microfone fica ligado e eu só entendo o que você fala quando começa com 'Jefrey'. Nada é guardado nem enviado para a internet.">
-                <input type="checkbox" checked={wakeOn} onChange={() => void toggleWake()} />
-                Chamar pelo nome ("Jefrey, …")
-              </label>
-            )}
-            {listener.supported && (
-              <label className="flex cursor-pointer items-center gap-1.5">
-                <input
-                  type="checkbox"
-                  checked={continuous}
-                  onChange={e => {
-                    setContinuousState(e.target.checked)
-                    writeFlag("jefrey_voice_continuous", e.target.checked)
-                  }}
-                />
-                Conversa contínua
-              </label>
-            )}
-            <span className="text-white/30">Enter envia · Shift+Enter quebra a linha</span>
-          </div>
-          {listener.error && (
-            <p role="alert" className="mt-1 text-center text-xs text-red-300">
-              {listener.error}
-            </p>
-          )}
+          {listener.error && <p role="alert" className="text-center text-xs text-red-300">{listener.error}</p>}
         </div>
+
+        {/* gaveta do historico */}
+        {drawer && (
+          <div className="absolute inset-y-0 right-0 z-50 flex w-[min(30rem,100%)] flex-col border-l border-white/10 bg-[#050d13]/95 backdrop-blur" role="dialog" aria-label="Histórico da conversa">
+            <div className="flex items-center justify-between border-b border-white/10 p-3">
+              <h2 className="text-lg font-medium text-white">Histórico</h2>
+              <button type="button" onClick={() => setDrawer(false)} className="jf-focus rounded-lg border border-white/20 px-3 py-1.5 text-sm text-white/85 hover:bg-white/10">Fechar</button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-3" role="log" aria-live="polite" aria-label="Mensagens">
+              {empty ? <p className="py-6 text-center text-base text-white/60">Ainda não conversamos. Toque no botão de voz e fale comigo.</p> : messageList}
+              <div ref={endRef} />
+            </div>
+          </div>
+        )}
       </section>
     </div>
   )

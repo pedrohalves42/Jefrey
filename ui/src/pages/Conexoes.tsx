@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { useSearchParams } from "react-router-dom"
 import ListenButton from "@/components/ListenButton"
 import { disconnectGoogle, getGoogle, googleReturnMessage, SERVICE_LABEL, startGoogle, type GoogleService, type GoogleStatus } from "@/lib/connections"
+import AlexaTab from "@/components/AlexaTab"
 import Cerebros from "@/components/Cerebros"
 import {
   MODE_LABEL, minutesLeft, sortChats, waForgetAll, waOpenFolder, waPairing, waRevoke, waSetMode, waSetPaused, waStatus, WA_PRIVACY_NOTE, WA_RISK_NOTE,
@@ -279,16 +280,54 @@ function WhatsApp() {
   )
 }
 
+const TABS = [
+  { id: "cerebros", label: "Cérebros" },
+  { id: "google", label: "Google" },
+  { id: "whatsapp", label: "WhatsApp" },
+  { id: "alexa", label: "Alexa" },
+] as const
+type TabId = (typeof TABS)[number]["id"]
+
+function pickTab(params: URLSearchParams): TabId {
+  const a = params.get("aba") ?? (params.get("google") ? "google" : "")
+  return (TABS.find(t => t.id === a)?.id ?? "cerebros") as TabId
+}
+
 export default function Conexoes() {
+  const [params, setParams] = useSearchParams()
+  const [tab, setTab] = useState<TabId>(() => pickTab(params))
+  function choose(id: TabId) {
+    setTab(id)
+    if (params.get("aba")) setParams({ aba: id }, { replace: true })
+  }
   return (
-    <div className="mx-auto h-full max-w-2xl space-y-4 overflow-y-auto pb-8">
+    <div className="mx-auto h-full max-w-2xl overflow-y-auto pb-8">
       <header>
         <h1 className="text-3xl font-semibold text-white">Conexões</h1>
         <p className="mt-1 text-base text-white/65">Ligue o Jefrey às suas contas. É só apertar o botão, entrar na sua conta e voltar.</p>
       </header>
-      <Cerebros />
-      <Google />
-      <WhatsApp />
+      <div role="tablist" aria-label="Conexões" className="mt-4 flex flex-wrap gap-2 border-b border-white/10 pb-3">
+        {TABS.map(t => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            id={`tab-${t.id}`}
+            aria-selected={tab === t.id}
+            aria-controls={`painel-${t.id}`}
+            onClick={() => choose(t.id)}
+            className={`jf-focus rounded-lg border px-5 py-2.5 text-base ${tab === t.id ? "border-cyan-300 bg-cyan-400/10 text-white" : "border-white/20 text-white/75 hover:bg-white/5"}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div role="tabpanel" id={`painel-${tab}`} aria-labelledby={`tab-${tab}`} className="mt-4">
+        {tab === "cerebros" && <Cerebros />}
+        {tab === "google" && <Google />}
+        {tab === "whatsapp" && <WhatsApp />}
+        {tab === "alexa" && <AlexaTab />}
+      </div>
     </div>
   )
 }

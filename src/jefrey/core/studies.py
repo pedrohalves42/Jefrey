@@ -27,8 +27,17 @@ DEFAULT_BUDGET_USD = 0.10
 MAX_ACTIVE_TOPICS = 5
 LEVEL_MAX = 5
 MAX_PAGES = 4
+MAX_SOURCES = 40
 LEVELS = {0: "Começando", 1: "Iniciante", 2: "Básico", 3: "Intermediário", 4: "Avançado", 5: "Especialista"}
 _MIN_CALL_USD = 0.002
+
+
+def clean_source_url(url: str) -> Optional[str]:
+    """Link seguro para estudar: so http(s) publico, sem usuario/senha e sem enderecos internos."""
+    from src.jefrey.skills.computer import clean_url
+
+    t = (url or "").strip()
+    return clean_url(t) if re.match(r"^(https?://|[\w.-]+\.[a-z]{2,})", t, re.I) else None
 
 
 def level_label(level: int) -> str:
@@ -91,6 +100,20 @@ def _tables():
     return topics, guides, prefs, spend
 
 
+def _sources_table():
+    from sqlalchemy import Column, DateTime, String, Table
+
+    from src.jefrey.core.db import Base
+
+    t = Base.metadata.tables.get("study_sources")
+    if t is None:
+        t = Table("study_sources", Base.metadata,
+                  Column("id", String(40), primary_key=True), Column("user_id", String(255), nullable=False, index=True),
+                  Column("topic_id", String(40), nullable=True, index=True), Column("url", String(600), nullable=False),
+                  Column("title", String(160), nullable=False), Column("created_at", DateTime, nullable=False))
+    return t
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
@@ -107,7 +130,8 @@ class StudyStore:
 
         self.topics, self.guides, self.prefs, self.spend = _tables()
         self.engine = get_engine()
-        for t in (self.topics, self.guides, self.prefs, self.spend):
+        self.sources = _sources_table()
+        for t in (self.topics, self.guides, self.prefs, self.spend, self.sources):
             t.create(self.engine, checkfirst=True)
 
     @staticmethod
@@ -210,12 +234,14 @@ class StudyStore:
         with self.engine.begin() as c:
             n = c.execute(self.topics.delete().where((self.topics.c.id == topic_id) & (self.topics.c.user_id == user_id))).rowcount
             c.execute(self.guides.delete().where((self.guides.c.topic_id == topic_id) & (self.guides.c.user_id == user_id)))
+            c.execute(self.sources.delete().where((self.sources.c.topic_id == topic_id) & (self.sources.c.user_id == user_id)))
         return bool(n)
 
     def forget_all(self, user_id: str) -> int:
         with self.engine.begin() as c:
             n = c.execute(self.topics.delete().where(self.topics.c.user_id == user_id)).rowcount or 0
             c.execute(self.guides.delete().where(self.guides.c.user_id == user_id))
+            c.execute(self.sources.delete().where(self.sources.c.user_id == user_id))
         return n
 
     def mark(self, user_id: str, topic_id: str, *, level: Optional[int] = None, error: Optional[str] = None) -> None:
@@ -226,6 +252,43 @@ class StudyStore:
             vals["level"] = level
         with self.engine.begin() as c:
             c.execute(self.topics.update().where((self.topics.c.id == topic_id) & (self.topics.c.user_id == user_id)).values(**vals))
+
+    # --- fontes que a pessoa indica (links para pesquisar) ---
+    def add_source(self, user_id: str, url: str, topic_id: Optional[str] = None, title: str = "") -> dict:
+        self._check(user_id)
+        clean = clean_source_url(url)
+        if clean is None:
+            raise ValueError("Esse link não serve. Use um endereço de site que comece com http:// ou https://, como https://pt.wikipedia.org/…")
+        if topic_id is not None and self.get_topic(user_id, topic_id) is None:
+            raise ValueError("Não encontrei esse assunto.")
+        with self.engine.connect() as c:
+            dup = c.execute(self.sources.select().where((self.sources.c.user_id == user_id) & (self.sources.c.url == clean)
+                                                        & (self.sources.c.topic_id == topic_id))).first()
+            n = c.execute(select(func.count()).select_from(self.sources).where(self.sources.c.user_id == user_id)).scalar() or 0
+        if dup is not None:
+            return self._source(dup)
+        if n >= MAX_SOURCES:
+            raise ValueError(f"Você já indicou {MAX_SOURCES} fontes. Apague alguma para incluir outra.")
+        sid = uuid.uuid4().hex
+        label = " ".join((title or "").split())[:160] or webread.domain(clean)
+        with self.engine.begin() as c:
+            c.execute(self.sources.insert().values(id=sid, user_id=user_id, topic_id=topic_id, url=clean, title=label, created_at=_now()))
+        return {"id": sid, "topic_id": topic_id, "url": clean, "title": label}
+
+    @staticmethod
+    def _source(r) -> dict:
+        return {"id": r.id, "topic_id": r.topic_id, "url": r.url, "title": r.title}
+
+    def list_sources(self, user_id: str, topic_id: Optional[str] = None) -> list[dict]:
+        q = self.sources.select().where(self.sources.c.user_id == user_id)
+        if topic_id is not None:
+            q = q.where(self.sources.c.topic_id == topic_id)
+        with self.engine.connect() as c:
+            return [self._source(r) for r in c.execute(q.order_by(self.sources.c.created_at.desc())).fetchall()]
+
+    def delete_source(self, user_id: str, source_id: str) -> bool:
+        with self.engine.begin() as c:
+            return bool(c.execute(self.sources.delete().where((self.sources.c.id == source_id) & (self.sources.c.user_id == user_id))).rowcount)
 
     # --- guias ---
     def add_guide(self, user_id: str, topic_id: str, title: str, summary: str, body: str, sources: list[dict], level: int) -> str:
@@ -424,7 +487,9 @@ async def _study(user_id: str, topic_id: str, client: Any, *, tz=None, search: O
         queries = parse_queries(await budget.ask(client, [{"role": "system", "content": _PLAN_PROMPT},
                                                           {"role": "user", "content": f"Assunto: {topic['title']}"}], 200), topic["title"])
         seen_urls, seen_domains = store.read_urls(user_id, topic_id), set()
-        cands: list[dict] = []
+        cands: list[dict] = [{"url": u["url"], "title": u["title"], "snippet": "", "mine": True}
+                             for u in store.list_sources(user_id, topic_id) + [x for x in store.list_sources(user_id) if x["topic_id"] is None]
+                             if u["url"] not in seen_urls]
         for q in queries:
             for r in await search(q, 6):
                 d = webread.domain(r["url"])
@@ -433,16 +498,19 @@ async def _study(user_id: str, topic_id: str, client: Any, *, tz=None, search: O
                 seen_domains.add(d)
                 cands.append(r)
         pages: list[dict] = []
-        for r in cands[: MAX_PAGES + 2]:
-            if len(pages) >= MAX_PAGES:
+        mine_urls = {c["url"] for c in cands if c.get("mine")}
+        for r in cands[: MAX_PAGES + 2 + len(mine_urls)]:
+            if len(pages) >= MAX_PAGES + min(len(mine_urls), 2):
                 break
             try:
-                pages.append(await fetch(r["url"]))
+                pg = await fetch(r["url"])
+                pg["mine"] = r["url"] in mine_urls
+                pages.append(pg)
             except webread.ReadError:
                 continue
         if not pages:
             raise StudyError("Não consegui ler fontes agora. Tento de novo mais tarde.")
-        sources = [{"title": p["title"], "url": p["url"], "date": p["fetched_at"]} for p in pages]
+        sources = [{"title": p["title"], "url": p["url"], "date": p["fetched_at"], **({"mine": True} if p.get("mine") else {})} for p in pages]
         material = "\n".join(f"<fonte n={i}>\n{p['text'][:2500]}\n</fonte>" for i, p in enumerate(pages, 1))
         raw = await budget.ask(client, [{"role": "system", "content": _WRITE_PROMPT},
                                         {"role": "user", "content": f"Assunto: {topic['title']}\nNivel atual de conhecimento: {level_label(topic['level'])}\n{material}"}], 2200)
@@ -461,6 +529,65 @@ async def _study(user_id: str, topic_id: str, client: Any, *, tz=None, search: O
     gid = store.add_guide(user_id, topic_id, guide["title"], guide["summary"], guide["body"], guide["sources"], level)
     store.mark(user_id, topic_id, level=level)
     return {**guide, "id": gid, "level": level, "level_label": level_label(level), "topic_id": topic_id}
+
+
+# ---------------- aprender por pedido (sem usar o chat) ----------------
+async def learn_request(user_id: str, *, topic: str = "", url: str = "", text: str = "", store: Optional[StudyStore] = None,
+                        fetch: Optional[Callable] = None) -> dict:
+    """A pessoa pede para o Jefrey aprender algo: um assunto, um link ou um texto. Devolve o que foi feito (sem estudar ainda).
+
+    - link: vira fonte (e assunto, com o titulo da pagina se a pessoa nao disse); o estudo le essa pagina primeiro;
+    - assunto: entra na lista de estudos;
+    - texto: guardado nas notas/memorias e dele saem fatos (nunca segredos).
+    """
+    store = store or StudyStore()
+    topic, url, text = (topic or "").strip(), (url or "").strip(), (text or "").strip()
+    if not (topic or url or text):
+        raise ValueError("Diga o assunto, cole um link ou um texto.")
+    out: dict = {}
+    if text and len(text) >= 20 and not url:
+        if has_secret(text):
+            raise ValueError("Esse texto parece ter senha, documento ou número de cartão. Eu não guardo isso.")
+        from src.jefrey.core.learning import FactStore, extract_by_rules
+        from src.jefrey.core.memory import get_memory_manager
+
+        get_memory_manager().long_term.add(text[:4000], metadata={"type": "note", "source": "aprender"}, user_id=user_id)
+        fs, n = FactStore(), 0
+        if fs.enabled(user_id):
+            for f in extract_by_rules(text):
+                if fs.learn(user_id, f) != "same":
+                    n += 1
+        out.update(saved_text=True, facts=n)
+        if not topic:
+            return out
+    if url:
+        clean = clean_source_url(url)
+        if clean is None:
+            raise ValueError("Esse link não serve. Use um endereço de site que comece com http:// ou https://")
+        title = topic
+        if not title:
+            try:
+                page = await (fetch or webread.fetch_page)(clean)
+                title = re.sub(r"\s*[|\-–—].*$", "", page["title"]).strip()[:80] or webread.domain(clean)
+            except webread.ReadError:
+                title = webread.domain(clean)
+        try:
+            t = store.add_topic(user_id, title, "manual")
+        except ValueError as e:
+            if "já está" not in str(e):
+                raise
+            t = next(x for x in store.list_topics(user_id) if _norm(x["title"]) == _norm(title))
+        store.add_source(user_id, clean, t["id"], title=title)
+        out.update(topic=t, source=clean)
+        return out
+    if topic:
+        try:
+            out["topic"] = store.add_topic(user_id, topic, "manual")
+        except ValueError as e:
+            if "já está" not in str(e):
+                raise
+            out["topic"] = next(x for x in store.list_topics(user_id) if _norm(x["title"]) == _norm(topic))
+    return out
 
 
 # ---------------- quando estudar ----------------

@@ -36,6 +36,36 @@ def default_home() -> Path:
     return Path(base) / "Jefrey"
 
 
+SEED_FILES = ("google_oauth.json", "update_url.txt", "update_public_key.txt")
+
+
+def defaults_dir() -> Optional[Path]:
+    """Pasta `defaults` que acompanha o instalador (credenciais do app Google, endereco e chave das atualizacoes)."""
+    cands = []
+    if getattr(sys, "frozen", False):
+        cands.append(Path(sys.executable).resolve().parent / "defaults")
+    cands.append(Path(__file__).resolve().parents[3] / "packaging" / "defaults")
+    return next((c for c in cands if c.is_dir()), None)
+
+
+def seed_defaults(config_dir: Path, source: Optional[Path] = None) -> list[str]:
+    """Na primeira abertura copia os padroes do instalador para a pasta de dados. Nunca sobrescreve o que a pessoa ja tem."""
+    src = source if source is not None else defaults_dir()
+    copied: list[str] = []
+    if src is None:
+        return copied
+    config_dir.mkdir(parents=True, exist_ok=True)
+    for name in SEED_FILES:
+        s, d = src / name, config_dir / name
+        try:
+            if s.is_file() and not d.exists() and s.stat().st_size < 20_000:
+                d.write_bytes(s.read_bytes())
+                copied.append(name)
+        except OSError:
+            continue
+    return copied
+
+
 def ensure_secrets(config_dir: Path) -> dict[str, str]:
     """Gera (uma vez) e le as chaves internas. Arquivo so do usuario; nunca vai para o navegador."""
     config_dir.mkdir(parents=True, exist_ok=True)
@@ -65,6 +95,7 @@ def build_env(home: Path, base: Optional[Mapping[str, str]] = None, port: int = 
     """Variaveis de ambiente do modo nativo. O que o usuario ja definiu tem prioridade (exceto o modo)."""
     base = dict(base if base is not None else os.environ)
     sec = ensure_secrets(home / "config")
+    seed_defaults(home / "config")
     data = home / "data"
     for d in (data, data / "files", data / "chroma_db", home / "config"):
         d.mkdir(parents=True, exist_ok=True)

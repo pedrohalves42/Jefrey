@@ -113,7 +113,14 @@ def verify_manifest(m: Any, key: Optional[Ed25519PublicKey] = None) -> dict:
 
 
 def manifest_url() -> str:
-    return os.getenv("JEFREY_UPDATE_URL", "")
+    """Endereco do manifesto: variavel de ambiente, ou config/update_url.txt (vem no instalador)."""
+    env = os.getenv("JEFREY_UPDATE_URL", "").strip()
+    if env:
+        return env
+    try:
+        return (Path(os.getenv("JEFREY_CONFIG_DIR", "config")) / "update_url.txt").read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
 
 
 async def check(*, transport: Optional[httpx.AsyncBaseTransport] = None, key: Optional[Ed25519PublicKey] = None,

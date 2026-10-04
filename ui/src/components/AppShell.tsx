@@ -12,6 +12,7 @@ import WaApprovals from "@/components/WaApprovals"
 const ITEMS: NavItem[] = [
   { to: "/", label: "Conversa", end: true, icon: "M4 5h16v11H8l-4 4V5z", easy: true },
   { to: "/conexoes", label: "Conexões", icon: "M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1", easy: true },
+  { to: "/aprender", label: "Aprender", icon: "M12 3l9 5-9 5-9-5 9-5zM7 11v5c0 1.5 2.2 3 5 3s5-1.5 5-3v-5", easy: true },
   { to: "/aprendi", label: "O que aprendi", icon: "M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5L12 3z", easy: true },
   { to: "/estudos", label: "Estudos", icon: "M4 19V6a2 2 0 012-2h12v15H6a2 2 0 00-2 2m0 0h14M8 8h6M8 12h6" },
   { to: "/memoria", label: "Memória", icon: "M12 3a7 7 0 00-4 12.7V19h8v-3.3A7 7 0 0012 3zm-2 18h4" },

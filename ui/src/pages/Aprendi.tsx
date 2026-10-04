@@ -1,9 +1,73 @@
 import { useEffect, useState } from "react"
+import { Link } from "react-router-dom"
 import ListenButton from "@/components/ListenButton"
+import { apiMessage, deleteUserSource, getUserSources, learnMessage, learnRequest, type UserSource } from "@/lib/studies"
 import { correctFact, correctionError, forgetAll, forgetFact, getLearned, groupFacts, setLearning, type Fact } from "@/lib/learning"
 
 const card = "jf-panel p-5"
 const field = "w-full rounded-lg border border-white/15 bg-black/30 px-3 py-3 text-base text-white"
+
+/** Fontes e links: a pessoa indica sites para o Jefrey pesquisar sobre os assuntos. */
+function Links() {
+  const [url, setUrl] = useState("")
+  const [topic, setTopic] = useState("")
+  const [list, setList] = useState<UserSource[]>([])
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  async function load() {
+    setList((await getUserSources()).data?.sources ?? [])
+  }
+  useEffect(() => {
+    void load()
+  }, [])
+  async function go(run: boolean) {
+    if (!url.trim()) {
+      setMsg({ ok: false, text: "Cole o link de um site." })
+      return
+    }
+    setBusy(true)
+    setMsg(run ? { ok: true, text: "Lendo o site e estudando… pode levar um minuto." } : null)
+    const r = await learnRequest({ url: url.trim(), topic: topic.trim(), run })
+    setBusy(false)
+    if (r.ok && r.data) {
+      setMsg(learnMessage(r.data))
+      setUrl("")
+      setTopic("")
+      await load()
+    } else setMsg({ ok: false, text: apiMessage(r, "Não consegui agora. Tente de novo.") })
+  }
+  const field = "w-full rounded-lg border border-white/15 bg-black/30 px-3 py-3 text-base text-white placeholder:text-white/35"
+  return (
+    <section className={card} aria-labelledby="l-links">
+      <h2 id="l-links" className="text-xl font-medium text-white">Fontes e links para eu pesquisar</h2>
+      <p className="mt-1 text-base text-white/70">Cole o endereço de um site de que você gosta. Eu leio, estudo e uso nas respostas, citando a fonte.</p>
+      <label className="mt-3 block text-base text-white/85">
+        Link
+        <input className={`${field} mt-1`} value={url} inputMode="url" maxLength={600} placeholder="https://…" onChange={e => setUrl(e.target.value)} />
+      </label>
+      <label className="mt-3 block text-base text-white/85">
+        Sobre qual assunto? (opcional)
+        <input className={`${field} mt-1`} value={topic} maxLength={80} placeholder="Ex.: orquídeas" onChange={e => setTopic(e.target.value)} />
+      </label>
+      <div className="mt-3 flex flex-wrap gap-3">
+        <button type="button" onClick={() => void go(true)} disabled={busy} className="jf-btn jf-focus px-5 py-3 text-base">{busy ? "Estudando…" : "Pesquisar agora"}</button>
+        <button type="button" onClick={() => void go(false)} disabled={busy} className="jf-focus rounded-lg border border-white/25 px-5 py-3 text-base text-white/85 hover:bg-white/5">Só guardar o link</button>
+        <Link to="/aprender" className="jf-focus rounded-lg border border-white/25 px-5 py-3 text-base text-white/85 hover:bg-white/5">Pedir outra coisa</Link>
+      </div>
+      {msg && <p role={msg.ok ? "status" : "alert"} className={`mt-3 text-base ${msg.ok ? "text-emerald-100" : "text-red-200"}`}>{msg.text}</p>}
+      {list.length > 0 && (
+        <ul className="mt-4 space-y-2">
+          {list.map(s => (
+            <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 p-3 text-base text-white/85">
+              <span className="min-w-0 break-all">{s.title}</span>
+              <button type="button" onClick={() => void deleteUserSource(s.id).then(load)} className="jf-focus rounded-lg border border-red-300/40 px-3 py-1.5 text-sm text-red-100 hover:bg-red-400/10">Apagar</button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
 
 export default function Aprendi() {
   const [facts, setFacts] = useState<Fact[]>([])
@@ -83,6 +147,8 @@ export default function Aprendi() {
           {msg.text}
         </p>
       )}
+
+      <Links />
 
       {loaded && groups.length === 0 && (
         <section className={card}>

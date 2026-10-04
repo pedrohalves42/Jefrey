@@ -37,6 +37,13 @@ REM A extensao do Chrome (WhatsApp) vai numa pasta visivel, para a pessoa "Carre
 if exist "dist\Jefrey\extensao-chrome" rmdir /s /q "dist\Jefrey\extensao-chrome"
 xcopy /e /i /y /q "extensions\whatsapp" "dist\Jefrey\extensao-chrome" >nul || exit /b 1
 
+REM Padroes do instalador (credenciais do Google, endereco e chave das atualizacoes): so o que existir em packaging\defaults.
+if exist "dist\Jefrey\defaults" rmdir /s /q "dist\Jefrey\defaults"
+mkdir "dist\Jefrey\defaults"
+for %%f in (google_oauth.json update_url.txt update_public_key.txt) do (
+  if exist "packaging\defaults\%%f" copy /y "packaging\defaults\%%f" "dist\Jefrey\defaults\%%f" >nul
+)
+
 if defined JEFREY_SIGN_PFX (
   call :sign "dist\Jefrey\Jefrey.exe" || exit /b 1
 )

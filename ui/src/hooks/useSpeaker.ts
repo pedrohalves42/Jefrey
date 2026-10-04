@@ -78,6 +78,9 @@ export function useSpeaker() {
           pending.current = Math.max(0, pending.current - 1)
           if (pending.current === 0) setSpeaking(false)
         }
+        u.onboundary = e => {
+          if (e.name === "word" || e.name === undefined) window.dispatchEvent(new Event("jefrey-word")) // o avatar pulsa a cada palavra
+        }
         u.onend = done
         u.onerror = done
         window.speechSynthesis.speak(u)

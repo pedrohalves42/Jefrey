@@ -14,6 +14,7 @@ import Conexoes from "@/pages/Conexoes"
 import Ajuda from "@/pages/Ajuda"
 import Aprendi from "@/pages/Aprendi"
 import Estudos from "@/pages/Estudos"
+import Aprender from "@/pages/Aprender"
 import Termos from "@/pages/Termos"
 import Privacidade from "@/pages/Privacidade"
 import { applyEasy, getEasy } from "@/lib/easy"
@@ -41,6 +42,7 @@ export default function App() {
               <Route path="/ajuda" element={<Ajuda />} />
               <Route path="/aprendi" element={<Aprendi />} />
               <Route path="/estudos" element={<Estudos />} />
+              <Route path="/aprender" element={<Aprender />} />
               <Route path="/termos" element={<Termos />} />
               <Route path="/privacidade" element={<Privacidade />} />
               {/* enderecos antigos */}
