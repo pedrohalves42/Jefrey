@@ -1,74 +1,53 @@
 # Jefrey
 
-Assistente pessoal de IA que **roda no seu computador**. Conversa por texto e voz, lembra do que você
-conta, usa ferramentas (notas, hora, contas, clima, arquivos, agenda e e-mail do Google) e **pede a sua
-aprovação antes de qualquer ação de risco**. Funciona offline com modelos locais; se quiser respostas
-mais fortes, conecta ao Claude, ao ChatGPT ou a outro provedor compatível.
+Assistente pessoal de IA que **roda no seu computador (Windows)**, feito para que **uma pessoa de 70 anos** instale, configure e use sozinha.
+Conversa **por voz** (um botão grande: toque, fale, ouça), lembra de você, faz lembretes que avisam no Windows, **aprende** o que é importante
+(você revisa), **estuda sozinho** os assuntos do seu interesse e pode **responder o seu WhatsApp** (extensão do Chrome) nas conversas que você liberar.
+Para pensar, usa a **nuvem** (OpenRouter, Claude ou ChatGPT, com um botão que leva ao site e volta) ou um **modelo local**.
 
-## Começando (Windows)
+> Estado, o que foi verificado e o que só você pode testar: [docs/COMO_O_JEFREY_FUNCIONA.md](docs/COMO_O_JEFREY_FUNCIONA.md) e [docs/PLANO_EXECUCAO_SESSOES.md](docs/PLANO_EXECUCAO_SESSOES.md).
 
-Você precisa do [Docker Desktop](https://www.docker.com/products/docker-desktop) e de uns 8 GB de RAM livres.
+## Instalar (para quem usa)
+Baixe e execute **Jefrey-Setup.exe** (não precisa de administrador, nem de Docker). Leia e aceite os termos, diga o seu nome, aperte **Conectar com 1 clique** e fale.
+Atalho para chamar de qualquer programa: **Ctrl+Alt+J**.
 
-1. Copie `.env.example` para `.env` e preencha os segredos (a chave da API: `python -c "import secrets; print(secrets.token_hex(32))"`).
-2. Dê duplo clique em **`start_jefrey.bat`**. Ele abre o Docker se preciso, sobe o Jefrey e abre o navegador.
-   - Na primeira vez os modelos são baixados (alguns GB). `start_jefrey.bat completo` sobe também o monitoramento.
-3. Abra http://localhost:8000. No Edge/Chrome use **Instalar aplicativo** para usar o Jefrey como um programa do Windows.
-
-Para parar: `stop_jefrey.bat`. Se algo não funcionar: `python -m src.jefrey.cli doctor` diagnostica e diz como resolver.
-
-## O que ele faz hoje
-
-| Área | Estado |
-|---|---|
-| Conversa | Streaming, histórico, parar/tentar de novo. Modelo local por padrão (`qwen3:1.7b`), nuvem opcional em **Configurações** |
-| Memória | Busca por sentido em português, guardar/esquecer, **importar documentos** (txt, md, csv, json, html), isolada por usuário |
-| Ferramentas | Notas, hora, calculadora segura, clima, arquivos numa pasta sua, agenda/e-mail/Drive do Google (exigem login Google) |
-| Segurança | Ações de risco só com aprovação humana (na tela ou por WhatsApp); auditoria; resultados de ferramentas filtrados contra injeção de prompt |
-| Voz | Ouvir (Whisper local) e falar (vozes do Windows); falar por cima interrompe; conversa contínua |
-| Interface | Cérebro 3D em três formas (cérebro, orbe, reator), 100% personalizável; status e métricas reais |
-| WhatsApp | Canal oficial da Meta, desligado por padrão ([guia](docs/WHATSAPP.md)); **ainda não testado com conta real** |
-| Operação | `doctor`, `backup`/`restore`, modo leve (4 containers), app instalável |
-
-Limitações conhecidas estão em [docs/PLANO_PRODUTO_COMPLETO.md](docs/PLANO_PRODUTO_COMPLETO.md) (seção "Estado real").
-
-## Modelos
-
-Veja [docs/MODELOS.md](docs/MODELOS.md): comparação medida e como escolher. Em resumo, `qwen3:1.7b` para
-pouca memória e `qwen2.5:3b` para usar todas as ferramentas. A tela **Configurações → Modelo de IA**
-mostra a memória livre e recomenda o maior modelo que cabe.
-
-## Comandos úteis
+## Rodar em desenvolvimento
+Python **3.12** (`C:\Users\Pedro\jv312` neste projeto) e Node 20+.
 
 ```bash
-python -m src.jefrey.cli doctor            # diagnóstico do ambiente
-python -m src.jefrey.cli backup            # salva config, memórias, arquivos e banco em um .zip
-python -m src.jefrey.cli restore ARQUIVO   # restaura (o que existe é guardado, nunca apagado)
-python -m pytest tests -q                  # testes do servidor
-python evals/run_evals.py                  # avalia o Jefrey rodando (acerto e latência)
-cd ui && npm ci && npm test                # testes da interface
-cd ui && npm run build:api                 # reconstrói a interface servida pelo servidor
+python -m src.jefrey.native                 # servidor + tela + bandeja (http://127.0.0.1:8000)
+cd ui && npm ci && npm run build:api        # reconstrói a tela servida pelo programa
 ```
+
+## Testes
+```bash
+python -m pytest tests -q --ignore=tests/e2e --ignore=tests/smoke     # servidor (hermético: SQLite + Redis em memória)
+cd ui && npm test && npx tsc --noEmit -p .                             # interface e extensão do WhatsApp (página simulada)
+python evals/run_evals.py --only leigos                                # bateria de 17 pedidos de pessoa comum (precisa de cérebro de nuvem)
+```
+
+## Gerar o instalador
+`packaging\build_exe.bat C:\caminho\python3.12.exe` (assina se `JEFREY_SIGN_PFX`/`JEFREY_SIGN_PASS` existirem). Veja [docs/DISTRIBUICAO.md](docs/DISTRIBUICAO.md).
 
 ## Estrutura
-
 ```
 src/jefrey/
-  api/        rotas (chat, memória, aprovações, skills, configurações, WhatsApp, voz)
-  core/       agente, ferramentas e política de risco, memória, provedores de modelo, doctor, backup
-  channels/   canais externos (WhatsApp)
+  api/        rotas (chat, conexões, aprendizado, estudos, resumo, WhatsApp, privacidade, atualizações, voz)
+  core/       agente, persona, aprendizado, recordação, estudos, leitor protegido, WhatsApp, atualização assinada, privacidade
+  native/     lançador, bandeja, atalho global
+  legal/      termos de uso e política de privacidade (rascunhos para revisão)
   skills/     notas, essenciais, agenda, e-mail, web, Drive, automação
-ui/           interface (React + three.js), testes com vitest
-evals/        avaliação do produto rodando (34 casos)
-docs/         modelos, WhatsApp, ameaças, runbooks, referências
+extensions/whatsapp/   extensão do Chrome (WhatsApp Web)
+ui/           interface (React), testes com vitest
+evals/        avaliação do produto rodando (inclui a bateria de leigos)
+packaging/    PyInstaller + Inno Setup
+site/         página de apresentação (a preencher)
 ```
 
 ## Documentação
-
-- [Plano e estado real do produto](docs/PLANO_PRODUTO_COMPLETO.md)
-- [Comparação com os projetos de referência](docs/COMPARACAO_REFERENCIAS.md)
-- [Modelos locais](docs/MODELOS.md) · [WhatsApp](docs/WHATSAPP.md) · [Modelo de ameaças](docs/THREAT_MODEL.md)
-- [Referências bibliográficas e projetos usados](docs/REFERENCES.md)
+[Como funciona](docs/COMO_O_JEFREY_FUNCIONA.md) · [Plano por sessões](docs/PLANO_EXECUCAO_SESSOES.md) · [Distribuição e venda](docs/DISTRIBUICAO.md) ·
+[Google](docs/GOOGLE.md) · [Extensão do WhatsApp](extensions/whatsapp/README.md) · [Auditoria de segurança](docs/AUDITORIA_CIPHER_2026-10.md) ·
+[Licenças de terceiros](docs/LICENCAS_TERCEIROS.md) · [Modelos locais](docs/MODELOS.md) · [Modelo de ameaças](docs/THREAT_MODEL.md)
 
 ## Licença
-
-MIT.
+O repositório está sob MIT; **a decisão de licença para a venda é do dono** (ver [docs/DISTRIBUICAO.md](docs/DISTRIBUICAO.md), item 5).

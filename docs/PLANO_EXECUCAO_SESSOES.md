@@ -1,5 +1,23 @@
 # Plano completo de execução, por sessões (sem datas)
 
+## Status (04/10/2026)
+| Sessão | Situação | Verificação |
+|---|---|---|
+| 1 Identidade e presença | **Pronta** | testes de servidor |
+| 2 Interface e avatar | **Pronta** | testes + navegador |
+| 2B Voz primeiro e modo Fácil | **Pronta** (voz real: só com o seu microfone) | testes + navegador |
+| 3 Conexões para leigos | **Pronta** (Google real: precisa do app no Google Cloud; o botão já levou ao Google de verdade) | testes + navegador |
+| 4 Aprendizado automático | **Pronta** | testes |
+| 5 Recordação inteligente | **Pronta** | testes |
+| 6 Estudos em segundo plano | **Pronta** (qualidade real: precisa de chave de nuvem) | testes |
+| 7 Proatividade | **Pronta** | testes |
+| 8 Ferramentas completas na nuvem | **Pronta** | testes |
+| 9 Voz e presença no Windows | **Pronta** (atalho/palavra de ativação: testar com o seu PC) | testes |
+| 10 WhatsApp Web | **Pronta no código** (página simulada; teste real só com o celular) | testes de servidor e da extensão |
+| 11 Segurança restante | **Pronta** (P-03 e P-07 da auditoria seguem pendentes) | testes |
+| 12 Qualidade | **Pronta** (bateria de 17 pedidos pronta; rodar com uma chave de nuvem) | testes |
+| 13 Distribuição e comercial | **Pronta no código**; depende de você: certificado, servidor de atualizações, textos legais revisados, licença, Google, página, cobrança (`DISTRIBUICAO.md`) | testes |
+
 Cada sessão tem **entregas**, **critério de pronto** (verificável) e **o que depende de você**. Uma sessão só termina com testes
 passando e commit. Tudo o que já foi conversado está aqui; nada ficou de fora.
 

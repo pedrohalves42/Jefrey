@@ -108,6 +108,11 @@ class BriefingStore:
             r = c.execute(self.t.select().where((self.t.c.user_id == user_id) & (self.t.c.day == day))).first()
         return {"day": r.day, "text": r.text, "seen": bool(r.seen)} if r else None
 
+    def all(self, user_id: str, limit: int = 400) -> list[dict]:
+        with self.engine.connect() as c:
+            rows = c.execute(self.t.select().where(self.t.c.user_id == user_id).order_by(self.t.c.day.desc()).limit(limit)).fetchall()
+        return [{"day": r.day, "text": r.text} for r in rows]
+
     def put(self, user_id: str, day: str, text: str) -> None:
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         with self.engine.begin() as c:

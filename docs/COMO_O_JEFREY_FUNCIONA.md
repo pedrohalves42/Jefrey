@@ -1,63 +1,69 @@
 # Como o Jefrey funciona, por inteiro
 
-Texto para entender o produto de ponta a ponta. Marcamos o que **já funciona**, o que está **em construção** (sessões do plano) e o
-que **ainda não existe**.
+Texto para entender o produto de ponta a ponta, como ele está **hoje** (04/10/2026, versão 0.9.0). Cada parte diz se foi **verificada
+por testes automáticos** e o que **só você consegue testar** (conta, celular, microfone, outro PC).
 
 ## 1. A ideia em uma frase
-Um assistente pessoal que mora no **seu computador**, conversa por texto e voz, **lembra** de você, **faz coisas** (lembretes, notas,
-pesquisas, agenda) e, aos poucos, **estuda sozinho** os assuntos do seu interesse para ajudar com mais autoridade. Você controla tudo
-o que ele guarda e gasta.
+Um assistente pessoal que mora no **seu computador**, conversa **por voz** e texto, **lembra** de você, **faz coisas** (lembretes, notas,
+pesquisas, agenda), **estuda sozinho** os assuntos do seu interesse e pode **responder o seu WhatsApp** nas conversas que você liberar.
+Pensado para que uma pessoa de **70 anos** instale, configure e use sozinha.
 
-## 2. As peças (o que roda e onde)
+## 2. As peças
 | Peça | O que faz | Onde fica |
 |---|---|---|
-| **Programa Jefrey** (`Jefrey.exe`) | Servidor local + tela. Ícone na bandeja (Abrir / Registros / Sair) | Seu PC, só aceita conexões do próprio computador |
-| **Cérebro (modelo de IA)** | Entende e responde | **Nuvem** por padrão (OpenRouter, Claude ou ChatGPT, com a sua conta/chave) ou **local** (Ollama), se o PC tiver placa de vídeo |
-| **Memória** | Notas, fatos, documentos, busca por sentido | Seu PC (`%LOCALAPPDATA%\Jefrey\data`). A busca usa Ollama, a nuvem ou um motor embutido |
-| **Banco local** | Lembretes, perfil, histórico de conversas, aprovações | Seu PC (SQLite) |
-| **Voz** | Ouvir (Whisper local) e falar (vozes do Windows) | Seu PC |
-| **Avatar** | Cérebro 3D, orbe, reator ou **holograma com a sua imagem** | Só o navegador; a imagem não sai do PC |
+| **Programa Jefrey** | Servidor local + tela + ícone perto do relógio (Abrir / Registros / Sair). Atalho **Ctrl+Alt+J** chama de qualquer programa | Seu PC; só aceita conexões do próprio computador |
+| **Cérebro** | Entende e responde | **Nuvem** por padrão (OpenRouter, Claude ou ChatGPT) ou **local** (Ollama) se o PC aguentar |
+| **Memória** | Notas, fatos, documentos, busca por sentido | Seu PC |
+| **Banco local** | Lembretes, perfil, histórico, o que aprendeu, diário, estudos, resumos, WhatsApp | Seu PC (SQLite) |
+| **Voz** | Ouve (Whisper local) e fala (vozes do Windows) | Seu PC; o áudio não vai para a internet |
+| **Avatar** | Cérebro 3D, orbe, reator ou holograma com a sua imagem | Só no navegador |
+| **Extensão do Chrome** | Liga o Jefrey ao WhatsApp Web | Chrome do seu PC, pareada por código |
 
-## 3. O caminho de uma mensagem (já funciona)
-1. Você escreve ou fala. A tela manda ao servidor local (com proteção contra sites maliciosos: só a própria tela fala com ele).
-2. O Jefrey monta o **contexto**: persona informal, **como te chamar**, data e hora, **que cérebro está usando**, **que ferramentas tem agora**
-   (e quais faltam, como "conta Google não conectada") e as **memórias relevantes**. Assim ele sabe quem ele é e o que pode.
-3. **Atalhos sem IA** para o que é exato: hora, contas, lembretes ("me lembra de… amanhã às 8h"), notas ("guarda isso"), listar notas.
-   São instantâneos e não erram.
-4. Para o resto, o modelo responde e pode **chamar ferramentas** (clima, notas, lembretes, agenda…). Ferramentas de risco
-   (enviar e-mail, apagar algo) **pedem a sua aprovação** antes. Texto vindo de ferramentas, páginas e memórias é tratado como
-   **informação, nunca como ordem**.
-5. A resposta chega aos poucos (streaming) e pode ser falada. A conversa é gravada no banco local, então **continua depois de fechar o programa**.
+## 3. O caminho de uma mensagem
+1. Você **fala** (botão grande "Toque aqui e fale comigo") ou escreve. A tela só conversa com o servidor local (proteção contra sites maliciosos).
+2. O Jefrey monta o **contexto**: persona informal, **seu nome**, data e hora, **que cérebro usa**, **que ferramentas tem agora** (e quais faltam, como
+   "conta Google não conectada"), o que **aprendeu** sobre você e, **só quando ajuda**, memórias, diário e guias que estudou (o **portão de recordação**
+   evita buscar à toa). Tudo que vem de fora entra dentro de `<dados>…</dados>`: é informação, nunca ordem.
+3. **Atalhos sem IA** para o que é exato: hora, contas, lembretes, notas.
+4. Para o resto o modelo responde e pode **chamar ferramentas**. Com cérebro de nuvem ele vê **todas**; com modelo local, só as relevantes. Ações de
+   risco (enviar e-mail, apagar algo) **pedem a sua aprovação**.
+5. A resposta chega aos poucos e é **falada**. Você pode falar por cima para interromper. Sob a resposta aparece **"Lembrei de…"** com o que foi usado.
+6. A conversa fica gravada (90 dias) e continua depois de fechar o programa.
 
-## 4. Como ele aprende (Sessões 3 e 4: em construção)
-- **Automático:** depois de cada conversa, um passo em segundo plano extrai fatos, preferências, pessoas, projetos e datas.
-  Fato novo **substitui** o antigo (com histórico). Nunca guarda senhas, documentos de identidade ou cartões.
-- **Você revisa depois** em "O que aprendi": ver, corrigir, esquecer, desligar.
-- **Diário e perfil:** um resumo por dia e um perfil curto que entra em toda resposta.
-- **"Lembrei de…"**: sob a resposta, mostra de onde veio cada lembrança.
+## 4. Como ele aprende (automático)
+Depois de cada conversa, em segundo plano, o Jefrey extrai fatos (onde mora, gostos, família, projetos, datas) por regras e, com cérebro de nuvem, também por IA.
+Fato novo **substitui** o antigo (o antigo vai para o histórico). **Nunca** guarda senhas, documentos, cartões ou chaves; saúde e dinheiro ficam marcados como
+"delicado" e não entram nas respostas à toa. Em **O que aprendi** você vê, corrige, esquece ou manda **parar de aprender**. Um **diário** resume cada dia.
 
-## 5. Como ele estuda sozinho (Sessão 5: em construção)
-1. Escolhe **temas pela sua memória e curiosidade** (o que você pergunta e guarda).
-2. Para cada tema faz um plano de estudo e roda um ciclo: **planeja perguntas → busca → lê páginas (leitor protegido) → resume com fonte e
-   data → escreve um guia prático aplicável**, subindo o "nível" do tema.
-3. Gasta no máximo o **teto diário** (padrão US$ 0,10; centavos com modelos baratos) e respeita o horário de silêncio.
-4. Você vê tudo na tela **Estudos** e pode desligar quando quiser. O texto lido na web nunca vira instrução.
+## 5. Como ele estuda sozinho
+Escolhe assuntos pela sua **memória** (gostos, trabalho, projetos) e pela sua **curiosidade** (o que você pergunta mais de uma vez), até 5 por vez; você pode
+incluir, pausar ou apagar. Cada ciclo: planeja buscas → busca na web → **lê as páginas com leitor protegido** (bloqueia endereços internos, limita tamanho)
+→ escreve um **guia prático com as fontes e a data**, e sobe o **nível** do assunto (de "Começando" a "Especialista"). Só roda **com você ausente**, fora do
+**horário de silêncio** e dentro do **teto diário (padrão US$ 0,10)**, e só com cérebro de nuvem. Na conversa ele usa esses guias quando têm a ver.
 
-## 6. Proatividade (Sessão 6) e voz (Sessão 8)
-Briefing da manhã (agenda, lembretes, clima, o que ele estudou), avisos úteis sem incomodar, atalho global e palavra de ativação.
+## 6. Proatividade
+Um **resumo todas as manhãs** (lembretes do dia, o que ficou pendente, o que estudou, aniversário) aparece na Conversa e pode ser **ouvido**. **Lembretes avisam
+no Windows** (balão perto do relógio) na hora, mesmo com a janela fechada. O avatar mostra "Estudando…" ou "Aprendendo…" e o ícone da bandeja também.
 
-## 7. Conexões (Sessão 3)
-Botões que levam ao site, você entra na conta e volta: **assistente (OpenRouter, 1 clique)**, **Google** (agenda/e-mail), **WhatsApp**.
-Onde o provedor só oferece chave, um guia em 3 passos.
+## 7. Conexões (botões que levam ao site)
+- **Inteligência:** 1 clique (OpenRouter) ou o guia de 3 passos para Claude/ChatGPT, com o código validado na hora.
+- **Google (Agenda/E-mail):** "Entrar com o Google"; os tokens ficam protegidos pelo Windows e dá para desconectar (o Google é avisado). Precisa do app no Google Cloud (`docs/GOOGLE.md`).
+- **WhatsApp:** extensão do Chrome. Você libera conversa por conversa ("Perguntar antes" ou "Responder sozinho"); grupos nunca. Dinheiro, dados pessoais, links,
+  emergência, compromisso, áudio/imagem ou dúvida do modelo **abrem um pop-up para você aprovar** (pode editar o texto). Há pausa geral, limites e aviso do risco de bloqueio do número.
 
-## 8. Privacidade e segurança, resumidamente
-- Dados, memórias e imagem do avatar ficam **no seu PC**. Com cérebro na nuvem, **o texto da conversa vai ao provedor escolhido**; no
-  cérebro local nada sai.
-- Chaves ficam **protegidas pelo Windows (DPAPI)** e nunca voltam à tela.
-- Só o próprio navegador acessa o programa (proteção contra DNS rebinding e CSRF); aprovação humana para ações de risco; registros
-  de suporte **sem chaves nem tokens**.
-- Mensagens de terceiros (futuro WhatsApp) são **dados** e nunca acionam ferramentas.
+## 8. Privacidade e segurança
+- Seus dados ficam no PC. Com nuvem, **o texto da conversa vai ao serviço escolhido**; com modelo local, nada sai. Sem telemetria.
+- Tela **Privacidade**: o que é guardado, **baixar uma cópia**, **apagar tudo**. Termos e política no primeiro uso.
+- Chaves protegidas pelo Windows (DPAPI) e nunca voltam à tela; só a própria tela acessa o programa; `/metrics` pede login; aprovação para ações de risco;
+  atualizações **assinadas** (Ed25519 + SHA-256), com backup antes e sem instalar sem você clicar.
+- Mensagens de terceiros (WhatsApp) e páginas da web são **dados**: o modelo que as lê não tem ferramentas.
 
-## 9. O que ainda não existe
-WhatsApp Web (Sessão 9), atualização automática assinada e assinatura do instalador (Sessão 12), verificação do Google (Sessão 12),
-palavra de ativação (Sessão 8).
+## 9. Modo Fácil
+Ligado por padrão: letra grande, mais contraste, menu só com **Conversa, Conexões, O que aprendi e Ajuda**, botões "Ouvir" em cada tela, erros em português simples
+(o que houve + o que fazer). Em **Ajuda** dá para mostrar mais opções.
+
+## 10. O que foi verificado e o que falta
+**Verificado automaticamente:** servidor (≈ 1.100 testes), interface (≈ 180) e a extensão do WhatsApp contra uma página simulada; navegação das telas no navegador.
+**Só você consegue verificar:** voz com o seu microfone (e o download do modelo de voz na primeira vez); login do Google (precisa do app no Google Cloud); WhatsApp real
+(celular); instalação em **PC limpo** e o alerta do Windows/antivírus; qualidade das respostas com **uma chave de nuvem** (`python evals/run_evals.py --only leigos`).
+**Depende de decisões/contas suas:** certificado de assinatura, servidor de atualizações, textos legais revisados, licença, página de download e cobrança (`docs/DISTRIBUICAO.md`).

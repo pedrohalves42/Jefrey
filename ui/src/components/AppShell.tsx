@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query"
 import { Navigate, NavLink, Outlet, useLocation, useSearchParams } from "react-router-dom"
 import { getConfig, needsWelcome, welcomeSkipped } from "@/lib/llm"
 import { useEasy, visibleItems, type NavItem } from "@/lib/easy"
+import { getLegalStatus } from "@/lib/legal"
 import { StatusPill } from "@/components/StatusPill"
 import { ReminderBanner } from "@/components/ReminderBanner"
 import WaApprovals from "@/components/WaApprovals"
@@ -16,6 +17,7 @@ const ITEMS: NavItem[] = [
   { to: "/memoria", label: "Memória", icon: "M12 3a7 7 0 00-4 12.7V19h8v-3.3A7 7 0 0012 3zm-2 18h4" },
   { to: "/skills", label: "Skills", icon: "M13 2L4 14h6l-1 8 9-12h-6l1-8z" },
   { to: "/configuracoes", label: "Configurações", icon: "M12 8a4 4 0 100 8 4 4 0 000-8zm0-5v3m0 12v3M3 12h3m12 0h3" },
+  { to: "/privacidade", label: "Privacidade", icon: "M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6l7-3z" },
   { to: "/avancado", label: "Avançado", icon: "M4 6h16M4 12h16M4 18h10" },
   { to: "/ajuda", label: "Ajuda", icon: "M9.5 9a2.5 2.5 0 115 0c0 1.7-2.5 2-2.5 4M12 17h.01M12 3a9 9 0 100 18 9 9 0 000-18z", easy: true },
 ]
@@ -46,7 +48,10 @@ export function AppShell() {
   const [easy] = useEasy()
   const items = visibleItems(ITEMS, easy)
   const cfg = useQuery({ queryKey: ["llm-config"], queryFn: async () => (await getConfig()).data, staleTime: 30_000, retry: 1 })
-  if (loc.pathname !== "/bem-vindo" && needsWelcome(cfg.data, welcomeSkipped())) return <Navigate to="/bem-vindo" replace />
+  const legal = useQuery({ queryKey: ["legal"], queryFn: async () => (await getLegalStatus()).data, staleTime: 60_000, retry: 1 })
+  // primeira tela: termos e privacidade (so depois do aceite o resto abre)
+  if (legal.data && !legal.data.accepted && loc.pathname !== "/termos") return <Navigate to="/termos" replace />
+  if (loc.pathname !== "/bem-vindo" && loc.pathname !== "/termos" && needsWelcome(cfg.data, welcomeSkipped())) return <Navigate to="/bem-vindo" replace />
   return (
     <div className="flex h-dvh flex-col md:flex-row">
       <ReminderBanner />

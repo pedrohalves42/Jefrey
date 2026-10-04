@@ -14,6 +14,8 @@ import Conexoes from "@/pages/Conexoes"
 import Ajuda from "@/pages/Ajuda"
 import Aprendi from "@/pages/Aprendi"
 import Estudos from "@/pages/Estudos"
+import Termos from "@/pages/Termos"
+import Privacidade from "@/pages/Privacidade"
 import { applyEasy, getEasy } from "@/lib/easy"
 
 const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true } } })
@@ -39,6 +41,8 @@ export default function App() {
               <Route path="/ajuda" element={<Ajuda />} />
               <Route path="/aprendi" element={<Aprendi />} />
               <Route path="/estudos" element={<Estudos />} />
+              <Route path="/termos" element={<Termos />} />
+              <Route path="/privacidade" element={<Privacidade />} />
               {/* enderecos antigos */}
               <Route path="/memory" element={<Navigate to="/memoria" replace />} />
               <Route path="/settings" element={<Navigate to="/configuracoes" replace />} />

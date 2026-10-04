@@ -33,6 +33,7 @@ Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortugue
 Name: "desktopicon"; Description: "Criar um atalho na Área de Trabalho"; Flags: unchecked
 
 [Files]
+; "extensao-chrome" ja vem dentro de dist\Jefrey (copiada pelo build_exe.bat): fica numa pasta visivel para a extensao do WhatsApp
 Source: "..\dist\Jefrey\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]

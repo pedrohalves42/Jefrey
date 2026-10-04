@@ -152,3 +152,9 @@ dist/
 build/
 packaging/Output/
 *.spec
+
+# Chaves de assinatura (NUNCA no repositorio)
+update_private_key*
+*.pfx
+*.p12
+*.snk

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom"
 import ListenButton from "@/components/ListenButton"
 import { BRIEFING_HOURS, getBriefing, putBriefingPrefs, type BriefingPrefs } from "@/lib/briefing"
 import { useEasy } from "@/lib/easy"
+import { checkUpdate, installUpdate, sizeLabel, updateMessage, type UpdateInfo } from "@/lib/updates"
 
 const TOPICS: { title: string; text: string }[] = [
   { title: "Como falar com o Jefrey", text: "Aperte o botão do microfone na tela de Conversa e fale normalmente, como se falasse com uma pessoa. Quando você terminar, o Jefrey responde falando." },
@@ -11,6 +12,44 @@ const TOPICS: { title: string; text: string }[] = [
   { title: "Conectar as suas contas", text: "Na tela de Conexões você liga o Jefrey à inteligência que responde e ao seu Google. Em cada uma é só apertar o botão, entrar na sua conta e voltar." },
   { title: "Para fechar o Jefrey", text: "Procure o ícone do Jefrey perto do relógio do Windows, clique com o botão direito e escolha Sair." },
 ]
+
+function Updates() {
+  const [info, setInfo] = useState<UpdateInfo | null>(null)
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [busy, setBusy] = useState(false)
+  async function look() {
+    setBusy(true)
+    const r = await checkUpdate()
+    setBusy(false)
+    setInfo(r.data?.available ? r.data : null)
+    setMsg(updateMessage(r))
+  }
+  async function install() {
+    setBusy(true)
+    setMsg({ ok: true, text: "Baixando e conferindo a atualização… O Jefrey vai fechar e abrir de novo sozinho." })
+    const r = await installUpdate()
+    setBusy(false)
+    if (!r.ok) {
+      const d = (r.data as { detail?: unknown } | null)?.detail
+      setMsg({ ok: false, text: typeof d === "string" ? d : "Não consegui atualizar agora. Tente de novo mais tarde." })
+    }
+  }
+  return (
+    <section className="jf-panel p-5" aria-labelledby="h-upd">
+      <h2 id="h-upd" className="text-xl font-medium text-white">Atualizações</h2>
+      <p className="mt-2 text-base text-white/80">Eu confiro se a atualização é autêntica antes de instalar e guardo uma cópia dos seus dados. Os seus dados não se perdem.</p>
+      <div className="mt-3 flex flex-wrap gap-3">
+        <button type="button" onClick={() => void look()} disabled={busy} className="jf-btn jf-focus px-5 py-3 text-base">Procurar atualização</button>
+        {info?.available && (
+          <button type="button" onClick={() => void install()} disabled={busy} className="jf-btn jf-focus px-5 py-3 text-base">
+            Atualizar agora {info.size ? `(${sizeLabel(info.size)})` : ""}
+          </button>
+        )}
+      </div>
+      {msg && <p role={msg.ok ? "status" : "alert"} className={`mt-3 text-base ${msg.ok ? "text-emerald-100" : "text-red-200"}`}>{msg.text}</p>}
+    </section>
+  )
+}
 
 function MorningSettings() {
   const [p, setP] = useState<BriefingPrefs | null>(null)
@@ -78,6 +117,13 @@ export default function Ajuda() {
       ))}
 
       <MorningSettings />
+      <Updates />
+
+      <section className="jf-panel p-5">
+        <h2 className="text-xl font-medium text-white">Meus dados e privacidade</h2>
+        <p className="mt-2 text-base text-white/80">Veja o que eu guardo, baixe uma cópia ou apague tudo.</p>
+        <Link to="/privacidade" className="jf-btn jf-focus mt-3 inline-block px-5 py-3 text-base">Abrir</Link>
+      </section>
 
       <section className="jf-panel p-5">
         <h2 className="text-xl font-medium text-white">Letra grande e menu simples</h2>
