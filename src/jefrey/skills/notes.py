@@ -64,7 +64,9 @@ class NotesSkill(SkillBase):
             **metadata,
         }
         _uid = user_id or "system"
-        note_id = self.memory.long_term.add(content, metadata=meta, user_id=_uid)
+        # o titulo entra no texto indexado: senao "minha cor favorita" nunca acha a nota "Verde-esmeralda"
+        indexed = f"{title}\n{content}" if title and title.strip() else content
+        note_id = self.memory.long_term.add(indexed, metadata=meta, user_id=_uid)
         logger.info(f"Nota salva: {title} ({note_id[:8]}...)")
         return {
             "id": note_id,
@@ -118,7 +120,19 @@ class NotesSkill(SkillBase):
         if metadata is not None:
             meta.update(metadata)
         
-        success = self.memory.long_term.update(note_id, content=content, metadata=meta, user_id=user_id or "system")
+        _uid = user_id or "system"
+        if content is not None or title is not None:
+            # reindexa titulo + conteudo juntos (mesma regra do save_note)
+            current = self.memory.long_term.get(note_id, user_id=_uid)
+            if current:
+                cur_title = (current.get("metadata") or {}).get("title") or ""
+                cur_body = current["content"]
+                if cur_title and cur_body.startswith(cur_title + "\n"):
+                    cur_body = cur_body[len(cur_title) + 1:]
+                new_title = title if title is not None else cur_title
+                new_body = content if content is not None else cur_body
+                content = f"{new_title}\n{new_body}" if new_title and new_title.strip() else new_body
+        success = self.memory.long_term.update(note_id, content=content, metadata=meta, user_id=_uid)
         return {"success": success, "id": note_id}
     
     @tool(description="Remove nota permanentemente")

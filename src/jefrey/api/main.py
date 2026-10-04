@@ -319,6 +319,8 @@ def create_app() -> FastAPI:
     app.include_router(llm_settings_router)
     from src.jefrey.api.skills_routes import router as skills_router
     app.include_router(skills_router)
+    from src.jefrey.api.whatsapp_routes import router as whatsapp_router
+    app.include_router(whatsapp_router)
     app.include_router(memory_router)
     app.include_router(stt_router)
     app.include_router(tts_router)

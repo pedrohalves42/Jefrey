@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { BrainStage, type BrainState } from "@/components/brain/BrainStage"
 import { MessageText } from "@/components/MessageText"
+import { useSpeaker } from "@/hooks/useSpeaker"
+import { useListener } from "@/hooks/useListener"
+import { SentenceBuffer } from "@/lib/voice/sentences"
 import { authedFetch, ensureSession } from "@/lib/session"
 import {
   loadActiveId, loadThreads, newThread, saveActiveId, saveThreads, streamChat, titleFrom, uid,
@@ -13,6 +16,22 @@ const SUGGESTIONS = [
   "Explique o que é RAM em duas frases",
   "Guarde isto: meu café favorito é sem açúcar",
 ]
+
+function readFlag(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === "1"
+  } catch {
+    return false
+  }
+}
+
+function writeFlag(key: string, on: boolean): void {
+  try {
+    localStorage.setItem(key, on ? "1" : "0")
+  } catch {
+    /* sem armazenamento: vale so nesta sessao */
+  }
+}
 
 function initThreads(): { threads: Thread[]; active: string } {
   const threads = loadThreads()
@@ -34,6 +53,26 @@ export default function Conversa() {
   const [pendingApproval, setPendingApproval] = useState<{ id: string | null; label?: string } | undefined>(undefined)
   const [showList, setShowList] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
+  // ---- voz ----
+  const [voiceReply, setVoiceReplyState] = useState(() => readFlag("jefrey_voice_reply"))
+  const [continuous, setContinuousState] = useState(() => readFlag("jefrey_voice_continuous"))
+  const [micOn, setMicOn] = useState(false)
+  const [micLevel, setMicLevel] = useState(0)
+  const speaker = useSpeaker()
+  const voiceReplyRef = useRef(voiceReply)
+  voiceReplyRef.current = voiceReply
+  const continuousRef = useRef(continuous)
+  continuousRef.current = continuous
+  const sendRef = useRef<(t?: string) => Promise<void>>(async () => {})
+  const listener = useListener({
+    onTranscript: t => {
+      if (!continuousRef.current) setMicOn(false)
+      void sendRef.current(t)
+    },
+    onSpeechStart: () => speaker.cancel(), // falar por cima interrompe o Jefrey
+    onLevel: setMicLevel,
+  })
+  const listeningNow = listener.state === "listening" || listener.state === "hearing"
   const endRef = useRef<HTMLDivElement>(null)
   const taRef = useRef<HTMLTextAreaElement>(null)
 
@@ -56,7 +95,7 @@ export default function Conversa() {
     ? "approval"
     : streaming
       ? gotToken ? "responding" : "thinking"
-      : "idle"
+      : listeningNow ? "listening" : "idle"
 
   async function send(textArg?: string) {
     const text = (textArg ?? input).trim()
@@ -76,12 +115,14 @@ export default function Conversa() {
     setPendingApproval(undefined)
     const ctrl = new AbortController()
     abortRef.current = ctrl
+    const sb = new SentenceBuffer()
     const result = await streamChat(
       text,
       tid,
       {
         onToken: chunk => {
           setGotToken(true)
+          if (voiceReplyRef.current) sb.push(chunk).forEach(speaker.say)
           updateThread(tid, t => ({
             ...t,
             messages: t.messages.map(m => (m.id === aiMsg.id ? { ...m, content: m.content + chunk } : m)),
@@ -129,6 +170,7 @@ export default function Conversa() {
     )
     setStreaming(false)
     abortRef.current = null
+    if (voiceReplyRef.current) sb.flush().forEach(speaker.say)
     if (!result.ok) {
       updateThread(tid, t => ({
         ...t,
@@ -140,8 +182,33 @@ export default function Conversa() {
     taRef.current?.focus()
   }
 
+  sendRef.current = send
+
+  // conversa continua: depois da resposta (e da fala), volta a ouvir sozinho
+  useEffect(() => {
+    if (micOn && continuous && !streaming && !speaker.speaking && listener.state === "idle") void listener.start()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [micOn, continuous, streaming, speaker.speaking, listener.state])
+
+  // se o microfone falhar, o botao volta ao normal (a mensagem de erro continua visivel)
+  useEffect(() => {
+    if (listener.state === "error") setMicOn(false)
+  }, [listener.state])
+
   function stop() {
     abortRef.current?.abort()
+    speaker.cancel()
+  }
+
+  function toggleMic() {
+    if (micOn || listener.state !== "idle") {
+      setMicOn(false)
+      listener.stop()
+      return
+    }
+    speaker.cancel()
+    setMicOn(true)
+    void listener.start()
   }
 
   function retry() {
@@ -259,7 +326,7 @@ export default function Conversa() {
           </button>
         </div>
 
-        <BrainStage state={brainState} className={empty ? "h-[34vh] min-h-[200px]" : "h-[22vh] min-h-[130px]"} />
+        <BrainStage state={brainState} level={micLevel} className={empty ? "h-[34vh] min-h-[200px]" : "h-[22vh] min-h-[130px]"} />
 
         <div className="min-h-0 flex-1 overflow-y-auto px-1" role="log" aria-live="polite" aria-label="Mensagens">
           {empty && (
@@ -367,6 +434,20 @@ export default function Conversa() {
                 el.style.height = Math.min(el.scrollHeight, 160) + "px"
               }}
             />
+            {listener.supported && (
+              <button
+                type="button"
+                onClick={toggleMic}
+                aria-pressed={micOn || listener.state !== "idle"}
+                aria-label={micOn || listener.state !== "idle" ? "Parar de ouvir" : "Falar com o Jefrey"}
+                title={listener.state === "hearing" ? "Ouvindo você…" : listener.state === "transcribing" ? "Transcrevendo…" : "Falar com o Jefrey"}
+                className={`jf-focus rounded-lg border px-3 py-2 text-sm ${
+                  micOn || listener.state !== "idle" ? "border-white/40 bg-white/15 text-white" : "border-white/15 text-white/70 hover:bg-white/5"
+                }`}
+              >
+                {listener.state === "transcribing" ? "…" : listener.state === "hearing" ? "●" : "🎙"}
+              </button>
+            )}
             {streaming ? (
               <button type="button" onClick={stop} className="jf-focus rounded-lg border border-white/20 px-4 py-2 text-sm text-white/85 hover:bg-white/5">
                 Parar
@@ -377,7 +458,41 @@ export default function Conversa() {
               </button>
             )}
           </div>
-          <p className="mt-1 text-center text-[11px] text-white/30">Enter envia · Shift+Enter quebra a linha</p>
+          <div className="mt-1 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[12px] text-white/50">
+            {speaker.supported && (
+              <label className="flex cursor-pointer items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  checked={voiceReply}
+                  onChange={e => {
+                    setVoiceReplyState(e.target.checked)
+                    writeFlag("jefrey_voice_reply", e.target.checked)
+                    if (!e.target.checked) speaker.cancel()
+                  }}
+                />
+                Falar as respostas
+              </label>
+            )}
+            {listener.supported && (
+              <label className="flex cursor-pointer items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  checked={continuous}
+                  onChange={e => {
+                    setContinuousState(e.target.checked)
+                    writeFlag("jefrey_voice_continuous", e.target.checked)
+                  }}
+                />
+                Conversa contínua
+              </label>
+            )}
+            <span className="text-white/30">Enter envia · Shift+Enter quebra a linha</span>
+          </div>
+          {listener.error && (
+            <p role="alert" className="mt-1 text-center text-xs text-red-300">
+              {listener.error}
+            </p>
+          )}
         </div>
       </section>
     </div>

@@ -30,7 +30,8 @@ class LLMSettings(BaseSettings):
 class EmbeddingsSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="JEFREY_EMBEDDINGS__", extra="ignore")
     
-    model: str = "nomic-embed-text"
+    provider: Literal["ollama", "openai"] = "ollama"
+    model: str = "embeddinggemma"
     base_url: str = "http://ollama:11434"
     api_key: str = ""
 
@@ -46,10 +47,10 @@ class MemoryLongTermSettings(BaseSettings):
     provider: Literal["chromadb", "sqlite-vec", "postgres", "postgresql"] = "chromadb"
     persist_directory: str = "data/chroma_db"
     collection_name: str = "jefrey_memory"
-    embedding_model: str = "nomic-embed-text"
+    embedding_model: str = "embeddinggemma"
     embedding_dim: int = 768  # nomic-embed-text via Ollama = 768 dims (1536 quebra pgvector)
     top_k: int = 5
-    similarity_threshold: float = 0.6
+    similarity_threshold: float = 0.5
 
 class MemorySettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="JEFREY_MEMORY__", extra="ignore")

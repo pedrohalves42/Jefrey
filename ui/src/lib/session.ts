@@ -43,7 +43,8 @@ export async function authedFetch(path: string, init: RequestInit = {}): Promise
   const run = () => {
     const t = getToken()
     const headers = new Headers(init.headers)
-    if (!headers.has("Content-Type") && init.body) headers.set("Content-Type", "application/json; charset=utf-8")
+    // JSON so quando o corpo e texto; FormData (audio, arquivos) precisa do boundary automatico do navegador
+    if (!headers.has("Content-Type") && typeof init.body === "string") headers.set("Content-Type", "application/json; charset=utf-8")
     if (t) headers.set("Authorization", `Bearer ${t}`)
     return fetch(path, { ...init, headers })
   }

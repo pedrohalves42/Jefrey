@@ -93,10 +93,13 @@ export default function Memoria() {
   }
 
   function Item({ m }: { m: Hit }) {
+    // o titulo tambem fica no texto indexado: nao repete na tela
+    const t = m.metadata?.title
+    const body = t && m.content.startsWith(t + "\n") ? m.content.slice(t.length + 1) : m.content
     return (
       <li className="rounded-lg border border-white/10 bg-black/20 p-3 text-sm">
         {m.metadata?.title && <p className="font-medium text-white">{m.metadata.title}</p>}
-        <p className="whitespace-pre-wrap break-words text-white/85">{m.content}</p>
+        <p className="whitespace-pre-wrap break-words text-white/85">{body}</p>
         <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-white/40">
           {typeof m.similarity === "number" && <span>parecido com a sua busca: {Math.round(m.similarity * 100)}%</span>}
           {when(m.metadata?.timestamp) && <span>{when(m.metadata?.timestamp)}</span>}

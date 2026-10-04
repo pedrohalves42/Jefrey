@@ -1,6 +1,8 @@
 """Sistema de Memória Otimizado - Curto e Longo Prazo."""
 from __future__ import annotations
 import json
+import logging
+import re
 import uuid
 import threading
 from datetime import datetime
@@ -17,6 +19,8 @@ from langchain_ollama import OllamaEmbeddings
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage
 
 from src.jefrey.core.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 # Ativa logging estruturado (JSON) ao carregar o subsistema de memória.
 import src.jefrey.core.logging  # noqa: F401
@@ -53,8 +57,9 @@ def _create_embeddings():
     emb_settings = s.embeddings
     llm_settings = s.llm
     
-    # Se provider for ollama, usa OllamaEmbeddings
-    if llm_settings.provider == "ollama":
+    # Embeddings tem provedor PROPRIO (local por padrao): trocar o chat para Claude/ChatGPT nao pode
+    # mexer na memoria, e Claude nem oferece embeddings.
+    if getattr(emb_settings, "provider", "ollama") == "ollama":
         return OllamaEmbeddings(
             model=emb_settings.model,
             base_url=emb_settings.base_url,
@@ -214,6 +219,33 @@ class ShortTermMemory:
             return self._token_count
 
 
+LEGACY_EMBEDDING_MODEL = "nomic-embed-text"  # modelo da colecao original (sem sufixo no nome)
+
+
+def collection_name_for(base: str, embedding_model: str) -> str:
+    """Vetores de modelos diferentes NUNCA compartilham colecao (os espacos vetoriais nao se misturam)."""
+    if not embedding_model or embedding_model == LEGACY_EMBEDDING_MODEL:
+        return base
+    slug = re.sub(r"[^a-zA-Z0-9_-]+", "_", embedding_model).strip("_-")[:40] or "m"
+    return f"{base}__{slug}"[:63]
+
+
+def reindex_collection(old, new, embed_documents, batch: int = 16) -> int:
+    """Copia itens de `old` para `new` re-embedando com o modelo atual. Idempotente (upsert por id)."""
+    done = 0
+    offset = 0
+    while True:
+        got = old.get(include=["documents", "metadatas"], limit=batch, offset=offset)
+        ids = got.get("ids") or []
+        if not ids:
+            break
+        docs = got["documents"]
+        new.upsert(ids=ids, documents=docs, metadatas=got["metadatas"], embeddings=embed_documents(docs))
+        done += len(ids)
+        offset += len(ids)
+    return done
+
+
 class ChromaConnectionPool:
     """Pool de conexões ChromaDB para reuso eficiente."""
     
@@ -265,7 +297,7 @@ class ChromaConnectionPool:
 class LongTermMemory:
     """Memória vetorial persistente com ChromaDB - Otimizada."""
     
-    __slots__ = ("_top_k", "_similarity_threshold", "_embeddings", "_collection")
+    __slots__ = ("_top_k", "_similarity_threshold", "_embeddings", "_collection", "_legacy", "_legacy_checked")
     
     def __init__(
         self,
@@ -285,10 +317,32 @@ class LongTermMemory:
         # Pool de conexões
         pool = ChromaConnectionPool()
         s = get_settings()
-        self._collection = pool.get_collection(
-            collection_name or s.memory.long_term.collection_name
-        )
+        base = collection_name or s.memory.long_term.collection_name
+        model = embedding_model or s.embeddings.model  # o modelo que de fato gera os vetores
+        name = collection_name_for(base, model)
+        self._collection = pool.get_collection(name)
+        # colecao antiga (outro modelo de embedding) a migrar, se existir
+        self._legacy = pool.get_collection(base) if name != base else None
+        self._legacy_checked = False
+        self.migrate_legacy()
     
+    def migrate_legacy(self) -> int:
+        """Reindexa memorias da colecao antiga com o modelo atual. Nunca derruba quem chama."""
+        legacy = getattr(self, "_legacy", None)
+        if legacy is None or getattr(self, "_legacy_checked", False):
+            return 0
+        try:
+            if legacy.count() <= self._collection.count():
+                self._legacy_checked = True
+                return 0
+            n = reindex_collection(legacy, self._collection, self._embeddings.embed_documents)
+            self._legacy_checked = True
+            logger.info("memoria: %d itens reindexados com o modelo de embedding atual", n)
+            return n
+        except Exception as e:  # modelo ainda baixando / Ollama fora: tenta de novo na proxima vez
+            logger.warning("memoria: migracao adiada (%s: %s)", type(e).__name__, e)
+            return 0
+
     def add(
         self,
         content: str,
@@ -325,6 +379,7 @@ class LongTermMemory:
         user_id: str | None = None,
     ) -> list[dict]:
         """Busca semântica otimizada."""
+        self.migrate_legacy()  # no-op quando ja migrou
         top_k = top_k or self._top_k
         query_embedding = self._embeddings.embed_query(query)
         

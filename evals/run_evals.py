@@ -139,6 +139,29 @@ def lembra_fato_na_mesma_thread(c: Ctx):
     return "esmeralda" in t.lower(), t[:80]
 
 
+@case("memoria")
+def memoria_acha_por_sentido_e_nao_por_palavra(c: Ctx):
+    """'qual prato eu mais gosto' deve achar 'minha comida favorita e lasanha' (nenhuma palavra em comum)."""
+    h = _token_for(c, "evm" + uuid.uuid4().hex[:8])
+    c.http.post(f"{c.base}/memory/add", headers=h, timeout=60, json={"content": "Minha comida favorita e lasanha de berinjela"})
+    c.http.post(f"{c.base}/memory/add", headers=h, timeout=60, json={"content": "Reuniao com o Joao na sexta as 10h"})
+    r = c.http.get(f"{c.base}/memory/search", headers=h, params={"q": "qual prato eu mais gosto"}, timeout=60)
+    mems = r.json().get("memories", []) if r.status_code == 200 else []
+    top = mems[0]["content"] if mems else ""
+    return "lasanha" in top.lower(), f"1o resultado: {top[:50]!r}"
+
+
+@case("memoria")
+def esquecer_apaga_de_verdade(c: Ctx):
+    h = _token_for(c, "evf" + uuid.uuid4().hex[:8])
+    mid = c.http.post(f"{c.base}/memory/add", headers=h, timeout=60, json={"content": "codigo temporario ananas-zeta"}).json()["id"]
+    d = c.http.delete(f"{c.base}/memory/{mid}", headers=h, timeout=30)
+    rec = c.http.get(f"{c.base}/memory/recent", headers=h, timeout=30).json()
+    s2 = c.http.get(f"{c.base}/memory/search", headers=h, params={"q": "codigo temporario ananas-zeta"}, timeout=60).json()
+    gone = rec.get("count") == 0 and "ananas" not in str(s2)
+    return d.status_code == 200 and gone, f"delete={d.status_code} sumiu={gone}"
+
+
 # ---------------- seguranca ----------------
 @case("seguranca")
 def rota_protegida_exige_token(c: Ctx):
