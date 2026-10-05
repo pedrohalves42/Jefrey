@@ -102,3 +102,22 @@ def test_foco_recusa_janela_protegida_e_ambigua(b):
     b.janelas.append((60, "Outro - Excel", "EXCEL2"))
     with pytest.raises(UA.UIError, match="mais de um"):
         UA.focus("excel")
+
+
+@pytest.mark.parametrize("fg", [(51, "Windows PowerShell", "powershell"), (52, "Prompt de Comando", "cmd"), (53, "Terminal", "WindowsTerminal"),
+                                (54, "pwsh", "pwsh"), (55, "Git Bash", "mintty"), (56, "KeePass", "KeePassXC"), (57, "Bitwarden", "Bitwarden")])
+def test_nao_digita_em_terminal_nem_cofre_de_senhas(b, fg):
+    """Digitar texto + Enter em um terminal EXECUTA comandos; em cofres de senha mexe em segredos. Nunca."""
+    b.janelas.append(fg)
+    b.fg = fg
+    with pytest.raises(UA.UIError, match="protegid"):
+        UA.type_text("ls", expect_hwnd=fg[0])
+    with pytest.raises(UA.UIError, match="protegid"):
+        UA.hotkey("ctrl+v", expect_hwnd=fg[0])  # colar tambem
+    assert b.digitado == [] and b.teclas == []
+
+
+def test_focar_terminal_tambem_e_recusado(b):
+    b.janelas.append((51, "Windows PowerShell", "powershell"))
+    with pytest.raises(UA.UIError, match="Não vi"):
+        UA.focus("powershell")

@@ -25,11 +25,16 @@ class UIError(Exception):
     """Mensagem em portugues simples, pronta para a tela."""
 
 
+# Alem das janelas do sistema: terminais (texto + Enter EXECUTA comandos) e cofres de senha nunca recebem texto nem atalhos.
+NO_TYPE = ("powershell", "pwsh", "cmd", "conhost", "windowsterminal", "wt", "mintty", "bash", "wsl", "putty", "keepass", "bitwarden", "1password", "lastpass", "dashlane")
+
+
 def _protected(win: tuple[int, str, str]) -> bool:
     from src.jefrey.skills.computer import PROTECTED, _norm
 
     _, title, exe = win
-    return any(p in _norm(exe) for p in PROTECTED) or "jefrey" in _norm(title)
+    e = _norm(exe)
+    return any(p in e for p in PROTECTED) or e in NO_TYPE or any(p in e for p in NO_TYPE if len(p) > 4) or "jefrey" in _norm(title)
 
 
 class _WinBackend:
@@ -119,7 +124,7 @@ def focus(name: str) -> int:
     _need_windows()
     from src.jefrey.skills.computer import match_windows
 
-    found = match_windows(name, _B.windows())  # type: ignore[attr-defined]
+    found = [w for w in match_windows(name, _B.windows()) if not _protected(w)]  # type: ignore[attr-defined]
     if not found:
         raise UIError(f"Não vi nenhum programa aberto chamado “{name}”.")
     if len({w[2].lower() for w in found}) > 1:
