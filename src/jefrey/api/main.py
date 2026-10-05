@@ -410,6 +410,8 @@ def create_app() -> FastAPI:
     app.include_router(voice_router)
     from src.jefrey.api.halt_routes import router as halt_router
     app.include_router(halt_router)
+    from src.jefrey.api.support_routes import router as support_router
+    app.include_router(support_router)
 
     # Monta a sub-aplicacao de aprovacoes Starlette (mantem CIPHER-019, 020, 024 intactos)
     # FIX: mount em /approvals (nao /) para evitar conflito com outros routers.
