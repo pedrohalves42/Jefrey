@@ -11,6 +11,7 @@ import Configuracoes from "@/pages/Configuracoes"
 import Avancado from "@/pages/Avancado"
 import BemVindo from "@/pages/BemVindo"
 import PrimeiraVez from "@/pages/PrimeiraVez"
+import Hoje from "@/pages/Hoje"
 import Conexoes from "@/pages/Conexoes"
 import Ajuda from "@/pages/Ajuda"
 import Aprendi from "@/pages/Aprendi"
@@ -40,6 +41,7 @@ export default function App() {
               <Route path="/avancado" element={<Avancado />} />
               <Route path="/bem-vindo" element={<BemVindo />} />
               <Route path="/primeira-vez" element={<PrimeiraVez />} />
+              <Route path="/hoje" element={<Hoje />} />
               <Route path="/conexoes" element={<Conexoes />} />
               <Route path="/ajuda" element={<Ajuda />} />
               <Route path="/aprendi" element={<Aprendi />} />

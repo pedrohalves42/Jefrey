@@ -15,6 +15,7 @@ import Conexoes from "../pages/Conexoes"
 import VoiceDownload from "../components/VoiceDownload"
 import { UpdateBanner } from "../components/UpdateBanner"
 import ReportProblem from "../components/ReportProblem"
+import Hoje from "../pages/Hoje"
 
 let root: Root | null = null
 let box: HTMLDivElement
@@ -63,6 +64,7 @@ describe("acessibilidade (axe, sem violacoes serias ou criticas)", () => {
     ["Voz natural", () => <VoiceDownload />],
     ["Aviso de atualizacao", () => <UpdateBanner />],
     ["Algo deu errado", () => <ReportProblem />],
+    ["Hoje", () => <Hoje />],
   ]
   for (const [name, el] of screens) {
     it(name, async () => {

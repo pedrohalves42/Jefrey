@@ -9,17 +9,17 @@ export type Status = {
 }
 
 const LABELS: Record<string, string> = {
-  api: "Servidor",
-  ollama: "Modelo local (Ollama)",
-  postgres: "Memória (banco)",
+  api: "Jefrey",
+  ollama: "Cérebro neste computador",
+  postgres: "Memória",
   redis: "Cache",
-  mcp: "Ferramentas (MCP)",
-  stt: "Voz → texto",
-  tts: "Texto → voz",
+  mcp: "Ferramentas",
+  stt: "Ouvir você",
+  tts: "Falar",
 }
 
 /** Servicos sem os quais o chat nao funciona de verdade. O resto so degrada recursos. */
-const ESSENTIAL = new Set(["api", "ollama"])
+const ESSENTIAL = new Set(["api"]) // o cerebro local so conta se for o usado (o servidor marca "off" quando e a nuvem)
 
 export function summarize(services: Status["services"], reachable: boolean): Status["summary"] {
   if (!reachable) return "offline"

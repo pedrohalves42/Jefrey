@@ -246,6 +246,13 @@ def create_app() -> FastAPI:
             logger.debug("ignorado (%s): %s", 'main.py', type(_e).__name__)
 
         native = (os.getenv("JEFREY_MODE", "") or "").lower() == "native"  # sem Docker: SQLite + memoria local
+        try:
+            from src.jefrey.core.llm_provider import config_from_settings as _cfg_llm
+
+            local_brain = _cfg_llm().provider == "ollama"
+        except Exception as _e:
+            logger.debug("ignorado (%s): %s", 'main.py', type(_e).__name__)
+            local_brain = False
 
         # Check Redis
         redis_ok = False
@@ -309,11 +316,11 @@ def create_app() -> FastAPI:
             logger.debug("ignorado (%s): %s", 'main.py', type(_e).__name__)
 
         return {
-            "api": {"status": "ok" if ollama_ok else "degraded"},
+            "api": {"status": "ok"},  # se esta resposta chegou, o servidor esta de pe (antes caia para "degradado" so porque o Ollama faltava)
             "stt": {"status": "ok"},  # Already verified via /stt/health
             "tts": {"status": "ok"},  # Already verified via /tts/health
             "mcp": {"status": mcp_status},  # MCP service health (probe real)
-            "ollama": {"status": "ok" if ollama_ok else "degraded"},
+            "ollama": {"status": "ok" if ollama_ok else ("degraded" if local_brain else "off")},  # so importa se o cerebro for o local
             "redis": {"status": "off" if native else ("ok" if redis_ok else "degraded")},
             "postgres": {"status": "ok" if postgres_ok else "degraded"},
             "timestamp": __import__("datetime").datetime.utcnow().isoformat() + "Z"
@@ -413,6 +420,8 @@ def create_app() -> FastAPI:
     app.include_router(halt_router)
     from src.jefrey.api.support_routes import router as support_router
     app.include_router(support_router)
+    from src.jefrey.api.today_routes import router as today_router
+    app.include_router(today_router)
 
     # Monta a sub-aplicacao de aprovacoes Starlette (mantem CIPHER-019, 020, 024 intactos)
     # FIX: mount em /approvals (nao /) para evitar conflito com outros routers.

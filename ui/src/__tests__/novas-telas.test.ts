@@ -120,3 +120,55 @@ describe("nivel real da voz", () => {
     expect(nextPulse(0.5, false, false, 0, 0.9)).toBeLessThan(0.5)
   })
 })
+
+import { change, money, points, spokenSummary, type TodayData } from "../lib/today"
+
+describe("painel Hoje: formatacao", () => {
+  it("dinheiro, pontos e variacao em portugues", () => {
+    expect(money(4.9988)).toBe("R$ 5,00")
+    expect(money(131500)).toContain("131.500,00")
+    expect(points(131500.4)).toBe("131.500 pts")
+    expect(change(1.154)).toEqual({ text: "▲ +1,15%", tone: "up" })
+    expect(change(-4.2742)).toEqual({ text: "▼ -4,27%", tone: "down" })
+    expect(change(0.001).tone).toBe("flat")
+  })
+  it("frase falada traz o essencial e nunca quebra com cartoes vazios", () => {
+    const base = { status: "ok" as const, items: [] }
+    const d: TodayData = {
+      generated_at: "2026-10-05T08:00",
+      region: { city: "São Paulo", uf: "sp" },
+      sections: {
+        news: { status: "ok", items: [{ title: "Governo anuncia plano", link: "https://g1.globo.com/a" }] },
+        economy: base,
+        region: base,
+        market: { status: "ok", usd: { value: 5, pct: 0.1 } },
+        weather: { status: "ok", summary: "Agora 24 °C, chuva fraca." },
+        agenda: { status: "ok", items: [{ title: "Consulta", time: "09:30" }] },
+        reminders: { status: "ok", items: [{ text: "Beber água", due_label: "hoje às 15:00" }] },
+      },
+    }
+    const t = spokenSummary(d, "Ana")
+    expect(t).toContain("Bom dia, Ana!")
+    expect(t).toContain("Consulta às 09:30")
+    expect(t).toContain("Beber água")
+    expect(t).toContain("Governo anuncia plano")
+    expect(spokenSummary({ ...d, sections: { ...d.sections, agenda: { status: "erro", items: [] }, weather: { status: "erro" } } })).toContain("Bom dia!")
+  })
+})
+
+import { normalizeToday } from "../lib/today"
+
+describe("painel Hoje: resposta incompleta nunca quebra a tela", () => {
+  it("normaliza o que faltar", () => {
+    const d = normalizeToday({ sections: { news: { status: "ok", items: [{ title: "x", link: "https://a.com" }] } } })!
+    expect(d.sections.news.items).toHaveLength(1)
+    expect(d.sections.weather.status).toBe("erro")
+    expect(d.sections.agenda.items).toEqual([])
+    expect(d.region).toEqual({ city: "", uf: "" })
+  })
+  it("lixo vira null", () => {
+    expect(normalizeToday(null)).toBeNull()
+    expect(normalizeToday({ skills: [] })).toBeNull()
+    expect(normalizeToday("texto")).toBeNull()
+  })
+})

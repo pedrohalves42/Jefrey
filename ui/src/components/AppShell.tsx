@@ -13,6 +13,7 @@ import { UpdateBanner } from "@/components/UpdateBanner"
 // easy: aparece no modo Fácil (padrao): so o essencial para quem nao e tecnico
 const ITEMS: NavItem[] = [
   { to: "/", label: "Conversa", end: true, icon: "M4 5h16v11H8l-4 4V5z", easy: true },
+  { to: "/hoje", label: "Hoje", icon: "M12 3v2m0 14v2M5 12H3m18 0h-2M6.3 6.3L5 5m14 0l-1.3 1.3M6.3 17.7L5 19m14 0l-1.3-1.3M12 8a4 4 0 100 8 4 4 0 000-8z", easy: true },
   { to: "/conexoes", label: "Conexões", icon: "M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1", easy: true },
   { to: "/aprender", label: "Aprender", icon: "M12 3l9 5-9 5-9-5 9-5zM7 11v5c0 1.5 2.2 3 5 3s5-1.5 5-3v-5", easy: true },
   { to: "/aprendi", label: "O que aprendi", icon: "M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5L12 3z", easy: true },
