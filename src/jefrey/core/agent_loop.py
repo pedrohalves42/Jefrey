@@ -61,6 +61,16 @@ GROUPS: list[tuple[tuple[str, ...], list[str]]] = [
 ]
 
 
+CONTROL_ONLY = {"focus_window", "type_text", "press_hotkey", "close_app"}  # agem em outros programas
+
+
+def begin_turn() -> None:
+    """Uma nova fala da pessoa encerra a "parada": ela pode pedir de novo."""
+    from src.jefrey.core import halt
+
+    halt.clear()
+
+
 def select_tools(message: str, available: list[str], offer_all: bool = False) -> list[str]:
     """Ferramentas a oferecer ao modelo.
 
@@ -68,13 +78,14 @@ def select_tools(message: str, available: list[str], offer_all: bool = False) ->
     palavra-chave nenhuma e mesmo assim precisa da busca). Modelo local pequeno: so os grupos cujas palavras aparecem na mensagem.
     As ferramentas de risco continuam exigindo aprovacao, em qualquer caso.
     """
-    if offer_all:
-        return [t for t in available if t in CATALOG]
     msg = _norm(message)
     chosen: list[str] = []
     for words, tools in GROUPS:
         if any(w in msg for w in words):
             chosen += tools
+    if offer_all:
+        # controle do computador so quando a PESSOA pediu: texto de e-mail/site/documento nunca liga estas ferramentas
+        return [t for t in available if t in CATALOG and (t not in CONTROL_ONLY or t in chosen)]
     seen: set[str] = set()
     out = []
     for t in chosen:
@@ -254,6 +265,7 @@ async def run_agent(
     config: Optional[LoopConfig] = None,
 ) -> AsyncIterator[Event]:
     """Gera eventos {token|tool_start|approval_required|tool_end}. O chamador acrescenta 'done'."""
+    begin_turn()
     cfg = config or LoopConfig()
     msgs = list(messages)
     offer_all = cfg.offer_all if cfg.offer_all is not None else bool(getattr(getattr(llm, "config", None), "is_cloud", False))

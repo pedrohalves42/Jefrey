@@ -84,3 +84,16 @@ def test_texto_de_terceiros_ou_pedidos_comuns_nao_oferecem_digitacao(pedido):
 @pytest.mark.parametrize("pedido", ["digita olá no bloco de notas", "digite meu nome na planilha", "usa o atalho ctrl+s", "foca o Excel"])
 def test_pedido_do_usuario_oferece_as_ferramentas(pedido):
     assert set(select_tools(pedido, list(CATALOG))) & {"type_text", "press_hotkey", "focus_window"}
+
+
+@pytest.mark.parametrize("pedido", ["resuma este e-mail", "o que tem na agenda?", "quem ganhou o jogo ontem?"])
+def test_modelo_de_nuvem_nao_recebe_ferramentas_de_controle_sem_o_usuario_pedir(pedido):
+    """offer_all oferece quase tudo; as de controle do computador so aparecem se a PESSOA pediu (texto de terceiros nao as liga)."""
+    oferecidas = set(select_tools(pedido, list(CATALOG), offer_all=True))
+    assert oferecidas  # o resto continua disponivel
+    assert not oferecidas & {"type_text", "press_hotkey", "focus_window", "close_app"}
+
+
+def test_modelo_de_nuvem_recebe_o_controle_quando_a_pessoa_pede():
+    assert {"type_text", "press_hotkey"} <= set(select_tools("digita olá no bloco de notas", list(CATALOG), offer_all=True))
+    assert "close_app" in select_tools("fecha o chrome", list(CATALOG), offer_all=True)

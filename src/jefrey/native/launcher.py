@@ -26,6 +26,8 @@ from typing import Mapping, Optional
 
 import httpx
 
+logger = logging.getLogger(__name__)
+
 DEFAULT_PORT = 8000
 OLLAMA_URL = "http://127.0.0.1:11434"
 REQUIRED_MODELS = ("qwen3:1.7b", "embeddinggemma")
@@ -320,6 +322,22 @@ def start_tray_updates(icon, interval_s: float = 5.0) -> threading.Event:
     return stop
 
 
+HALT_HOTKEY = "ctrl+alt+p"  # "Parar": interrompe qualquer acao do Jefrey no computador, de qualquer janela
+
+
+def start_halt_hotkey():
+    if os.getenv("JEFREY_NO_HOTKEY"):
+        return None
+    try:
+        from src.jefrey.core import halt
+        from src.jefrey.native import hotkey
+
+        return hotkey.start_hotkey(halt.request_halt, HALT_HOTKEY)
+    except Exception as e:
+        logger.info("atalho de parada indisponivel (%s)", type(e).__name__)
+        return None
+
+
 def start_global_hotkey(url: str, no_browser: bool):
     """Atalho global (Ctrl+Alt+J): traz o Jefrey para a frente (ou abre) e manda ele comecar a ouvir."""
     if os.getenv("JEFREY_NO_HOTKEY"):
@@ -443,11 +461,14 @@ def main(argv: Optional[list[str]] = None) -> int:
     tray = None if no_tray else start_tray(url, logs_dir, quit_now)
     tray_updates = start_tray_updates(tray) if tray is not None else None
     stop_hotkey = start_global_hotkey(url, no_browser)
+    stop_halt = start_halt_hotkey()
     try:
         server.run()
     finally:
         if stop_hotkey is not None:
             stop_hotkey()
+        if stop_halt is not None:
+            stop_halt()
         if tray_updates is not None:
             tray_updates.set()
         control.set_quit_hook(None)

@@ -26,7 +26,7 @@ ApprovalHook = Callable[[str, str, dict], Awaitable[None]]  # (approval_id, tool
 @dataclass
 class ToolOutcome:
     tool: str
-    status: str  # ok | error | unknown_tool | approval_rejected | approval_expired | bad_arguments
+    status: str  # ok | error | unknown_tool | approval_rejected | approval_expired | bad_arguments | halted
     content: str  # texto que volta para o modelo e para o usuario
     approval_id: Optional[str] = None
     risk: str = "unknown"
@@ -141,6 +141,13 @@ class ToolRuntime:
             self._audit_call(name, "unknown", "deny", "ferramenta fora do catalogo")
             self._blocked_metric(name, "not_in_catalog")
             return ToolOutcome(name, "unknown_tool", f"A ferramenta '{name}' nao existe ou nao e permitida.")
+
+        from src.jefrey.core import halt
+
+        if name in halt.COMPUTER_TOOLS and halt.is_halted():
+            self._audit_call(name, policy.risk, "deny", "parada pelo usuario")
+            self._blocked_metric(name, "halted")
+            return ToolOutcome(name, "halted", "Parei tudo, como você pediu. Não mexi no computador.", risk=policy.risk)
 
         tool = self.resolver(name)
         if tool is None:

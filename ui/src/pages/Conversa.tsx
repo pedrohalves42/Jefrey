@@ -14,6 +14,7 @@ import { useActivity } from "@/hooks/useActivity"
 import { ambientLabel } from "@/lib/briefing"
 import BriefingCard from "@/components/BriefingCard"
 import { HudOverlay, Wave } from "@/components/hud/JarvisHud"
+import { haltComputer } from "@/lib/halt"
 import { useVoicePulse } from "@/hooks/useVoicePulse"
 import { SentenceBuffer } from "@/lib/voice/sentences"
 import { authedFetch, ensureSession } from "@/lib/session"
@@ -251,6 +252,7 @@ export default function Conversa() {
   function stop() {
     abortRef.current?.abort()
     speaker.cancel()
+    void haltComputer() // "Parar" tambem interrompe qualquer acao no computador (digitar, abrir, fechar...)
   }
 
   function toggleMic() {
