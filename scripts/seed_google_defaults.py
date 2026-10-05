@@ -21,7 +21,7 @@ def from_env_file(path: Path) -> dict[str, str]:
     out: dict[str, str] = {}
     if path.is_file():
         for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
-            m = re.match(r"\s*(JEFREY_OAUTH__CLIENT_(?:ID|SECRET))\s*=\s*(.*?)\s*$", line)
+            m = re.match(r"\s*(JEFREY_OAUTH__CLIENT_(?:ID|SECRET)|JEFREY_OAUTH__REDIRECT_URIS)\s*=\s*(.*?)\s*$", line)
             if m:
                 out[m.group(1)] = m.group(2).strip().strip("\"'")
     return out
@@ -37,7 +37,11 @@ def main() -> int:
     if not cid.endswith(".apps.googleusercontent.com"):
         print("O ID do cliente nao parece valido (deve terminar com .apps.googleusercontent.com).")
         return 1
-    data = json.dumps({"installed": {"client_id": cid, "client_secret": sec}})
+    uris = [u.strip() for u in (os.getenv("JEFREY_OAUTH__REDIRECT_URIS") or vals.get("JEFREY_OAUTH__REDIRECT_URIS", "")).split(",") if u.strip()]
+    inner = {"client_id": cid, "client_secret": sec}
+    if uris:  # cliente "Aplicativo da Web": so aceita os enderecos de retorno ja registrados
+        inner["redirect_uris"] = uris
+    data = json.dumps({"installed": inner})
     targets = [ROOT / "packaging" / "defaults" / "google_oauth.json"]
     if "--instalado" in sys.argv:
         home = Path(os.getenv("JEFREY_HOME") or (Path(os.getenv("LOCALAPPDATA", str(Path.home()))) / "Jefrey"))

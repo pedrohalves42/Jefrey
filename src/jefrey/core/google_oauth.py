@@ -80,11 +80,23 @@ def scopes_for(services: list[str]) -> list[str]:
 CALLBACK_PATHS = ("/connections/google/callback", "/auth/google/callback")
 
 
+def registered_redirects() -> list[str]:
+    """Enderecos de retorno ja registrados no Google: variavel de ambiente e/ou "redirect_uris" do google_oauth.json (vem no instalador)."""
+    out = [r.strip() for r in os.getenv("JEFREY_OAUTH__REDIRECT_URIS", "").split(",") if r.strip()]
+    try:
+        d = json.loads(_config_file().read_text(encoding="utf-8"))
+        d = d.get("installed") or d.get("web") or d
+        out += [str(r).strip() for r in (d.get("redirect_uris") or []) if str(r).strip()]
+    except (OSError, ValueError, AttributeError):
+        pass
+    return out
+
+
 def redirect_uri(origin: str) -> str:
     """Endereco de retorno. Clientes "Web" do Google aceitam so enderecos registrados: se o dono ja registrou um em
     JEFREY_OAUTH__REDIRECT_URIS (na mesma porta do programa), usa ele; senao o padrao (clientes "Computador" aceitam qualquer porta local)."""
     port = urlsplit(origin).port
-    for raw in os.getenv("JEFREY_OAUTH__REDIRECT_URIS", "").split(","):
+    for raw in registered_redirects():
         p = urlsplit(raw.strip())
         if p.scheme == "http" and p.hostname in ("localhost", "127.0.0.1") and p.path in CALLBACK_PATHS and p.port == port:
             return raw.strip()

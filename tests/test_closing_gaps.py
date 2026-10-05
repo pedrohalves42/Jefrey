@@ -178,3 +178,14 @@ def test_script_que_embute_o_google_nao_mostra_os_valores(tmp_path, monkeypatch,
     out = capsys.readouterr().out
     assert "GOCSPX" not in out and "123-abc" not in out
     assert json.loads((tmp_path / "packaging" / "defaults" / "google_oauth.json").read_text(encoding="utf-8"))["installed"]["client_id"].startswith("123-abc")
+
+
+def test_google_do_instalador_respeita_os_enderecos_ja_registrados(tmp_path, monkeypatch):
+    from src.jefrey.core import google_oauth as G
+    monkeypatch.setenv("JEFREY_CONFIG_DIR", str(tmp_path))
+    monkeypatch.delenv("JEFREY_OAUTH__REDIRECT_URIS", raising=False)
+    assert G.redirect_uri("http://localhost:8000") == "http://localhost:8000/connections/google/callback"  # padrao (cliente Computador)
+    (tmp_path / "google_oauth.json").write_text(json.dumps({"installed": {"client_id": "1-a.apps.googleusercontent.com", "client_secret": "x" * 20,
+                                                                           "redirect_uris": ["http://localhost:8000/auth/google/callback"]}}), encoding="utf-8")
+    assert G.redirect_uri("http://localhost:8000") == "http://localhost:8000/auth/google/callback"  # o que o dono registrou
+    assert G.redirect_uri("http://localhost:8001") == "http://localhost:8001/connections/google/callback"  # outra porta: nao ha o que registrar
