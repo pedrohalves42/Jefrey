@@ -112,3 +112,17 @@ def test_download_acompanha_progresso_e_erro(monkeypatch):
         return await VR.local_status(Req())
     s = run(fluxo2())
     assert s["state"] == "error" and s["error"] == "Sem internet."
+
+
+def test_motor_local_e_aquecido_ao_listar_para_a_primeira_fala_nao_demorar(monkeypatch):
+    """Medido com o modelo real: a 1a fala levava ~4 s (carregar o modelo); com o modelo ja carregado, ~0,7 s."""
+    _engines(monkeypatch, cloud=False, local=True)
+    carregou = []
+    monkeypatch.setattr(LV, "_load", lambda: carregou.append(1) or object())
+    LV._cache.clear()
+
+    async def fluxo():
+        await VR.engines(Req())
+        await asyncio.sleep(0.2)
+    run(fluxo())
+    assert carregou == [1]

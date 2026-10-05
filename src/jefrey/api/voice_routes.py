@@ -19,6 +19,13 @@ _download: dict = {"state": "idle", "pct": 0, "error": ""}
 _task: Optional[asyncio.Task] = None
 
 
+def _warm() -> None:
+    try:
+        LV._load()
+    except Exception as e:
+        logger.info("voz local: aquecimento falhou (%s)", type(e).__name__)
+
+
 def _login(request: Request) -> None:
     uid = getattr(request.state, "user_id", None)
     if not uid or uid in ("anonymous", "system"):
@@ -34,6 +41,8 @@ class SpeakBody(BaseModel):
 async def engines(request: Request):
     _login(request)
     cloud, local = CV.available(), LV.available()
+    if local and "voice" not in LV._cache:
+        asyncio.create_task(asyncio.to_thread(_warm))  # carrega o modelo agora: a primeira fala sai em ~1 s em vez de ~4 s
     items = [
         {"id": "cloud", "available": cloud, "label": "Natural (nuvem, conta do ChatGPT)"},
         {"id": "local", "available": local, "label": "Natural (neste computador)"},
