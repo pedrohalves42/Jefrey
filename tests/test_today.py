@@ -214,3 +214,28 @@ def test_rotas_exigem_login_e_validam_regiao(monkeypatch):
         run(R.set_region(Req("ana"), R.RegionBody(city="<script>", uf="sp")))
     assert e.value.status_code == 422
     assert run(R.set_region(Req("ana"), R.RegionBody(city="Belo Horizonte", uf="MG"))) == {"city": "Belo Horizonte", "uf": "mg"}
+
+
+# ---------------- achados com dados REAIS (g1 tem ~420 KB; uma falha de rede nao pode "grudar" por 15 min) ----------------
+def test_feed_real_do_g1_tem_mais_de_400kb_e_ainda_e_lido():
+    itens = "".join(f"<item><title>Noticia {i} " + "x" * 4100 + f"</title><link>https://g1.globo.com/n/{i}</link></item>" for i in range(100))
+    feed = f"<?xml version='1.0'?><rss><channel>{itens}</channel></rss>".encode()
+    assert 400_000 < len(feed) < T.MAX_FEED
+    assert len(T.parse_rss(feed, limit=6)) == 6
+
+
+def test_falha_de_rede_no_mercado_nao_fica_em_cache(monkeypatch):
+    T.save_prefs("São Paulo", "sp")
+    estado = {"cai": True}
+
+    def h(r):
+        u = str(r.url)
+        if estado["cai"] and ("awesomeapi" in u or "yahoo" in u):
+            raise httpx.ConnectTimeout("sem rede ainda", request=r)
+        return servidor().handle_request(r) if False else (httpx.Response(200, json=AWESOME) if "awesomeapi" in u else httpx.Response(200, json=YAHOO) if "yahoo" in u else httpx.Response(200, content=RSS) if "rss" in u else httpx.Response(404))
+    t = httpx.MockTransport(h)
+    d = run(T.build(user_id="ana", transport=t))
+    assert d["sections"]["market"]["status"] == "erro"
+    estado["cai"] = False
+    d = run(T.build(user_id="ana", transport=t))  # a rede voltou: o painel se recupera na hora, sem esperar 15 minutos
+    assert d["sections"]["market"]["status"] == "ok" and d["sections"]["market"]["usd"]["value"] == 4.9988

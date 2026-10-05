@@ -27,7 +27,7 @@ import httpx
 logger = logging.getLogger(__name__)
 
 TTL = 15 * 60
-MAX_FEED = 400_000
+MAX_FEED = 2_000_000  # o feed real do g1 tem ~420 KB
 UFS = {"ac", "al", "ap", "am", "ba", "ce", "df", "es", "go", "ma", "mt", "ms", "mg", "pa", "pb", "pr", "pe", "pi", "rj", "rn", "rs", "ro", "rr", "sc", "sp", "se", "to"}
 G1 = "https://g1.globo.com/rss/g1/"
 FEEDS = {"news": G1, "economy": G1 + "economia/"}
@@ -113,9 +113,15 @@ async def fetch_market(*, transport: Optional[httpx.AsyncBaseTransport] = None) 
             v, prev = float(m["regularMarketPrice"]), float(m["chartPreviousClose"])
             out["ibov"] = {"value": v, "pct": (v - prev) * 100 / prev if prev else 0.0}
 
-        for job in await asyncio.gather(moedas(), ibov(), return_exceptions=True):
-            if isinstance(job, Exception):
-                logger.info("painel do dia: fonte de mercado falhou (%s)", type(job).__name__)
+        for attempt in (1, 2):
+            jobs = [moedas()] if "usd" not in out else []
+            jobs += [ibov()] if "ibov" not in out else []
+            for job in await asyncio.gather(*jobs, return_exceptions=True):
+                if isinstance(job, Exception):
+                    logger.info("painel do dia: fonte de mercado falhou na tentativa %s (%s)", attempt, type(job).__name__)
+            if "usd" in out and "ibov" in out:
+                break
+            await asyncio.sleep(0.5 if transport is not None else 2.0)
     return out
 
 
@@ -186,7 +192,8 @@ async def _cached_call(key: str, make):
     if v is not None:
         return v
     v = await make()
-    _cache[key] = (time.monotonic(), v)
+    if v:  # resultado vazio nunca fica em cache: uma falha de rede passageira nao pode "grudar" por 15 minutos
+        _cache[key] = (time.monotonic(), v)
     return v
 
 
@@ -201,7 +208,7 @@ async def build(*, user_id: str, transport: Optional[httpx.AsyncBaseTransport] =
     async def market():
         m = await _cached_call("market", lambda: fetch_market(transport=transport))
         if not m:
-            raise RuntimeError("sem dados")
+            raise RuntimeError("sem dados")  # (vazio nao foi para o cache: a proxima abertura tenta de novo)
         return {"status_override": "ok" if len(m) >= 3 else "parcial", **m}
 
     async def region():
