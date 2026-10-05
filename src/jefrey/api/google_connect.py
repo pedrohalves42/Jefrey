@@ -31,6 +31,7 @@ class StartBody(BaseModel):
 async def google_status(request: Request):
     out = G.status(_user(request))
     out["available_services"] = [{"id": k, "label": v["label"]} for k, v in G.SERVICES.items()]
+    out["redirect_uri"] = G.redirect_uri(str(request.base_url).rstrip("/"))  # o que o Google vai receber: precisa estar cadastrado no Cloud Console
     return out
 
 

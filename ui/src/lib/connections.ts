@@ -7,6 +7,7 @@ export type GoogleStatus = {
   connected: boolean
   email: string | null
   services: GoogleService[]
+  redirect_uri?: string
   available_services: { id: GoogleService; label: string }[]
 }
 

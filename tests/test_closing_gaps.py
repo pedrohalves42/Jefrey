@@ -189,3 +189,15 @@ def test_google_do_instalador_respeita_os_enderecos_ja_registrados(tmp_path, mon
                                                                            "redirect_uris": ["http://localhost:8000/auth/google/callback"]}}), encoding="utf-8")
     assert G.redirect_uri("http://localhost:8000") == "http://localhost:8000/auth/google/callback"  # o que o dono registrou
     assert G.redirect_uri("http://localhost:8001") == "http://localhost:8001/connections/google/callback"  # outra porta: nao ha o que registrar
+
+
+def test_status_do_google_mostra_o_endereco_de_retorno(tmp_path, monkeypatch):
+    from src.jefrey.api import google_connect as GC
+    from src.jefrey.core import google_oauth as G
+    monkeypatch.setenv("JEFREY_CONFIG_DIR", str(tmp_path))
+    monkeypatch.delenv("JEFREY_OAUTH__REDIRECT_URIS", raising=False)
+    monkeypatch.setattr(GC, "_user", lambda r: "ana")
+    monkeypatch.setattr(G, "status", lambda uid: {"configured": True, "connected": False})
+    req = type("R", (), {"base_url": "http://localhost:8000/"})()
+    out = run(GC.google_status(req))
+    assert out["redirect_uri"] == "http://localhost:8000/connections/google/callback"
