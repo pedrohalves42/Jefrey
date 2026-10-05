@@ -142,9 +142,24 @@ async def say(text: str, device: str = "", *, transport: Optional[httpx.AsyncBas
         raise AlexaError(f"A mensagem é longa demais para a Alexa (até {MAX_TEXT} letras).")
     if has_secret(t):
         raise AlexaError("Não vou mandar senha, documento ou número de cartão para falar em voz alta.")
-    name, ident = _pick(_load()["devices"], device, "dispositivo")
+    devices = _load()["devices"]
+    if " ".join((device or "").split()).lower() in ("todos", "todas", "tudo", "casa toda", "all") and devices:
+        for ident in devices.values():  # um aviso para a casa toda
+            await _call("/announcement", {"device": ident, "text": t}, transport=transport)
+        return f"A Alexa falou em {len(devices)} aparelho{'s' if len(devices) > 1 else ''}: “{t}”."
+    name, ident = _pick(devices, device, "dispositivo")
     await _call("/announcement", {"device": ident, "text": t}, transport=transport)
     return f"A Alexa ({name}) falou: “{t}”."
+
+
+def describe() -> str:
+    """O que esta cadastrado (para o Jefrey saber o que existe antes de pedir)."""
+    c = _load()
+    if not (c["devices"] or c["routines"]):
+        return "A Alexa ainda não está configurada. Veja em Conexões > Alexa."
+    d = ", ".join(sorted(c["devices"])) or "nenhum"
+    r = ", ".join(sorted(c["routines"])) or "nenhuma"
+    return f"Aparelhos: {d}. Rotinas: {r}."
 
 
 async def routine(name: str, *, transport: Optional[httpx.AsyncBaseTransport] = None) -> str:

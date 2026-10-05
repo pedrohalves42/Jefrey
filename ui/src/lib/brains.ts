@@ -2,7 +2,7 @@ import { authedFetch } from "@/lib/session"
 
 export type BrainCard = { id: string; name: string; tagline: string; kind: "oneclick" | "key" | "local"; key_url: string; recommended: boolean }
 export type BrainRole = "principal" | "reserva"
-export type BrainsState = { brains: { id: string; role: BrainRole; model: string }[]; catalog: BrainCard[]; max: number }
+export type BrainsState = { brains: { id: string; role: BrainRole; model: string }[]; catalog: BrainCard[]; max: number; machine?: { ram_gb: number; local_recommended: boolean } }
 
 type Res<T> = { ok: boolean; status: number; data: T | null }
 

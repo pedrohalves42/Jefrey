@@ -138,4 +138,48 @@ def test_modelo_local_recebe_a_ferramenta_certa(pedido, ferramenta):
 
 def test_a_skill_expoe_so_quatro_ferramentas_seguras():
     nomes = {t.name for t in skill().get_tools()}
-    assert nomes == {"open_app", "open_website", "open_folder", "set_volume"}  # nada de digitar, apagar, instalar ou executar texto livre
+    assert nomes == {"open_app", "open_website", "open_folder", "set_volume", "media_control", "search_in_browser", "close_app"}  # nada de digitar, apagar, instalar ou executar texto livre
+
+
+# ---------------- midia, pesquisa e fechar programa ----------------
+def _tool(nome):
+    return next(x for x in skill().get_tools() if x.name == nome)
+
+
+def test_midia_manda_a_tecla_certa(ambiente):
+    teclas = ambiente[2]
+    for acao, vk in [("pausar", 0xB3), ("próxima", 0xB0), ("anterior", 0xB1), ("parar", 0xB2)]:
+        call(_tool("media_control"), action=acao)
+        assert teclas[-1] == (vk, 1)
+    assert "pausar" in call(_tool("media_control"), action="dançar")
+
+
+def test_pesquisa_codifica_o_texto(ambiente):
+    urls = ambiente[1]
+    call(_tool("search_in_browser"), query="receita de bolo & pão?x=1")
+    assert urls[-1] == "https://www.google.com/search?q=receita+de+bolo+%26+p%C3%A3o%3Fx%3D1"
+    n = len(urls)
+    assert "pesquisar" in call(_tool("search_in_browser"), query="  ") and len(urls) == n
+
+
+WINS = [(1, "Documento1 - Word", "WINWORD"), (2, "Google - Chrome", "chrome"), (3, "Jefrey - Chrome", "chrome"),
+        (4, "Pasta", "explorer"), (5, "Planilha - Excel", "EXCEL")]
+
+
+def test_fechar_programa_acha_pelo_nome_e_protege_o_sistema():
+    assert [w[0] for w in C.match_windows("word", WINS)] == [1]
+    assert [w[0] for w in C.match_windows("chrome", WINS)] == [2]  # a janela do proprio Jefrey nunca entra
+    assert C.match_windows("explorer", WINS) == [] and C.match_windows("pasta", WINS) == []
+    assert C.match_windows("a", WINS) == []
+
+
+def test_fechar_programa_pede_educadamente(ambiente, monkeypatch):
+    monkeypatch.setattr(C, "list_windows", lambda: WINS)
+    fechados = []
+    monkeypatch.setattr(C, "_close_window", lambda h: fechados.append(h))
+    assert "Pedi para fechar" in call(_tool("close_app"), name="word") and fechados == [1]
+    assert "Não vi" in call(_tool("close_app"), name="photoshop")
+    fechados.clear()
+    assert "Não vi" in call(_tool("close_app"), name="excel e word") and fechados == []  # nome composto nao fecha duas janelas por engano
+    from src.jefrey.core.tool_catalog import CATALOG
+    assert CATALOG["close_app"].needs_approval is True and not CATALOG["media_control"].needs_approval

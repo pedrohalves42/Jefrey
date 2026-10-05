@@ -567,6 +567,20 @@ export default function Conversa() {
                       Falar as respostas
                     </label>
                   )}
+                  {speaker.supported && (speaker.voices.length > 1 || speaker.cloudOk) && (
+                    <label className="block text-xs text-white/60">
+                      Voz
+                      <select
+                        value={speaker.voiceChoice ?? ""}
+                        onChange={e => { speaker.setVoice(e.target.value || null); speaker.cancel(); speaker.say("Oi, essa é a minha voz.") }}
+                        className="jf-focus mt-1 w-full rounded-lg border border-white/20 bg-black/60 px-2 py-1.5 text-sm text-white"
+                      >
+                        <option value="">Automática (a mais natural)</option>
+                        {speaker.cloudOk && <option value="cloud">Natural (nuvem, conta do ChatGPT)</option>}
+                        {speaker.voices.map(v => <option key={v.uri} value={v.uri}>{v.name.replace(/^Microsoft /, "")}</option>)}
+                      </select>
+                    </label>
+                  )}
                   {listener.supported && (
                     <label className="flex cursor-pointer items-center gap-2">
                       <input type="checkbox" checked={continuous} onChange={e => { setContinuousState(e.target.checked); writeFlag("jefrey_voice_continuous", e.target.checked) }} />

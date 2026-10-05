@@ -17,7 +17,7 @@ import webbrowser
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urlsplit
+from urllib.parse import quote_plus, urlsplit
 
 from src.jefrey.skills import SkillBase, SkillMetadata, skill, tool
 
@@ -112,6 +112,65 @@ def _press(vk: int, times: int) -> None:
         time.sleep(0.02)
 
 
+MEDIA_KEYS = {"play": 0xB3, "pause": 0xB3, "tocar": 0xB3, "pausar": 0xB3, "continuar": 0xB3, "parar": 0xB2, "stop": 0xB2,
+              "proxima": 0xB0, "proximo": 0xB0, "next": 0xB0, "pular": 0xB0, "anterior": 0xB1, "voltar": 0xB1, "previous": 0xB1}
+PROTECTED = ("explorer", "jefrey", "system", "taskmgr", "csrss", "winlogon", "searchhost", "startmenuexperiencehost", "shellexperiencehost")
+
+
+def list_windows() -> list[tuple[int, str, str]]:
+    """Janelas visiveis com titulo: (identificador, titulo, nome do programa). So Windows."""
+    import ctypes
+    from ctypes import wintypes
+
+    u, k = ctypes.windll.user32, ctypes.windll.kernel32  # type: ignore[attr-defined]
+    out: list[tuple[int, str, str]] = []
+    proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+    def each(hwnd, _):
+        if not u.IsWindowVisible(hwnd):
+            return True
+        n = u.GetWindowTextLengthW(hwnd)
+        if n <= 0:
+            return True
+        buf = ctypes.create_unicode_buffer(n + 1)
+        u.GetWindowTextW(hwnd, buf, n + 1)
+        pid = wintypes.DWORD()
+        u.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        exe = ""
+        h = k.OpenProcess(0x1000, False, pid.value)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if h:
+            size = wintypes.DWORD(520)
+            path = ctypes.create_unicode_buffer(520)
+            if k.QueryFullProcessImageNameW(h, 0, path, ctypes.byref(size)):
+                exe = Path(path.value).stem
+            k.CloseHandle(h)
+        out.append((int(hwnd), buf.value, exe))
+        return True
+
+    u.EnumWindows(proc(each), 0)
+    return out
+
+
+def _close_window(hwnd: int) -> None:
+    import ctypes
+
+    ctypes.windll.user32.PostMessageW(hwnd, 0x0010, 0, 0)  # type: ignore[attr-defined]  # WM_CLOSE: pede para fechar (o programa pergunta se quer salvar)
+
+
+def match_windows(query: str, wins: list[tuple[int, str, str]]) -> list[tuple[int, str, str]]:
+    """Janelas cujo programa ou titulo combina com o que a pessoa disse; nunca as protegidas."""
+    q = _norm(query)
+    if len(q) < 3:
+        return []
+    found = []
+    for hwnd, title, exe in wins:
+        if any(p in _norm(exe) for p in PROTECTED) or "jefrey" in _norm(title):
+            continue
+        if q in _norm(exe) or q in _norm(title):
+            found.append((hwnd, title, exe))
+    return found
+
+
 def _windows_only() -> Optional[str]:
     return None if sys.platform == "win32" else "Isso só funciona no Windows."
 
@@ -146,7 +205,7 @@ class ComputerSkill(SkillBase):
         return sys.platform == "win32"
 
     def get_tools(self) -> list:
-        return [self.open_app, self.open_website, self.open_folder, self.set_volume]
+        return [self.open_app, self.open_website, self.open_folder, self.set_volume, self.media_control, self.search_in_browser, self.close_app]
 
     @tool(description="Abre um programa do computador pelo nome (ex.: Word, Chrome, Bloco de Notas, Calculadora)")
     async def open_app(self, name: str, user_id: str | None = None) -> str:
@@ -209,6 +268,38 @@ class ComputerSkill(SkillBase):
             _press(0xAD, 1)
             return "Mudei o som (mudo ligado ou desligado)."
         return "Diga se é para aumentar, diminuir ou deixar mudo."
+
+    @tool(description="Controla a musica ou o video que estiver tocando: acao 'pausar', 'continuar', 'proxima', 'anterior' ou 'parar'")
+    async def media_control(self, action: str, user_id: str | None = None) -> str:
+        if (msg := _windows_only()):
+            return msg
+        vk = MEDIA_KEYS.get(_norm(action))
+        if vk is None:
+            return "Diga se é para pausar, continuar, passar para a próxima ou voltar."
+        _press(vk, 1)
+        return {0xB3: "Pausei ou continuei a reprodução.", 0xB0: "Passei para a próxima.", 0xB1: "Voltei para a anterior.", 0xB2: "Parei a reprodução."}[vk]
+
+    @tool(description="Pesquisa um assunto no Google, abrindo o navegador com o resultado (ex.: 'receita de bolo')")
+    async def search_in_browser(self, query: str, user_id: str | None = None) -> str:
+        q = " ".join((query or "").split())[:200]
+        if not q:
+            return "O que você quer pesquisar?"
+        ok = _open_url("https://www.google.com/search?q=" + quote_plus(q))
+        return f"Pesquisei “{q}” no navegador." if ok else "Não consegui abrir o navegador."
+
+    @tool(description="Fecha um programa aberto pelo nome (ex.: Word, Chrome). Pede para fechar com educacao: se houver algo sem salvar, o programa pergunta")
+    async def close_app(self, name: str, user_id: str | None = None) -> str:
+        if (msg := _windows_only()):
+            return msg
+        found = match_windows(name, list_windows())
+        if not found:
+            return f"Não vi nenhum programa aberto chamado “{name}”."
+        exes = {e.lower() for _, _, e in found}
+        if len(exes) > 1:
+            return "Achei mais de um: " + ", ".join(sorted({e.title() or t for _, t, e in found})[:5]) + ". Qual deles você quer fechar?"
+        for hwnd, _, _ in found:
+            _close_window(hwnd)
+        return f"Pedi para fechar {found[0][2].title() or name}. Se tiver algo sem salvar, ele vai perguntar."
 
 
 @skill("computer", "Abrir programas, sites e pastas e mudar o volume do computador, por voz", tags=["utility", "local", "windows"])

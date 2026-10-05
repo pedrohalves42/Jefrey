@@ -82,9 +82,13 @@ CATALOG: dict[str, ToolPolicy] = {
     "open_website": _p("medium", "Abrir site"),
     "open_folder": _p("low", "Abrir pasta"),
     "set_volume": _p("low", "Mudar o volume"),
+    "media_control": _p("low", "Controlar a música"),
+    "search_in_browser": _p("low", "Pesquisar no navegador"),
+    "close_app": _p("high", "Fechar programa"),
     # Alexa (via Voice Monkey): falar e leve; acionar rotina mexe na casa e pede aprovacao
     "alexa_say": _p("medium", "Falar na Alexa"),
     "alexa_routine": _p("high", "Acionar rotina da Alexa"),
+    "alexa_list": _p("low", "Ver o que a Alexa tem cadastrado"),
     # lembretes (dados do proprio usuario)
     "set_reminder": _p("medium", "Criar lembrete"),
     "list_reminders": _p("low", "Listar lembretes"),

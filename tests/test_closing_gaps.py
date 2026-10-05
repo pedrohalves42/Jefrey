@@ -64,7 +64,10 @@ def test_build_leva_a_pasta_de_padroes_e_ela_nao_vai_para_o_git():
     assert "packaging\\defaults" in bat and "google_oauth.json" in bat and "update_public_key.txt" in bat
     ign = (root / ".gitignore").read_text(encoding="utf-8")
     assert "packaging/defaults/*" in ign and "!packaging/defaults/README.md" in ign
-    assert not [p for p in (root / "packaging" / "defaults").iterdir() if p.name != "README.md"]  # nada sensivel versionado
+    import subprocess
+    for p in (root / "packaging" / "defaults").iterdir():  # tudo que for colocado aqui precisa ficar fora do Git
+        if p.name != "README.md":
+            assert subprocess.run(["git", "check-ignore", "-q", str(p)], cwd=root).returncode == 0, p.name
 
 
 # ---------------- controle do computador pelo laco REAL do agente ----------------

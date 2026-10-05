@@ -24,16 +24,27 @@ function Role({ role }: { role: "principal" | "reserva" | null }) {
 function KeyFlow({ card, onDone, onMsg }: { card: BrainCard; onDone: (s: BrainsState) => void; onMsg: (m: Msg) => void }) {
   const [key, setKey] = useState("")
   const [busy, setBusy] = useState(false)
-  async function go() {
+  async function go(code = key) {
     setBusy(true)
     onMsg(null)
-    const r = await connectBrain(card.id, key)
+    const r = await connectBrain(card.id, code)
     setBusy(false)
     if (r.ok && r.data) {
       setKey("")
       onMsg({ ok: true, text: `${card.name} conectado!` })
       onDone(r.data)
     } else onMsg({ ok: false, text: apiDetail(r, "Não consegui conectar agora. Tente de novo.") })
+  }
+  /** Le o que a pessoa copiou no site do provedor e conecta direto (menos um passo para quem nao digita bem). */
+  async function pasteAndConnect() {
+    try {
+      const t = (await navigator.clipboard.readText()).trim()
+      if (!t || t.length > 400 || /\s/.test(t)) throw new Error("vazio")
+      setKey(t)
+      await go(t)
+    } catch {
+      onMsg({ ok: false, text: "Não achei o código copiado. Copie o código no site e toque de novo, ou cole no campo abaixo." })
+    }
   }
   const text = `${steps(card.name).join(" ")} ${KEY_COST_NOTE}`
   return (
@@ -43,6 +54,7 @@ function KeyFlow({ card, onDone, onMsg }: { card: BrainCard; onDone: (s: BrainsS
       </ol>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <a href={card.key_url} target="_blank" rel="noopener noreferrer" className={`${big} inline-block`}>Abrir o site do {card.name}</a>
+        <button type="button" onClick={() => void pasteAndConnect()} disabled={busy} className={`${big} border-emerald-300/40`}>Já copiei: colar e conectar</button>
         <ListenButton text={text} />
       </div>
       <p className="mt-3 text-sm text-white/60">{KEY_COST_NOTE}</p>
@@ -53,6 +65,13 @@ function KeyFlow({ card, onDone, onMsg }: { card: BrainCard; onDone: (s: BrainsS
       <button type="button" onClick={() => void go()} disabled={busy} className={`${big} mt-3`}>{busy ? "Testando…" : "Conectar"}</button>
     </div>
   )
+}
+
+/** Nuvem e o padrao; o cerebro neste computador so e sugerido quando a maquina e forte. */
+export function localNote(st: BrainsState | null): string {
+  const m = st?.machine
+  if (m?.local_recommended) return `Seu computador é forte (${Math.round(m.ram_gb)} GB de memória): dá para usar um cérebro aqui, sem internet e sem custo. Uma conta na nuvem ainda responde melhor.`
+  return "Seu computador é simples para isso: prefira conectar uma conta acima. O cérebro daqui responde de forma mais básica."
 }
 
 /** Cerebros do Jefrey: varios ao mesmo tempo; se um falhar, o proximo assume sozinho. */
@@ -133,7 +152,7 @@ export default function Cerebros() {
                 <p className="text-lg text-white">{c.name}{c.recommended && !role && <span className="ml-2 text-sm text-cyan-300">recomendado</span>}</p>
                 <Role role={role} />
               </div>
-              <p className="mt-1 text-base text-white/65">{c.tagline}</p>
+              <p className="mt-1 text-base text-white/65">{c.kind === "local" ? localNote(st) : c.tagline}</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {role ? (
                   <>

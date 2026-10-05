@@ -50,3 +50,18 @@ describe("useVoicePulse.nextPulse", () => {
     expect(v).toBe(0)
   })
 })
+
+import { bestVoice, voiceScore } from "../hooks/useSpeaker"
+
+describe("escolha da voz", () => {
+  it("prefere a voz neural à antiga", () => {
+    const lista = [
+      { name: "Microsoft Maria - Portuguese (Brazil)", lang: "pt-BR" },
+      { name: "Microsoft Francisca Online (Natural) - Portuguese (Brazil)", lang: "pt-BR" },
+      { name: "Microsoft Helia - Portuguese (Portugal)", lang: "pt-PT" },
+    ]
+    expect(bestVoice(lista)?.name).toContain("Francisca")
+    expect(voiceScore(lista[1])).toBeGreaterThan(voiceScore(lista[0]))
+  })
+  it("lista vazia não quebra", () => expect(bestVoice([])).toBeUndefined())
+})

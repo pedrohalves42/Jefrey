@@ -52,7 +52,10 @@ GROUPS: list[tuple[tuple[str, ...], list[str]]] = [
     (("abre ", "abra ", "abrir", "abri ", "inicia", "iniciar", "executa", "programa", "aplicativo", "app "), ["open_app", "open_folder", "open_website"]),
     (("site", "youtube", "gmail", "pagina", "navegador", "internet"), ["open_website"]),
     (("pasta", "downloads", "documentos", "area de trabalho", "fotos", "imagens"), ["open_folder"]),
-    (("alexa", "echo", "anuncia", "fala na ", "avisa na ", "rotina da", "acende a luz", "apaga a luz"), ["alexa_say", "alexa_routine"]),
+    (("alexa", "echo", "anuncia", "fala na ", "avisa na ", "rotina da", "acende a luz", "apaga a luz"), ["alexa_say", "alexa_routine", "alexa_list"]),
+    (("fecha ", "fechar", "feche ", "encerra"), ["close_app"]),
+    (("musica", "música", "pausa", "pausar", "proxima", "próxima", "toca", "continua"), ["media_control"]),
+    (("pesquisa", "pesquisar", "procura", "procurar", "google"), ["search_in_browser"]),
     (("volume", "som ", "mudo", "silenci", "aumenta", "diminui", "mais alto", "mais baixo"), ["set_volume"]),
 ]
 

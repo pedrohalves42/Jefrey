@@ -168,10 +168,10 @@ def test_modelo_local_recebe_as_ferramentas_da_alexa(pedido):
     assert {"alexa_say", "alexa_routine"} <= set(select_tools(pedido, list(CATALOG)))
 
 
-def test_skill_expoe_so_duas_ferramentas_e_responde_texto_simples():
+def test_skill_expoe_so_tres_ferramentas_e_responde_texto_simples():
     from src.jefrey.skills.alexa import AlexaSkill
     s = AlexaSkill()
-    assert {t.name for t in s.get_tools()} == {"alexa_say", "alexa_routine"}
+    assert {t.name for t in s.get_tools()} == {"alexa_say", "alexa_routine", "alexa_list"}
     r = run(s.alexa_say.ainvoke({"text": "oi", "device": ""}))
     assert "Nenhum dispositivo" in r or "não está conectada" in r  # sem conexao: explica, nao quebra
 
@@ -208,3 +208,17 @@ def test_api_ciclo(api, monkeypatch):
     monkeypatch.setattr(A, "say", recusa)
     assert c.post("/alexa/test", headers=h).status_code == 409
     assert c.delete("/alexa", headers=h).json()["configured"] is False
+
+
+def test_falar_na_casa_toda_e_listar(tmp_path, monkeypatch):
+    import asyncio
+    import httpx
+    from src.jefrey.core import alexa as A
+    monkeypatch.setenv("JEFREY_CONFIG_DIR", str(tmp_path))
+    A.save("tok-1234567890abcdef", {"sala": "m-sala", "quarto": "m-quarto"}, {"boa noite": "r-noite"})
+    vistos = []
+    t = httpx.MockTransport(lambda r: (vistos.append(dict(r.url.params)), httpx.Response(200))[1])
+    out = asyncio.run(A.say("jantar pronto", "todos", transport=t))
+    assert "2 aparelhos" in out and sorted(v["device"] for v in vistos) == ["m-quarto", "m-sala"]
+    d = A.describe()
+    assert "quarto, sala" in d and "boa noite" in d and "tok-1234567890abcdef" not in d

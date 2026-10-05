@@ -197,3 +197,12 @@ def test_api_ciclo_completo(api):
     assert c.delete("/brains/anthropic", headers=h).json()["brains"][0]["id"] == "groq"
     assert c.delete("/brains/anthropic", headers=h).status_code == 404
     assert "gsk_" not in c.get("/brains", headers=h).text
+
+
+def test_maquina_so_recomenda_local_se_for_forte(monkeypatch):
+    from src.jefrey.core import brains, sysinfo
+    monkeypatch.setattr(sysinfo, "memory", lambda: (50.0, 8.0))
+    assert brains.machine() == {"ram_gb": 8.0, "local_recommended": False}
+    monkeypatch.setattr(sysinfo, "memory", lambda: (50.0, 32.0))
+    assert brains.machine()["local_recommended"] is True
+    assert "machine" in brains.state()

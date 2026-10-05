@@ -108,7 +108,21 @@ def state() -> dict:
             continue
         if it.get("provider") == "ollama" or read_secret(P._fallback_key_file(str(it["id"]))):
             out.append({"id": str(it["id"]), "role": "reserva", "model": str(it.get("model"))})
-    return {"brains": out, "catalog": public_catalog(), "max": MAX_BRAINS}
+    return {"brains": out, "catalog": public_catalog(), "max": MAX_BRAINS, "machine": machine()}
+
+
+LOCAL_MIN_RAM_GB = 24.0  # abaixo disso, modelo local costuma ser fraco/lento: a conta na nuvem e a melhor escolha
+
+
+def machine() -> dict:
+    """Conta na nuvem e o padrao; o cerebro local so e sugerido se o computador aguentar modelos maiores."""
+    try:
+        from src.jefrey.core import sysinfo
+
+        total = sysinfo.memory()[1]
+    except Exception:
+        total = 0.0
+    return {"ram_gb": total, "local_recommended": total >= LOCAL_MIN_RAM_GB}
 
 
 def _entries() -> list[dict]:

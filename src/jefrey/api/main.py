@@ -403,6 +403,8 @@ def create_app() -> FastAPI:
     app.include_router(brains_router)
     from src.jefrey.api.alexa_routes import router as alexa_router
     app.include_router(alexa_router)
+    from src.jefrey.api.cloudvoice_routes import router as cloudvoice_router
+    app.include_router(cloudvoice_router)
 
     # Monta a sub-aplicacao de aprovacoes Starlette (mantem CIPHER-019, 020, 024 intactos)
     # FIX: mount em /approvals (nao /) para evitar conflito com outros routers.
