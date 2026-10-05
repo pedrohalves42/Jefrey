@@ -358,7 +358,8 @@ def create_app() -> FastAPI:
 
         return {
             "status": overall,
-            "version": get_settings().version,
+            "version": __import__("src.jefrey", fromlist=["__version__"]).__version__,  # a mesma versao do instalador e das atualizacoes
+            "mode": "native" if (os.getenv("JEFREY_MODE", "") or "").strip().lower() == "native" else "server",
             "security_components": components,
             "timestamp": __import__("datetime").datetime.utcnow().isoformat() + "Z"
         }

@@ -212,3 +212,27 @@ def test_chroma_continua_embutido_sem_servidor_nem_codigo_remoto():
             continue
         txt = p.read_text(encoding="utf-8", errors="ignore")
         assert "chromadb.HttpClient" not in txt and "trust_remote_code" not in txt, p.name
+
+
+# ---------------- outra copia do Jefrey (Docker/antiga) ocupando a porta 8000 ----------------
+def _resp(code, payload):
+    import httpx
+    return httpx.Response(code, json=payload, request=httpx.Request("GET", "http://x"))
+
+
+def test_copia_docker_na_8000_nao_impede_a_instalada_de_abrir(monkeypatch):
+    """Antes: o .exe dizia "ja esta aberto" e abria o Jefrey do Docker (versao velha, sem Google/skills novos)."""
+    import httpx
+    saude = {"status": "healthy", "version": "0.9.0", "security_components": {}}
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: _resp(200, saude))  # sem "mode": e um servidor, nao a copia do Windows
+    assert L.jefrey_running(8000) is True  # algo responde
+    assert L.native_running(8000) is False  # mas nao e a copia nativa
+
+
+def test_copia_nativa_da_mesma_versao_conta_como_ja_aberta(monkeypatch):
+    import httpx
+    from src.jefrey import __version__
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: _resp(200, {"status": "healthy", "version": __version__, "mode": "native", "security_components": {}}))
+    assert L.native_running(8000) is True
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: _resp(200, {"status": "healthy", "version": "0.0.1", "mode": "native", "security_components": {}}))
+    assert L.native_running(8000) is False  # versao antiga aberta: nao reaproveitar

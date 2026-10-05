@@ -358,6 +358,21 @@ def jefrey_running(port: int) -> bool:
         return False
 
 
+def native_running(port: int) -> bool:
+    """So conta como "ja aberto" a copia NATIVA desta mesma versao. Outra copia (Docker, versao antiga) na mesma porta nao serve:
+    antes o programa instalado desistia e abria o Jefrey velho do Docker, sem o Google e as skills novas."""
+    try:
+        r = httpx.get(f"http://127.0.0.1:{port}/health", timeout=2)
+        if r.status_code != 200:
+            return False
+        d = r.json()
+        from src.jefrey import __version__
+
+        return d.get("mode") == "native" and d.get("version") == __version__
+    except (httpx.HTTPError, ValueError):
+        return False
+
+
 def wait_ready(port: int, timeout: float = 120.0) -> bool:
     end = time.time() + timeout
     while time.time() < end:
@@ -373,7 +388,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     no_browser = "--no-browser" in args or bool(os.getenv("JEFREY_NO_BROWSER"))
     no_tray = "--no-tray" in args or bool(os.getenv("JEFREY_NO_TRAY"))
     desired = int(os.getenv("JEFREY_API_PORT", str(DEFAULT_PORT)))
-    if jefrey_running(desired):
+    if native_running(desired):
         url = f"http://127.0.0.1:{desired}"
         print(f"O Jefrey ja esta aberto em {url}")
         if not no_browser:

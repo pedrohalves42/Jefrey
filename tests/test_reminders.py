@@ -133,6 +133,8 @@ def store(tmp_path, monkeypatch):
     eng = create_engine(f"sqlite:///{tmp_path}/r.db")
     import src.jefrey.core.db as db
     monkeypatch.setattr(db, "get_engine", lambda: eng)
+    orig = R.describe_due
+    monkeypatch.setattr(R, "describe_due", lambda due, now=None: orig(due, now or NOW))  # "hoje" = NOW do teste, nao o relogio real
     return R.ReminderStore()
 
 

@@ -120,6 +120,8 @@ asyncio_default_fixture_loop_scope = "function"
 python_files = ["test_*.py", "*_test.py"]
 pythonpath = ["src"]
 testpaths = ["tests"]
+addopts = "-m \"not contract\""
+markers = ["contract: usa chaves reais de nuvem (opt-in, JEFREY_CONTRACT_KEYS)"]
 
 [tool.coverage.run]
 source = ["src/jefrey"]

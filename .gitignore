@@ -162,3 +162,6 @@ update_private_key*
 # Padroes do instalador com credenciais (nao vao para o Git)
 packaging/defaults/*
 !packaging/defaults/README.md
+
+# area de trabalho de execucao de planos (local)
+.superpowers/
