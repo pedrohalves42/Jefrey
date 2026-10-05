@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { speakable } from "@/lib/voice/sentences"
 import { authedFetch } from "@/lib/session"
+import { getEngines, pickEngine, type Engines } from "@/lib/voice"
+import { createLevelMeter, setLevelSource } from "@/lib/voiceLevel"
 
 const MAX_CHUNK = 200 // alguns motores de voz travam em falas longas
 
@@ -59,8 +61,8 @@ export function useSpeaker() {
   const pending = useRef(0)
   const voiceUri = useRef<string | null>(savedVoice())
   const [voiceChoice, setVoiceChoice] = useState<string | null>(voiceUri.current)
-  const [cloudOk, setCloudOk] = useState(false)
-  const cloudOkRef = useRef(false)
+  const [engines, setEngines] = useState<Engines | null>(null)
+  const enginesRef = useRef<Engines | null>(null)
   const gen = useRef(0) // cada cancel() invalida a fila de audio da nuvem
   const queue = useRef<Promise<void>>(Promise.resolve())
   const audio = useRef<HTMLAudioElement | null>(null)
@@ -69,14 +71,13 @@ export function useSpeaker() {
     let alive = true
     void (async () => {
       try {
-        const r = await authedFetch("/voice/cloud")
-        const d = r.ok ? ((await r.json()) as { available?: boolean }) : null
-        if (alive && d?.available) {
-          setCloudOk(true)
-          cloudOkRef.current = true
+        const r = await getEngines()
+        if (alive && r.ok && r.data) {
+          setEngines(r.data)
+          enginesRef.current = r.data
         }
       } catch {
-        /* sem nuvem: usa as vozes do computador */
+        /* sem motor do servidor: usa as vozes do computador */
       }
     })()
     return () => {
@@ -114,14 +115,18 @@ export function useSpeaker() {
     return all.find(v => v.voiceURI === voiceUri.current) || bestVoice(all.filter(v => v.lang.toLowerCase().startsWith("pt")))
   }
 
-  /** Automatica = nuvem quando o ChatGPT esta conectado; a pessoa pode escolher uma voz do computador. */
-  const wantsCloud = () => cloudOkRef.current && (voiceUri.current === null || voiceUri.current === CLOUD_VOICE)
+  /** Automatica = o melhor motor do servidor (nuvem, depois voz natural local); a pessoa pode escolher uma voz do computador. */
+  const serverEngine = (): "cloud" | "local" | null => {
+    const e = pickEngine(voiceUri.current, enginesRef.current)
+    return e === "browser" ? null : e
+  }
 
-  const playCloud = async (piece: string, myGen: number): Promise<boolean> => {
+  const playCloud = async (piece: string, myGen: number, engine: "cloud" | "local"): Promise<boolean> => {
     try {
-      const r = await authedFetch("/voice/cloud/speak", { method: "POST", body: JSON.stringify({ text: piece }) })
+      const explicit = voiceUri.current === CLOUD_VOICE || voiceUri.current === "local"
+      const r = await authedFetch("/voice/speak", { method: "POST", body: JSON.stringify({ text: piece, engine: explicit ? engine : undefined }) })
       if (!r.ok) {
-        if (r.status === 409) cloudOkRef.current = false // sem conta/saldo: cai para a voz do computador nas proximas falas
+        if (r.status === 409 && enginesRef.current) enginesRef.current = { ...enginesRef.current, default: "browser" } // sem conta/voz: o computador fala nas proximas
         return false
       }
       const blob = await r.blob()
@@ -129,10 +134,12 @@ export function useSpeaker() {
       const url = URL.createObjectURL(blob)
       const a = new Audio(url)
       audio.current = a
-      let pulse = 0
+      const meter = createLevelMeter(a)
+      setLevelSource(meter.level) // o avatar pulsa com o volume REAL desta fala
       await new Promise<void>(resolve => {
         const end = () => {
-          window.clearInterval(pulse)
+          setLevelSource(null)
+          meter.stop()
           URL.revokeObjectURL(url)
           resolve()
         }
@@ -141,7 +148,6 @@ export function useSpeaker() {
         a.onpause = () => {
           if (a.ended || myGen !== gen.current) end()
         }
-        pulse = window.setInterval(() => window.dispatchEvent(new Event("jefrey-word")), 320) // sem marcador de palavra: bate no ritmo medio da fala
         void a.play().catch(end)
       })
       return true
@@ -182,7 +188,8 @@ export function useSpeaker() {
     (raw: string) => {
       const text = speakable(raw)
       if (!text) return
-      if (wantsCloud()) {
+      const engine = serverEngine()
+      if (engine) {
         const myGen = gen.current
         pending.current += 1
         setSpeaking(true)
@@ -190,7 +197,7 @@ export function useSpeaker() {
         queue.current = queue.current.then(async () => {
           for (const piece of pieces) {
             if (myGen !== gen.current) break
-            const ok = await playCloud(piece, myGen)
+            const ok = await playCloud(piece, myGen, engine)
             if (!ok && myGen === gen.current) sayBrowser(piece) // falhou: o computador fala no lugar
           }
           if (myGen === gen.current) {
@@ -219,5 +226,6 @@ export function useSpeaker() {
   useEffect(() => () => cancel(), [cancel])
 
   const sorted = [...voices].sort((a, b) => voiceScore(b) - voiceScore(a))
-  return { supported: supported || cloudOk, speaking, voices: sorted, voiceChoice, cloudOk, setVoice, say, cancel }
+  const cloudOk = !!engines?.engines.some(e => e.id !== "browser" && e.available)
+  return { supported: supported || cloudOk, speaking, voices: sorted, voiceChoice, cloudOk, engines, setVoice, say, cancel }
 }

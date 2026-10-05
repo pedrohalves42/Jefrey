@@ -1,11 +1,13 @@
 import { useEffect, type RefObject } from "react"
+import { currentLevel, hasLevelSource } from "@/lib/voiceLevel"
 
 /** Evento disparado a cada palavra falada (useSpeaker): o avatar "bate" no ritmo da fala. */
 export const WORD_EVENT = "jefrey-word"
 
 /** Envelope do pulso (0 a 1): sobe na palavra, desce suave; sem eventos de palavra, ondula devagar enquanto fala. */
-export function nextPulse(prev: number, speaking: boolean, word: boolean, t: number): number {
+export function nextPulse(prev: number, speaking: boolean, word: boolean, t: number, measured?: number): number {
   if (!speaking) return prev * 0.85 < 0.01 ? 0 : prev * 0.85
+  if (measured !== undefined) return Math.max(measured, prev * 0.85) // volume REAL da voz (audio da nuvem/local): sobe junto e desce suave
   const base = 0.3 + 0.25 * Math.abs(Math.sin(t / 240)) // fala sem marcador de palavra (algumas vozes): ondula sozinho
   return word ? 1 : Math.max(base, prev * 0.9)
 }
@@ -21,7 +23,7 @@ export function useVoicePulse(ref: RefObject<HTMLElement | null>, speaking: bool
     }
     window.addEventListener(WORD_EVENT, onWord)
     const tick = (t: number) => {
-      level = nextPulse(level, speaking, word, t)
+      level = nextPulse(level, speaking, word, t, hasLevelSource() ? currentLevel() : undefined)
       word = false
       const el = ref.current
       if (el) {

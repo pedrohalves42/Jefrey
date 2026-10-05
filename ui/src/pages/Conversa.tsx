@@ -576,7 +576,7 @@ export default function Conversa() {
                         className="jf-focus mt-1 w-full rounded-lg border border-white/20 bg-black/60 px-2 py-1.5 text-sm text-white"
                       >
                         <option value="">Automática (a mais natural)</option>
-                        {speaker.cloudOk && <option value="cloud">Natural (nuvem, conta do ChatGPT)</option>}
+                        {speaker.engines?.engines.filter(e => e.id !== "browser" && e.available).map(e => <option key={e.id} value={e.id}>{e.label}</option>)}
                         {speaker.voices.map(v => <option key={v.uri} value={v.uri}>{v.name.replace(/^Microsoft /, "")}</option>)}
                       </select>
                     </label>

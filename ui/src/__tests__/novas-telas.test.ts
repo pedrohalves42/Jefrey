@@ -65,3 +65,58 @@ describe("escolha da voz", () => {
   })
   it("lista vazia não quebra", () => expect(bestVoice([])).toBeUndefined())
 })
+
+import { downloadMessage, pickEngine, type Engines } from "../lib/voice"
+import { currentLevel, rmsLevel, setLevelSource } from "../lib/voiceLevel"
+
+const eng = (cloud: boolean, local: boolean): Engines => ({
+  engines: [
+    { id: "cloud", available: cloud, label: "n" },
+    { id: "local", available: local, label: "l" },
+    { id: "browser", available: true, label: "b" },
+  ],
+  default: cloud ? "cloud" : local ? "local" : "browser",
+  local: { installed: local, size_mb: 60 },
+})
+
+describe("voz: escolha do motor", () => {
+  it("sem escolha usa o padrao do servidor", () => {
+    expect(pickEngine(null, eng(true, true))).toBe("cloud")
+    expect(pickEngine(null, eng(false, true))).toBe("local")
+    expect(pickEngine(null, null)).toBe("browser")
+  })
+  it("escolha indisponivel cai para o padrao; voz especifica do PC vira navegador", () => {
+    expect(pickEngine("cloud", eng(false, true))).toBe("local")
+    expect(pickEngine("local", eng(true, true))).toBe("local")
+    expect(pickEngine("urn:voz-maria", eng(true, true))).toBe("browser")
+  })
+  it("mensagens do download", () => {
+    expect(downloadMessage({ installed: false, size_mb: 60, state: "idle", pct: 0, error: "" })).toContain("60 MB")
+    expect(downloadMessage({ installed: false, size_mb: 60, state: "running", pct: 42, error: "" })).toContain("42%")
+    expect(downloadMessage({ installed: true, size_mb: 60, state: "idle", pct: 0, error: "" })).toBe("Voz natural pronta.")
+    expect(downloadMessage({ installed: false, size_mb: 60, state: "error", pct: 0, error: "Sem internet." })).toBe("Sem internet.")
+  })
+})
+
+describe("nivel real da voz", () => {
+  it("silencio e 0 e sinal forte chega perto de 1", () => {
+    expect(rmsLevel(new Uint8Array(256).fill(128))).toBe(0)
+    const forte = Uint8Array.from({ length: 256 }, (_, i) => (i % 2 ? 240 : 16))
+    expect(rmsLevel(forte)).toBeGreaterThan(0.9)
+    expect(rmsLevel([])).toBe(0)
+  })
+  it("currentLevel usa a fonte, limita a 0..1 e sobrevive a erro", () => {
+    setLevelSource(() => 5)
+    expect(currentLevel()).toBe(1)
+    setLevelSource(() => { throw new Error("x") })
+    expect(currentLevel()).toBe(0)
+    setLevelSource(null)
+    expect(currentLevel()).toBe(0)
+  })
+  it("nextPulse com nivel alto bate perto de 1 e sem nivel mantem o comportamento", () => {
+    expect(nextPulse(0, true, false, 0, 0.9)).toBeGreaterThan(0.85)
+    expect(nextPulse(0, true, false, 100)).toBeGreaterThan(0.29)
+    expect(nextPulse(0.8, true, false, 0, 0)).toBeLessThan(0.8)
+    expect(nextPulse(0.5, false, false, 0, 0.9)).toBeLessThan(0.5)
+  })
+})
