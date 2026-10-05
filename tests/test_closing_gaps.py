@@ -170,6 +170,8 @@ def test_script_que_embute_o_google_nao_mostra_os_valores(tmp_path, monkeypatch,
     env = tmp_path / ".env"
     env.write_text('JEFREY_OAUTH__CLIENT_ID="123-abc.apps.googleusercontent.com"\nJEFREY_OAUTH__CLIENT_SECRET=GOCSPX-segredo-bem-comprido\nOUTRA=1\n', encoding="utf-8")
     assert m.from_env_file(env) == {"JEFREY_OAUTH__CLIENT_ID": "123-abc.apps.googleusercontent.com", "JEFREY_OAUTH__CLIENT_SECRET": "GOCSPX-segredo-bem-comprido"}
+    monkeypatch.delenv("JEFREY_OAUTH__CLIENT_ID", raising=False)
+    monkeypatch.delenv("JEFREY_OAUTH__CLIENT_SECRET", raising=False)
     monkeypatch.setattr(m, "ROOT", tmp_path)
     monkeypatch.setattr(m.sys, "argv", ["x"])
     assert m.main() == 0
