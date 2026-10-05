@@ -5,6 +5,7 @@ import { getConfig, needsWelcome, welcomeSkipped } from "@/lib/llm"
 import { useEasy, visibleItems, type NavItem } from "@/lib/easy"
 import { getLegalStatus } from "@/lib/legal"
 import { StatusPill } from "@/components/StatusPill"
+import VersionLabel from "@/components/VersionLabel"
 import { ReminderBanner } from "@/components/ReminderBanner"
 import WaApprovals from "@/components/WaApprovals"
 import { UpdateBanner } from "@/components/UpdateBanner"
@@ -86,6 +87,7 @@ export function AppShell() {
         </ul>
         <div className="mt-auto pt-4">
           <StatusPill />
+          <VersionLabel className="mt-1 px-1" />
         </div>
       </nav>
 

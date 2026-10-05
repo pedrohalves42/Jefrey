@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [project]
 name = "jefrey"
-version = "0.9.0"
+version = "0.9.1"
 description = "Jefrey - Assistente pessoal IA com memória avançada e habilidades orientadas a eventos"
 authors = [
     {name = "Jefrey Team", email = "contato@jefrey.ai"}

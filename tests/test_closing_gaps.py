@@ -1,6 +1,7 @@
 """Pendencias fechadas: padroes do instalador (Google e atualizacoes), controle do computador pelo laco real do agente."""
 import asyncio
 import json
+from pathlib import Path
 
 import pytest
 
@@ -271,3 +272,16 @@ def test_diagnostico_sem_credenciais(tmp_path, monkeypatch):
     monkeypatch.delenv("JEFREY_OAUTH__CLIENT_SECRET", raising=False)
     d = G.diagnose("http://localhost:8000")
     assert d["client_type"] == "unknown" and d["ok"] is False
+
+
+def test_versao_unica_e_carimbo_de_compilacao_visivel():
+    """Uma so versao em todo lugar; o build grava um carimbo (data+commit) que aparece na tela e no /health."""
+    from src.jefrey import BUILD, __version__
+    from src.jefrey.core.config import get_settings
+    assert get_settings().version == __version__
+    assert BUILD  # "desenvolvimento" fora do instalador
+    bat = (Path(__file__).resolve().parents[1] / "packaging" / "build_exe.bat").read_text(encoding="utf-8")
+    ps1 = (Path(__file__).resolve().parents[1] / "packaging" / "write_build_info.ps1").read_text(encoding="utf-8")
+    assert "write_build_info.ps1" in bat and "build_info.py" in ps1 and "rev-parse" in ps1
+    main = (Path(__file__).resolve().parents[1] / "src" / "jefrey" / "api" / "main.py").read_text(encoding="utf-8")
+    assert '"build"' in main

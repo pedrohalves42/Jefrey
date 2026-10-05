@@ -168,3 +168,6 @@ packaging/defaults/*
 
 # saidas de release (instaladores, manifestos, zips)
 release/
+
+# carimbo gerado a cada build
+src/jefrey/build_info.py

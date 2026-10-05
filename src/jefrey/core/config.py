@@ -372,7 +372,7 @@ class AppSettings(BaseSettings):
     # Reproducao C1a: JEFREY_ENV=prod JEFREY_EVENTBUS__HMAC_KEY= python -c "from src.jefrey.eventbus.signing import _get_hmac_key; _get_hmac_key()" -> RuntimeError
     env: Literal["dev", "prod"] = Field(default="dev", validation_alias="JEFREY_ENV")
     name: str = "Jefrey"
-    version: str = "0.9.0"
+    version: str = "0.9.1"
     user_name: str = "Usuario"
     debug: bool = Field(default=False, validation_alias="JEFREY_DEBUG")
 

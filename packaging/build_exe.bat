@@ -17,6 +17,9 @@ set VERSION=%VERSION:"=%
 if "%VERSION%"=="" (echo [erro] nao consegui ler a versao em src\jefrey\__init__.py & exit /b 1)
 echo Versao: %VERSION%
 
+REM Carimbo da compilacao (data, hora e commit): aparece na tela, para saber QUAL instalador esta rodando.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0write_build_info.ps1" || exit /b 1
+
 "%PY%" -m PyInstaller --noconfirm --clean --onedir --noconsole --name Jefrey ^
   --icon "%CD%\packaging\jefrey.ico" ^
   --distpath dist --workpath build --specpath build ^
