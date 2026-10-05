@@ -10,6 +10,7 @@ import Skills from "@/pages/Skills"
 import Configuracoes from "@/pages/Configuracoes"
 import Avancado from "@/pages/Avancado"
 import BemVindo from "@/pages/BemVindo"
+import PrimeiraVez from "@/pages/PrimeiraVez"
 import Conexoes from "@/pages/Conexoes"
 import Ajuda from "@/pages/Ajuda"
 import Aprendi from "@/pages/Aprendi"
@@ -38,6 +39,7 @@ export default function App() {
               <Route path="/configuracoes" element={<Configuracoes />} />
               <Route path="/avancado" element={<Avancado />} />
               <Route path="/bem-vindo" element={<BemVindo />} />
+              <Route path="/primeira-vez" element={<PrimeiraVez />} />
               <Route path="/conexoes" element={<Conexoes />} />
               <Route path="/ajuda" element={<Ajuda />} />
               <Route path="/aprendi" element={<Aprendi />} />

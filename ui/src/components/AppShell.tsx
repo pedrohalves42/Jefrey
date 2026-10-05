@@ -53,7 +53,7 @@ export function AppShell() {
   const legal = useQuery({ queryKey: ["legal"], queryFn: async () => (await getLegalStatus()).data, staleTime: 60_000, retry: 1 })
   // primeira tela: termos e privacidade (so depois do aceite o resto abre)
   if (legal.data && !legal.data.accepted && loc.pathname !== "/termos") return <Navigate to="/termos" replace />
-  if (loc.pathname !== "/bem-vindo" && loc.pathname !== "/termos" && needsWelcome(cfg.data, welcomeSkipped())) return <Navigate to="/bem-vindo" replace />
+  if (loc.pathname !== "/bem-vindo" && loc.pathname !== "/primeira-vez" && loc.pathname !== "/termos" && needsWelcome(cfg.data, welcomeSkipped())) return <Navigate to="/primeira-vez" replace />
   return (
     <div className="flex h-dvh flex-col md:flex-row">
       <ReminderBanner />

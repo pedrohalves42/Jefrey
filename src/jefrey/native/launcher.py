@@ -88,8 +88,8 @@ def ensure_secrets(config_dir: Path) -> dict[str, str]:
         os.replace(tmp, f)
         try:
             os.chmod(f, 0o600)
-        except OSError:
-            pass
+        except OSError as _e:
+            logger.debug("ignorado (launcher): %s", type(_e).__name__)
     return {"api_secret": data["api_secret"], "hmac_key": data["hmac_key"]}
 
 
@@ -203,8 +203,8 @@ class _RedactFilter(logging.Filter):
         try:
             record.msg = redact(record.getMessage())
             record.args = ()
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("ignorado (launcher): %s", type(_e).__name__)
         return True
 
 
@@ -268,8 +268,8 @@ def start_tray(url: str, logs_dir: Path, on_quit) -> "object | None":
         def open_logs(_icon=None, _item=None):
             try:
                 os.startfile(str(logs_dir))  # type: ignore[attr-defined]
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("ignorado (launcher): %s", type(_e).__name__)
 
         def quit_(icon=None, _item=None):
             on_quit()
@@ -285,8 +285,8 @@ def start_tray(url: str, logs_dir: Path, on_quit) -> "object | None":
             from src.jefrey.core import notify
 
             notify.set_sink(lambda title, text: icon.notify(text, title))
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("ignorado (launcher): %s", type(_e).__name__)
         return icon
     except Exception:
         return None
@@ -315,8 +315,8 @@ def start_tray_updates(icon, interval_s: float = 5.0) -> threading.Event:
                 if title != last:
                     icon.title = title[:120]
                     last = title
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("ignorado (launcher): %s", type(_e).__name__)
 
     threading.Thread(target=loop, daemon=True, name="jefrey-tray-title").start()
     return stop
@@ -475,8 +475,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         if tray is not None:
             try:
                 tray.stop()
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("ignorado (launcher): %s", type(_e).__name__)
     return 0
 
 
