@@ -28,7 +28,7 @@ Critério: uma pessoa de 70 anos instala, configura e usa sozinha, com a voz.
 8. **Telemetria sem dados pessoais** (opcional, com aceite) para achar onde as pessoas travam.
 
 ## C. Qualidade e dívida técnica
-1. P-03: atualizar `langchain-core`/`openai` (vulnerabilidades conhecidas das dependências).
+1. ~~P-03~~ resolvido: ver AUDITORIA §5 (só resta o chromadb em modo servidor, não usado).
 2. P-07: remover código não usado (MCP, eventbus, plugins, visão) para reduzir superfície e tamanho (~130 MB).
 3. Testes ponta a ponta no `.exe` instalado automatizados (hoje manuais).
 4. Instalador menor: separar faster-whisper/ctranslate2 como download opcional.

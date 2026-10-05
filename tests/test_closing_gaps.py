@@ -201,3 +201,14 @@ def test_status_do_google_mostra_o_endereco_de_retorno(tmp_path, monkeypatch):
     req = type("R", (), {"base_url": "http://localhost:8000/"})()
     out = run(GC.google_status(req))
     assert out["redirect_uri"] == "http://localhost:8000/connections/google/callback"
+
+
+def test_chroma_continua_embutido_sem_servidor_nem_codigo_remoto():
+    """As falhas conhecidas do chromadb (pip-audit, 2026-10) estao no modo SERVIDOR e em trust_remote_code: o Jefrey nao usa nenhum dos dois."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1] / "src" / "jefrey"
+    for p in root.rglob("*.py"):
+        if "static" in p.parts:
+            continue
+        txt = p.read_text(encoding="utf-8", errors="ignore")
+        assert "chromadb.HttpClient" not in txt and "trust_remote_code" not in txt, p.name
