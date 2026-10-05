@@ -172,3 +172,37 @@ describe("painel Hoje: resposta incompleta nunca quebra a tela", () => {
     expect(normalizeToday("texto")).toBeNull()
   })
 })
+
+import { splitSentences } from "../lib/voice"
+
+describe("voz fluida: divisao em frases", () => {
+  it("a primeira frase sai sozinha (a fala comeca mais rapido) e as seguintes se juntam ate o limite", () => {
+    const t = "Bom dia, Pedro! Hoje o dia está lindo. Você tem uma consulta às nove e meia. Não se esqueça do remédio, tá?"
+    const p = splitSentences(t, 70)
+    expect(p[0]).toBe("Bom dia, Pedro!")
+    expect(p.every(x => x.length <= 70)).toBe(true)
+    expect(p.join(" ")).toBe(t)
+  })
+  it("frase gigante sem pontuacao e cortada em virgulas/espacos", () => {
+    const t = Array.from({ length: 60 }, (_, i) => `palavra${i}`).join(" ")
+    const p = splitSentences(t, 80)
+    expect(p.every(x => x.length <= 80)).toBe(true)
+    expect(p.join(" ")).toBe(t)
+  })
+  it("vazio, reticencias e abreviacoes nao quebram a conta", () => {
+    expect(splitSentences("   ")).toEqual([])
+    expect(splitSentences("Espera... já vou. Sr. Silva chegou.", 200)[0]).toBe("Espera...")
+    expect(splitSentences("Oi")).toEqual(["Oi"])
+  })
+})
+
+import { newFacts, type Fact } from "../lib/learning"
+
+describe("aprende entre conversas: o que e novo", () => {
+  const f = (id: string, extra: Partial<Fact> = {}): Fact => ({ id, kind: "gosto", key: id, text: `fato ${id}`, sensitive: false, active: true, created_at: `2026-10-0${id}`, ...extra })
+  it("so devolve fatos novos, ativos e nao sensiveis, do mais novo para o mais antigo", () => {
+    const out = newFacts(new Set(["1"]), [f("1"), f("2"), f("3"), f("4", { sensitive: true }), f("5", { active: false })])
+    expect(out.map(x => x.id)).toEqual(["3", "2"])
+  })
+  it("nada novo = lista vazia", () => expect(newFacts(new Set(["1", "2"]), [f("1"), f("2")])).toEqual([]))
+})

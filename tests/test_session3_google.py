@@ -201,11 +201,11 @@ def test_callback_recusa_state_falso_ou_erro_do_google():
 def test_endereco_de_retorno_usa_o_registrado_na_mesma_porta(monkeypatch):
     monkeypatch.setenv("JEFREY_OAUTH__REDIRECT_URIS", "http://localhost:8000/auth/google/callback")
     assert G.redirect_uri("http://127.0.0.1:8000") == "http://localhost:8000/auth/google/callback"
-    assert G.redirect_uri("http://127.0.0.1:8001") == "http://127.0.0.1:8001/connections/google/callback"  # outra porta: padrao
+    assert G.redirect_uri("http://127.0.0.1:8001") == "http://localhost:8001/connections/google/callback"  # outra porta: padrao
     monkeypatch.setenv("JEFREY_OAUTH__REDIRECT_URIS", "https://evil.example/auth/google/callback,http://localhost:8000/outra/rota")
-    assert G.redirect_uri("http://127.0.0.1:8000") == "http://127.0.0.1:8000/connections/google/callback"  # so enderecos locais e conhecidos
+    assert G.redirect_uri("http://127.0.0.1:8000") == "http://localhost:8000/connections/google/callback"  # so enderecos locais e conhecidos
     monkeypatch.delenv("JEFREY_OAUTH__REDIRECT_URIS")
-    assert G.redirect_uri("http://127.0.0.1:8000") == "http://127.0.0.1:8000/connections/google/callback"
+    assert G.redirect_uri("http://127.0.0.1:8000") == "http://localhost:8000/connections/google/callback"
 
 
 def test_retorno_pelo_endereco_antigo_conclui_o_fluxo_novo_e_volta_a_tela_de_origem(api, monkeypatch):

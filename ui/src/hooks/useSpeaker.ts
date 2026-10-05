@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { speakable } from "@/lib/voice/sentences"
 import { authedFetch } from "@/lib/session"
-import { getEngines, pickEngine, type Engines } from "@/lib/voice"
+import { getEngines, pickEngine, splitSentences, type Engines } from "@/lib/voice"
 import { createLevelMeter, setLevelSource } from "@/lib/voiceLevel"
 
 const MAX_CHUNK = 200 // alguns motores de voz travam em falas longas
@@ -25,7 +25,7 @@ export type SpeakerVoice = { uri: string; name: string; lang: string }
 
 const VOICE_KEY = "jefrey_voice_uri"
 export const CLOUD_VOICE = "cloud" // escolha especial: voz natural na nuvem (conta do ChatGPT)
-const CLOUD_CHUNK = 400
+const CLOUD_CHUNK = 220 // frases curtas: a 1a sai logo e o resto vem pre-pronto
 
 /** Nota de naturalidade: vozes neurais ("Natural", "Online", "Neural", Google) soam bem menos roboticas que as antigas do Windows. */
 export function voiceScore(v: { name: string; lang: string }): number {
@@ -121,15 +121,23 @@ export function useSpeaker() {
     return e === "browser" ? null : e
   }
 
-  const playCloud = async (piece: string, myGen: number, engine: "cloud" | "local"): Promise<boolean> => {
+  /** Pede o audio de um pedaco ao servidor (nao toca). Devolve null se falhar. */
+  const fetchAudio = async (piece: string, engine: "cloud" | "local"): Promise<Blob | null> => {
     try {
       const explicit = voiceUri.current === CLOUD_VOICE || voiceUri.current === "local"
       const r = await authedFetch("/voice/speak", { method: "POST", body: JSON.stringify({ text: piece, engine: explicit ? engine : undefined }) })
       if (!r.ok) {
         if (r.status === 409 && enginesRef.current) enginesRef.current = { ...enginesRef.current, default: "browser" } // sem conta/voz: o computador fala nas proximas
-        return false
+        return null
       }
-      const blob = await r.blob()
+      return await r.blob()
+    } catch {
+      return null
+    }
+  }
+
+  const playBlob = async (blob: Blob, myGen: number): Promise<boolean> => {
+    try {
       if (myGen !== gen.current) return true // cancelado enquanto baixava
       const url = URL.createObjectURL(blob)
       const a = new Audio(url)
@@ -193,12 +201,21 @@ export function useSpeaker() {
         const myGen = gen.current
         pending.current += 1
         setSpeaking(true)
-        const pieces = chunkForSpeech(text, CLOUD_CHUNK)
+        const pieces = splitSentences(text, CLOUD_CHUNK)
         queue.current = queue.current.then(async () => {
-          for (const piece of pieces) {
+          const ahead: Promise<Blob | null>[] = []
+          const want = (i: number) => {
+            if (i < pieces.length && !ahead[i]) ahead[i] = fetchAudio(pieces[i], engine)
+          }
+          want(0)
+          want(1)
+          for (let i = 0; i < pieces.length; i++) {
             if (myGen !== gen.current) break
-            const ok = await playCloud(piece, myGen, engine)
-            if (!ok && myGen === gen.current) sayBrowser(piece) // falhou: o computador fala no lugar
+            want(i + 1)
+            want(i + 2) // enquanto este toca, os proximos ja estao sendo preparados
+            const blob = await ahead[i]
+            const ok = blob ? await playBlob(blob, myGen) : false
+            if (!ok && myGen === gen.current) sayBrowser(pieces[i]) // falhou: o computador fala no lugar
           }
           if (myGen === gen.current) {
             pending.current = Math.max(0, pending.current - 1)

@@ -50,3 +50,8 @@ export function correctionError(status: number): string {
   if (status === 404) return "Não encontrei mais isso. A lista foi atualizada."
   return "Não consegui salvar agora. Tente de novo."
 }
+
+/** Fatos que ainda nao estavam no conjunto conhecido (ativos e nao sensiveis), do mais novo para o mais antigo. */
+export function newFacts(known: Set<string>, facts: Fact[]): Fact[] {
+  return facts.filter(f => f.active && !f.sensitive && !known.has(f.id)).sort((a, b) => b.created_at.localeCompare(a.created_at))
+}

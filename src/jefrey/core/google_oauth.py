@@ -100,6 +100,9 @@ def redirect_uri(origin: str) -> str:
         p = urlsplit(raw.strip())
         if p.scheme == "http" and p.hostname in ("localhost", "127.0.0.1") and p.path in CALLBACK_PATHS and p.port == port:
             return raw.strip()
+    parts = urlsplit(origin)
+    if parts.hostname == "127.0.0.1":  # o endereco que costuma estar cadastrado no Google e o de "localhost" (mesmo computador, mesma porta)
+        origin = f"http://localhost:{parts.port}" if parts.port else "http://localhost"
     return origin.rstrip("/") + CALLBACK_PATHS[0]
 
 

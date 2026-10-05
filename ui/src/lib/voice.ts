@@ -40,3 +40,49 @@ export function downloadMessage(s: LocalStatus | null): string {
   if (s.state === "error") return s.error || "Não consegui baixar agora. Tente de novo."
   return `Baixar a voz natural (${s.size_mb} MB, uma vez só).`
 }
+
+/**
+ * Divide o texto em pedacos para falar: a PRIMEIRA frase sai sozinha (o Jefrey comeca a falar mais cedo) e as demais se juntam
+ * ate `max` letras (menos pausas entre pedacos). Frases enormes sao cortadas em virgulas e espacos.
+ */
+export function splitSentences(text: string, max = 220): string[] {
+  const clean = (text || "").replace(/\s+/g, " ").trim()
+  if (!clean) return []
+  const sentences = clean.match(/[^.!?…]+(?:\.{3}|[.!?…]+)(?:\s|$)|[^.!?…]+$/g)?.map(s => s.trim()).filter(Boolean) ?? [clean]
+  // "Sr. Silva": ponto de abreviacao nao encerra frase
+  const merged: string[] = []
+  for (const s of sentences) {
+    const prev = merged[merged.length - 1]
+    if (prev && /\b(?:Sr|Sra|Dr|Dra|Prof|Profa|etc|ex|av|nº|n°)\.$/i.test(prev)) merged[merged.length - 1] = `${prev} ${s}`
+    else merged.push(s)
+  }
+  const cut = (s: string): string[] => {
+    const out: string[] = []
+    let rest = s
+    while (rest.length > max) {
+      let i = Math.max(rest.lastIndexOf(", ", max), rest.lastIndexOf("; ", max))
+      if (i < max * 0.4) i = rest.lastIndexOf(" ", max)
+      const end = i < 1 ? max : i + 1
+      out.push(rest.slice(0, end).trim())
+      rest = rest.slice(end).trim()
+    }
+    if (rest) out.push(rest)
+    return out
+  }
+  const out: string[] = []
+  let cur = ""
+  merged.forEach((s, idx) => {
+    const parts = s.length > max ? cut(s) : [s]
+    for (const p of parts) {
+      if (idx === 0 && out.length === 0 && !cur) {
+        out.push(p) // primeira frase sozinha
+      } else if (cur && cur.length + 1 + p.length <= max) cur += " " + p
+      else {
+        if (cur) out.push(cur)
+        cur = p
+      }
+    }
+  })
+  if (cur) out.push(cur)
+  return out
+}

@@ -15,6 +15,11 @@ import { ambientLabel } from "@/lib/briefing"
 import BriefingCard from "@/components/BriefingCard"
 import { HudOverlay, Wave } from "@/components/hud/JarvisHud"
 import { haltComputer } from "@/lib/halt"
+import QuickActions from "@/components/QuickActions"
+import LearnedToast from "@/components/LearnedToast"
+import AvatarPicker from "@/components/AvatarPicker"
+import { LivePanel } from "@/components/hud/LivePanel"
+import { getToday, spokenSummary } from "@/lib/today"
 import { useVoicePulse } from "@/hooks/useVoicePulse"
 import { SentenceBuffer } from "@/lib/voice/sentences"
 import { authedFetch, ensureSession } from "@/lib/session"
@@ -106,6 +111,9 @@ export default function Conversa() {
   // ---- chamar pelo nome ("Jefrey, ...") e pelo atalho do Windows (Ctrl+Alt+J) ----
   const [hud, setHud] = useState(() => readFlag("jefrey_hud", true))
   const [drawer, setDrawer] = useState(false)
+  const [voiceLvl, setVoiceLvl] = useState(0)
+  const [summaryBusy, setSummaryBusy] = useState(false)
+  const tiltRef = useRef<HTMLDivElement | null>(null)
   const [opts, setOpts] = useState(false)
   const stageRef = useRef<HTMLDivElement>(null)
   const [wakeOn, setWakeOn] = useState(() => readFlag("jefrey_wake", false))
@@ -140,7 +148,7 @@ export default function Conversa() {
 
   const activity = useActivity()
   const note = ambientLabel(activity)
-  useVoicePulse(stageRef, speaker.speaking)
+  useVoicePulse(stageRef, speaker.speaking, setVoiceLvl)
   const brainState: BrainState = pendingApproval !== undefined
     ? "approval"
     : speaker.speaking
@@ -248,6 +256,31 @@ export default function Conversa() {
   useEffect(() => {
     if (listener.state === "error") setMicOn(false)
   }, [listener.state])
+
+  /** O avatar acompanha o mouse (leve inclinacao): a tela responde a quem esta olhando. */
+  function onTilt(e: React.PointerEvent<HTMLDivElement>) {
+    const el = tiltRef.current
+    if (!el) return
+    const r = e.currentTarget.getBoundingClientRect()
+    const x = ((e.clientX - r.left) / r.width - 0.5) * 2
+    const y = ((e.clientY - r.top) / r.height - 0.5) * 2
+    el.style.transform = `perspective(900px) rotateY(${(x * 7).toFixed(2)}deg) rotateX(${(-y * 5).toFixed(2)}deg)`
+  }
+  function offTilt() {
+    if (tiltRef.current) tiltRef.current.style.transform = ""
+  }
+
+  /** "Resumo do dia": fala o tempo, a agenda, os lembretes, o dolar e as manchetes, sem gastar o modelo de IA. */
+  async function speakSummary() {
+    setSummaryBusy(true)
+    try {
+      const r = await getToday()
+      if (r.data) speaker.say(spokenSummary(r.data, myName ?? undefined))
+      else speaker.say("Não consegui buscar o resumo agora. Verifique a internet.")
+    } finally {
+      setSummaryBusy(false)
+    }
+  }
 
   function stop() {
     abortRef.current?.abort()
@@ -473,10 +506,13 @@ export default function Conversa() {
       </aside>
 
       {/* palco: o avatar ocupa quase toda a tela e as opcoes ficam pequenas por cima */}
-      <section className="jf-stage relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-2xl" aria-label="Conversa com o Jefrey">
-        <div className="jf-rings" aria-hidden="true" />
+      <section className="jf-stage relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl" aria-label="Conversa com o Jefrey">
+        <div className="relative min-h-[52%] flex-1" onPointerMove={onTilt} onPointerLeave={offTilt}>
         <div ref={stageRef} className="jf-stage-core absolute inset-0 will-change-transform">
-          <BrainStage state={brainState} level={speaker.speaking ? Math.max(micLevel, 0.55) : micLevel} note={streaming || listeningNow ? null : note} className="h-full w-full" />
+        <div className="jf-rings" aria-hidden="true" />
+          <div ref={tiltRef} className="jf-tilt h-full w-full cursor-pointer" role="button" tabIndex={0} aria-label="Toque no avatar para falar com o Jefrey" onClick={() => void toggleVoiceMode()} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); void toggleVoiceMode() } }}>
+          <BrainStage state={brainState} level={speaker.speaking ? Math.max(micLevel, voiceLvl, 0.25) : micLevel} note={streaming || listeningNow ? null : note} className="h-full w-full" />
+        </div>
         </div>
         <span className="jf-corner jf-corner-tl" /><span className="jf-corner jf-corner-tr" /><span className="jf-corner jf-corner-bl" /><span className="jf-corner jf-corner-br" />
 
@@ -487,8 +523,8 @@ export default function Conversa() {
             {clock.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
           </span>
         </div>
-        <div className="pointer-events-none absolute inset-x-0 top-10 z-20 mx-auto w-full max-w-lg px-3"><div className="pointer-events-auto"><BriefingCard /></div></div>
         {hud && <HudOverlay messages={active.messages} activity={activity} />}
+        {hud && <LivePanel />}
 
         {/* aprovacao de acao de risco */}
         {pendingApproval !== undefined && (
@@ -506,19 +542,19 @@ export default function Conversa() {
           </div>
         )}
 
-        {/* base: legenda, voz, texto e opcoes */}
-        <div className="absolute inset-x-0 bottom-0 z-30 flex flex-col items-center gap-2 bg-gradient-to-t from-black/75 via-black/35 to-transparent px-3 pb-3 pt-16">
+        </div>
+
+        {/* doca: legenda, atalhos, voz, texto e opcoes (fora do cerebro, nunca por cima dele) */}
+        <div className="relative z-30 flex max-h-[44%] shrink-0 flex-col items-center gap-1.5 overflow-y-auto border-t border-white/10 bg-black/50 px-3 pb-3 pt-3">
+          <div className="w-full max-w-lg"><BriefingCard /></div>
           {empty && (
             <div className="max-w-xl text-center">
-              <h2 className="text-lg font-semibold text-white">{greeting(clock.getHours(), myName)}</h2>
-              <p className="text-sm text-white/65">{myName ? "O que vamos resolver agora?" : "Eu sou o Jefrey. Como posso te chamar?"}</p>
-              <div className="mt-2 flex flex-wrap justify-center gap-1.5">
-                {SUGGESTIONS.map(s => (
-                  <button key={s} type="button" onClick={() => void send(s)} className="jf-focus rounded-full border border-white/20 bg-black/30 px-3 py-1 text-xs text-white/80 hover:bg-white/10">{s}</button>
-                ))}
-              </div>
+              <h2 className="text-base font-semibold text-white">{greeting(clock.getHours(), myName)}</h2>
+              <p className="text-xs text-white/60">{myName ? "O que vamos resolver agora?" : "Eu sou o Jefrey. Como posso te chamar?"}</p>
             </div>
           )}
+          <LearnedToast streaming={streaming} />
+          <QuickActions onAsk={t => void send(t)} onSummary={() => void speakSummary()} busy={summaryBusy} />
 
           {!empty && (caption || streaming) && (
             <div className="jf-glass relative max-w-2xl rounded-xl px-4 py-2.5 text-center" aria-live="polite">
@@ -563,6 +599,7 @@ export default function Conversa() {
               <button type="button" onClick={() => setOpts(v => !v)} aria-expanded={opts} aria-label="Opções" className="jf-focus rounded-lg border border-white/20 bg-black/40 px-2.5 py-2 text-sm text-white/75 hover:bg-white/10">⚙</button>
               {opts && (
                 <div className="jf-glass absolute bottom-11 left-0 z-40 w-64 space-y-2 rounded-xl p-3 text-sm text-white/80">
+                  <AvatarPicker />
                   {speaker.supported && (
                     <label className="flex cursor-pointer items-center gap-2">
                       <input type="checkbox" checked={voiceReply} onChange={e => { setVoiceReplyState(e.target.checked); writeFlag("jefrey_voice_reply", e.target.checked); if (!e.target.checked) speaker.cancel() }} />

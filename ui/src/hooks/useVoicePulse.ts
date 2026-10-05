@@ -13,11 +13,12 @@ export function nextPulse(prev: number, speaking: boolean, word: boolean, t: num
 }
 
 /** Aplica o pulso direto no elemento (sem re-renderizar a tela): escala e brilho acompanham a voz. */
-export function useVoicePulse(ref: RefObject<HTMLElement | null>, speaking: boolean): void {
+export function useVoicePulse(ref: RefObject<HTMLElement | null>, speaking: boolean, onLevel?: (v: number) => void): void {
   useEffect(() => {
     let raf = 0
     let level = 0
     let word = false
+    let lastEmit = 0
     const onWord = () => {
       word = true
     }
@@ -25,9 +26,13 @@ export function useVoicePulse(ref: RefObject<HTMLElement | null>, speaking: bool
     const tick = (t: number) => {
       level = nextPulse(level, speaking, word, t, hasLevelSource() ? currentLevel() : undefined)
       word = false
+      if (onLevel && t - lastEmit > 66) {
+        lastEmit = t
+        onLevel(level) // ~15x por segundo: o cerebro 3D reage ao volume sem re-renderizar a tela inteira
+      }
       const el = ref.current
       if (el) {
-        el.style.transform = level > 0 ? `scale(${(1 + level * 0.07).toFixed(4)})` : ""
+        el.style.transform = level > 0 ? `scale(${(1 + level * 0.14).toFixed(4)})` : ""
         el.style.setProperty("--pulse", level.toFixed(3))
       }
       raf = requestAnimationFrame(tick)
@@ -37,5 +42,5 @@ export function useVoicePulse(ref: RefObject<HTMLElement | null>, speaking: bool
       window.removeEventListener(WORD_EVENT, onWord)
       cancelAnimationFrame(raf)
     }
-  }, [ref, speaking])
+  }, [ref, speaking, onLevel])
 }

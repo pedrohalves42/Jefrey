@@ -27,6 +27,8 @@ FILES: dict[str, dict] = {
                "sha256": "7e694de195ae3fc36dd732c445eb04fb49b649854893cb5506b978f0d50a1d6f"},
 }
 MAX_CHARS = 700
+# Mais variacao e um pouco mais calma que o padrao do modelo (0,667 / 1,0 / 0,8): menos "voz de GPS", mais natural.
+PROSODY = {"length_scale": 1.04, "noise_scale": 0.78, "noise_w_scale": 0.95}
 CHUNK = 1024 * 256
 _cache: dict = {}
 
@@ -132,7 +134,9 @@ def synth(text: str) -> bytes:
     try:
         buf = io.BytesIO()
         with wave.open(buf, "wb") as w:
-            _load().synthesize_wav(t, w)
+            from piper.config import SynthesisConfig
+
+            _load().synthesize_wav(t, w, syn_config=SynthesisConfig(**PROSODY))
         return buf.getvalue()
     except LocalVoiceError:
         raise

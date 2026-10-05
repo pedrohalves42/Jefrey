@@ -75,11 +75,12 @@ def test_download_recusa_desvio_para_endereco_inseguro(monkeypatch):
 def test_texto_longo_e_cortado_e_wav_valido(monkeypatch):
     modelo, config = _arquivos(monkeypatch)
     run(LV.download_model(transport=_transport(modelo, config)))
-    ouvido = []
+    ouvido, config = [], []
 
     class Falsa:
-        def synthesize_wav(self, text, wav):
+        def synthesize_wav(self, text, wav, syn_config=None):
             ouvido.append(text)
+            config.append(syn_config)
             wav.setnchannels(1)
             wav.setsampwidth(2)
             wav.setframerate(22050)
@@ -96,3 +97,21 @@ def test_texto_vazio_e_recusado(monkeypatch):
     run(LV.download_model(transport=_transport(modelo, config)))
     with pytest.raises(LV.LocalVoiceError, match="falar"):
         LV.synth("   ")
+
+
+def test_voz_usa_ritmo_e_variacao_mais_naturais(monkeypatch):
+    modelo, config_json = _arquivos(monkeypatch)
+    run(LV.download_model(transport=_transport(modelo, config_json)))
+    vistos = []
+
+    class Falsa:
+        def synthesize_wav(self, text, wav, syn_config=None):
+            vistos.append(syn_config)
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(22050)
+            wav.writeframes(b"\x00\x00")
+    monkeypatch.setattr(LV, "_load", lambda: Falsa())
+    LV.synth("Oi, tudo bem?")
+    c = vistos[0]
+    assert (c.length_scale, c.noise_scale, c.noise_w_scale) == (1.04, 0.78, 0.95)

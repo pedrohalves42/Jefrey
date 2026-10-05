@@ -285,3 +285,15 @@ def test_versao_unica_e_carimbo_de_compilacao_visivel():
     assert "write_build_info.ps1" in bat and "build_info.py" in ps1 and "rev-parse" in ps1
     main = (Path(__file__).resolve().parents[1] / "src" / "jefrey" / "api" / "main.py").read_text(encoding="utf-8")
     assert '"build"' in main
+
+
+def test_redirect_do_google_usa_localhost_quando_o_programa_abre_em_127_0_0_1(tmp_path, monkeypatch):
+    """O programa abre em 127.0.0.1, mas o endereco cadastrado no Google costuma ser o de localhost: usamos o que o dono cadastrou."""
+    from src.jefrey.core import google_oauth as G
+    monkeypatch.setenv("JEFREY_CONFIG_DIR", str(tmp_path))
+    monkeypatch.delenv("JEFREY_OAUTH__REDIRECT_URIS", raising=False)
+    assert G.redirect_uri("http://127.0.0.1:8000") == "http://localhost:8000/connections/google/callback"
+    assert G.redirect_uri("http://localhost:8000") == "http://localhost:8000/connections/google/callback"
+    (tmp_path / "google_oauth.json").write_text(json.dumps({"installed": {"client_id": "1-a.apps.googleusercontent.com", "client_secret": "x" * 20,
+                                                                           "redirect_uris": ["http://127.0.0.1:8000/connections/google/callback"]}}), encoding="utf-8")
+    assert G.redirect_uri("http://127.0.0.1:8000") == "http://127.0.0.1:8000/connections/google/callback"  # o cadastrado vence

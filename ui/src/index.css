@@ -281,3 +281,10 @@ html[data-easy="1"] .text-white\/65, html[data-easy="1"] .text-white\/70 { color
 }
 .jf-hud::before { top: 4px; left: 4px; border-right: 0; border-bottom: 0; }
 .jf-hud::after { bottom: 4px; right: 4px; border-left: 0; border-top: 0; }
+
+/* Interacao na tela principal: o avatar inclina com o mouse e os atalhos reagem ao toque */
+.jf-tilt { transition: transform 0.18s ease-out; transform-style: preserve-3d; }
+.jf-chip { transition: transform 0.12s ease, background-color 0.12s ease, box-shadow 0.12s ease; }
+.jf-chip:hover { transform: translateY(-2px); box-shadow: 0 4px 18px hsl(var(--hue) 90% 60% / 0.25); }
+.jf-chip:active { transform: translateY(0) scale(0.97); }
+@media (prefers-reduced-motion: reduce) { .jf-tilt, .jf-chip { transition: none; } .jf-chip:hover { transform: none; } }

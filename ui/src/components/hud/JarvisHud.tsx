@@ -63,21 +63,7 @@ export function HudOverlay({ messages, activity }: { messages: Message[]; activi
   const log = buildLog(messages, activity, Date.now(), 6)
   return (
     <>
-      <Panel title="Sistema" className="pointer-events-none absolute left-3 top-14 z-10 hidden w-48 xl:block">
-        <ul className="space-y-2.5">
-          {gauges(tele).map(g => (
-            <li key={g.label}>
-              <div className="flex justify-between text-[11px] text-white/70"><span>{g.label}</span><span className={g.warn ? "text-amber-300" : ""}>{g.text}</span></div>
-              <div className="mt-1 h-1 overflow-hidden rounded bg-white/10" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={g.value ?? 0} aria-label={g.label}>
-                <div className={`h-full ${g.warn ? "bg-amber-400" : "bg-[hsl(var(--hue)_90%_60%)]"}`} style={{ width: `${g.value ?? 0}%` }} />
-              </div>
-            </li>
-          ))}
-          <li className="text-[11px] text-white/60">Cérebro<span className="block text-xs text-white">{brainLine(tele)}</span></li>
-          <li className="text-[11px] text-white/60">Ligado há<span className="block text-xs text-white">{tele ? fmtUptime(tele.uptime_s) : "—"}</span></li>
-        </ul>
-      </Panel>
-      <Panel title="Registro" className="pointer-events-none absolute right-3 top-14 z-10 hidden w-56 xl:block">
+      <Panel title="Registro" className="pointer-events-none absolute bottom-3 left-3 z-10 hidden w-56 2xl:block">
         {log.length === 0 ? (
           <p className="text-[11px] text-white/50">Tudo quieto.</p>
         ) : (
