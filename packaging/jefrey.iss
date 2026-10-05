@@ -25,6 +25,7 @@ WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 CloseApplications=yes
+RestartApplications=yes
 
 [Languages]
 Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
@@ -44,3 +45,16 @@ Name: "{autodesktop}\Jefrey"; Filename: "{app}\Jefrey.exe"; Tasks: desktopicon
 Filename: "{app}\Jefrey.exe"; Description: "Abrir o Jefrey agora"; Flags: nowait postinstall skipifsilent
 
 ; Os dados da pessoa (conversas, memorias, notas) ficam em %LOCALAPPDATA%\Jefrey e NAO sao apagados ao desinstalar.
+
+[Code]
+// Ao desinstalar, pergunta se a pessoa quer MANTER o que o Jefrey aprendeu. O padrao e manter (e no modo silencioso tambem).
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usPostUninstall then
+  begin
+    if MsgBox('Quer manter suas conversas, memórias e notas do Jefrey neste computador?' + #13#10 + #13#10 +
+              'Escolha Sim para guardar (recomendado: se instalar de novo, tudo volta). Escolha Não para apagar tudo.',
+              mbConfirmation, MB_YESNO or MB_DEFBUTTON1) = IDNO then
+      DelTree(ExpandConstant('{localappdata}\Jefrey'), True, True, True);
+  end;
+end;
