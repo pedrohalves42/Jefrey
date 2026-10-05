@@ -45,6 +45,7 @@ def check_version(version: str, current: str | None = None) -> str:
 def plan(version: str) -> list[str]:
     return [
         "1. python -m pytest tests -q --ignore=tests/e2e --ignore=tests/smoke  (tudo verde)",
+        "1b. python -m pytest tests/gates -m gate -q  (portao: textos legais, chave e endereco de atualizacao, Google, versao)",
         "2. cd ui && npx tsc --noEmit -p . && npx vitest run && npm run build:api",
         f"3. aumentar __version__ para {version} em src/jefrey/__init__.py e config.py",
         "4. packaging\\build_exe.bat  (gera e, se houver certificado, assina o instalador)",
