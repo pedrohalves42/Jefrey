@@ -103,6 +103,23 @@ def redirect_uri(origin: str) -> str:
     return origin.rstrip("/") + CALLBACK_PATHS[0]
 
 
+def diagnose(origin: str) -> dict:
+    """Explica em frases simples se o login do Google tende a funcionar e o que cadastrar/fechar se nao."""
+    uri = redirect_uri(origin)
+    port = urlsplit(origin).port
+    if credentials() is None:
+        return {"client_type": "unknown", "redirect_uri": uri, "ok": False, "advice": "Falta colar o ID e a chave do Google (veja o quadro acima)."}
+    registered = registered_redirects()
+    if not registered:  # cliente "Aplicativo para computador": aceita qualquer porta local
+        return {"client_type": "desktop", "redirect_uri": uri, "ok": True, "advice": ""}
+    if uri in registered:
+        return {"client_type": "web", "redirect_uri": uri, "ok": True, "advice": ""}
+    why = (f"O Jefrey abriu na porta {port}, mas o Google só conhece a 8000. Feche o outro programa que usa a porta 8000 (por exemplo o Docker) e abra o Jefrey de novo. "
+           if port != 8000 else "")
+    return {"client_type": "web", "redirect_uri": uri, "ok": False,
+            "advice": why + f"Cadastre este endereço no Google Cloud (URIs de redirecionamento): {uri}"}
+
+
 def has_state(state: str) -> bool:
     e = _pending.get(state or "")
     return bool(e and e["exp"] >= time.time())

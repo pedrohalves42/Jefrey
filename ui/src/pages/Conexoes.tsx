@@ -139,6 +139,9 @@ function Google() {
             </button>
             <ListenButton text={listen} />
           </div>
+          {st?.diagnosis && !st.diagnosis.ok && st.configured && (
+            <p role="alert" className="mt-3 break-words text-base text-amber-200">{st.diagnosis.advice}</p>
+          )}
           {st?.configured && st.redirect_uri && (
             <p className="mt-3 break-all text-sm text-white/50">Se o Google disser “redirect_uri_mismatch”, cadastre este endereço no Google Cloud: <code className="text-white/80">{st.redirect_uri}</code></p>
           )}

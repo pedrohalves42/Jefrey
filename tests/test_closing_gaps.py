@@ -236,3 +236,38 @@ def test_copia_nativa_da_mesma_versao_conta_como_ja_aberta(monkeypatch):
     assert L.native_running(8000) is True
     monkeypatch.setattr(httpx, "get", lambda *a, **k: _resp(200, {"status": "healthy", "version": "0.0.1", "mode": "native", "security_components": {}}))
     assert L.native_running(8000) is False  # versao antiga aberta: nao reaproveitar
+
+
+# ---------------- Google: diagnostico em frases simples ----------------
+def _cfg(monkeypatch, tmp_path, uris=None):
+    from src.jefrey.core import google_oauth as G
+    monkeypatch.setenv("JEFREY_CONFIG_DIR", str(tmp_path))
+    monkeypatch.delenv("JEFREY_OAUTH__REDIRECT_URIS", raising=False)
+    inner = {"client_id": "1-a.apps.googleusercontent.com", "client_secret": "x" * 20}
+    if uris:
+        inner["redirect_uris"] = uris
+    (tmp_path / "google_oauth.json").write_text(json.dumps({"installed": inner}), encoding="utf-8")
+    return G
+
+
+def test_diagnostico_cliente_desktop_aceita_qualquer_porta(tmp_path, monkeypatch):
+    G = _cfg(monkeypatch, tmp_path)
+    d = G.diagnose("http://localhost:8001")
+    assert d["client_type"] == "desktop" and d["ok"] is True and d["redirect_uri"].startswith("http://localhost:8001/")
+
+
+def test_diagnostico_cliente_web_exige_endereco_registrado(tmp_path, monkeypatch):
+    G = _cfg(monkeypatch, tmp_path, ["http://localhost:8000/auth/google/callback"])
+    d = G.diagnose("http://localhost:8000")
+    assert d["client_type"] == "web" and d["ok"] is True and "/auth/google/callback" in d["redirect_uri"]
+    d = G.diagnose("http://localhost:8001")  # outra porta: nao ha o que registrar
+    assert d["ok"] is False and "8000" in d["advice"] and "Docker" in d["advice"]
+
+
+def test_diagnostico_sem_credenciais(tmp_path, monkeypatch):
+    from src.jefrey.core import google_oauth as G
+    monkeypatch.setenv("JEFREY_CONFIG_DIR", str(tmp_path))
+    monkeypatch.delenv("JEFREY_OAUTH__CLIENT_ID", raising=False)
+    monkeypatch.delenv("JEFREY_OAUTH__CLIENT_SECRET", raising=False)
+    d = G.diagnose("http://localhost:8000")
+    assert d["client_type"] == "unknown" and d["ok"] is False
