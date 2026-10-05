@@ -54,6 +54,7 @@ GROUPS: list[tuple[tuple[str, ...], list[str]]] = [
     (("pasta", "downloads", "documentos", "area de trabalho", "fotos", "imagens"), ["open_folder"]),
     (("alexa", "echo", "anuncia", "fala na ", "avisa na ", "rotina da", "acende a luz", "apaga a luz"), ["alexa_say", "alexa_routine", "alexa_list"]),
     (("fecha ", "fechar", "feche ", "encerra"), ["close_app"]),
+    (("digita", "digite", "escreve no", "escreve na", "escreva no", "escreva na", "atalho", "foca ", "focar", "traz para a frente"), ["focus_window", "type_text", "press_hotkey"]),
     (("musica", "música", "pausa", "pausar", "proxima", "próxima", "toca", "continua"), ["media_control"]),
     (("pesquisa", "pesquisar", "procura", "procurar", "google"), ["search_in_browser"]),
     (("volume", "som ", "mudo", "silenci", "aumenta", "diminui", "mais alto", "mais baixo"), ["set_volume"]),
