@@ -75,3 +75,4 @@ onnxruntime>=1.17.0
 av>=14,<17  # faster-whisper 1.2 quebra com av 17+ (open() sem metadata_errors): nao subir sem testar a voz
 pystray>=0.19; sys_platform == "win32"  # icone na bandeja (LGPL-3.0, ligacao dinamica)
 pillow>=10
+piper-tts>=1.8,<2  # voz natural local (modelo baixado sob demanda)

@@ -29,6 +29,7 @@ echo Versao: %VERSION%
   --collect-all faster_whisper ^
   --collect-all av ^
   --collect-all ddgs ^
+  --collect-all piper ^
   --copy-metadata chromadb --copy-metadata langchain-core ^
   --hidden-import pystray._win32 ^
   packaging\jefrey_entry.py || exit /b 1
