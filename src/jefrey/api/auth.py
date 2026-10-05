@@ -73,7 +73,7 @@ async def dev_token(request: Request):
     if not secret or len(secret) < 16 or "CHANGE_ME" in secret:
         raise HTTPException(
             status_code=500,
-            detail="secret_key nao configurado para dev-token (configure JEFREY_API__SECRET_KEY >=32)",
+            detail="O Jefrey ainda não está preparado para abrir sessão. Reinstale ou fale com quem te entregou o Jefrey.",
         )
 
     # CIPHER-302: antes devolvia a propria JEFREY_API__SECRET_KEY como token (master key exposta
@@ -109,7 +109,7 @@ async def google_login(request: Request = None):
     if not creds["client_id"] or not creds["client_secret"]:
         raise HTTPException(
             status_code=503,
-            detail="OAuth2 não configurado. Configure JEFREY_OAUTH__CLIENT_ID e JEFREY_OAUTH__CLIENT_SECRET no .env"
+            detail="O login com o Google ainda não foi liberado nesta cópia. Em Conexões > Google, cole o ID e a chave, ou fale com quem te entregou o Jefrey."
         )
     
     # state CSRF + PKCE (S256): guardados no servidor, de uso unico, e conferidos no retorno
@@ -155,7 +155,7 @@ async def google_callback(request: Request):
     if not creds["client_id"] or not creds["client_secret"]:
         raise HTTPException(
             status_code=503,
-            detail="OAuth2 não configurado. Configure JEFREY_OAUTH__CLIENT_ID e JEFREY_OAUTH__CLIENT_SECRET no .env"
+            detail="O login com o Google ainda não foi liberado nesta cópia. Em Conexões > Google, cole o ID e a chave, ou fale com quem te entregou o Jefrey."
         )
     
     # state CSRF: obrigatorio e de uso unico (antes era so registrado em log)
