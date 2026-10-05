@@ -165,3 +165,6 @@ packaging/defaults/*
 
 # area de trabalho de execucao de planos (local)
 .superpowers/
+
+# saidas de release (instaladores, manifestos, zips)
+release/
