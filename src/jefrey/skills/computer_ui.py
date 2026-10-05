@@ -31,7 +31,7 @@ class ComputerUISkill(SkillBase):
         return sys.platform == "win32"
 
     def get_tools(self) -> list:
-        return [self.focus_window, self.type_text, self.press_hotkey]
+        return [self.focus_window, self.type_text, self.press_hotkey, self.app_command]
 
     @tool(description="Traz uma janela aberta para a frente pelo nome do programa (ex.: Excel, Bloco de Notas). Pede aprovacao")
     async def focus_window(self, name: str, user_id: str | None = None) -> str:
@@ -64,6 +64,15 @@ class ComputerUISkill(SkillBase):
         except UA.UIError as e:
             return str(e)
         return f"Usei o atalho {combo.lower().replace(' ', '')} em {UA.last_window_title(hwnd) or window}."
+
+    @tool(description="Manda um comando para um programa com conector (hoje: blender). Comandos: add_cube, add_sphere (x,y,z,size,name), move_object (name,x,y,z), delete_object (name), set_color (name,r,g,b com 0 a 1). Pede aprovacao")
+    async def app_command(self, app: str, command: str, args: dict | None = None, user_id: str | None = None) -> str:
+        from src.jefrey.core.appconnectors import ConnectorError, run_command
+
+        try:
+            return await run_command(app, command, args or {})
+        except ConnectorError as e:
+            return str(e)
 
 
 @skill("computer_ui", "Digitar e usar atalhos em outros programas, com a sua aprovação", tags=["utility", "local", "windows"])

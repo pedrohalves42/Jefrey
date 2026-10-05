@@ -54,6 +54,7 @@ GROUPS: list[tuple[tuple[str, ...], list[str]]] = [
     (("pasta", "downloads", "documentos", "area de trabalho", "fotos", "imagens"), ["open_folder"]),
     (("alexa", "echo", "anuncia", "fala na ", "avisa na ", "rotina da", "acende a luz", "apaga a luz"), ["alexa_say", "alexa_routine", "alexa_list"]),
     (("fecha ", "fechar", "feche ", "encerra"), ["close_app"]),
+    (("blender", "cubo", "esfera", "objeto 3d", "modelo 3d"), ["app_command"]),
     (("digita", "digite", "escreve no", "escreve na", "escreva no", "escreva na", "atalho", "foca ", "focar", "traz para a frente"), ["focus_window", "type_text", "press_hotkey"]),
     (("musica", "música", "pausa", "pausar", "proxima", "próxima", "toca", "continua"), ["media_control"]),
     (("pesquisa", "pesquisar", "procura", "procurar", "google"), ["search_in_browser"]),
@@ -61,7 +62,7 @@ GROUPS: list[tuple[tuple[str, ...], list[str]]] = [
 ]
 
 
-CONTROL_ONLY = {"focus_window", "type_text", "press_hotkey", "close_app"}  # agem em outros programas
+CONTROL_ONLY = {"focus_window", "type_text", "press_hotkey", "close_app", "app_command"}  # agem em outros programas
 
 
 def begin_turn() -> None:

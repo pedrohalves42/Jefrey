@@ -88,6 +88,7 @@ CATALOG: dict[str, ToolPolicy] = {
     "focus_window": _p("high", "Trazer uma janela para a frente"),
     "type_text": _p("high", "Digitar em outro programa"),
     "press_hotkey": _p("high", "Usar um atalho de teclado"),
+    "app_command": _p("high", "Mandar um comando para um programa (Blender)"),
     # Alexa (via Voice Monkey): falar e leve; acionar rotina mexe na casa e pede aprovacao
     "alexa_say": _p("medium", "Falar na Alexa"),
     "alexa_routine": _p("high", "Acionar rotina da Alexa"),

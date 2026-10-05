@@ -33,7 +33,7 @@ def call(tool_name, **kw):
 
 
 def test_as_tres_ferramentas_existem_e_pedem_aprovacao():
-    assert set(tools()) == {"focus_window", "type_text", "press_hotkey"}
+    assert set(tools()) == {"focus_window", "type_text", "press_hotkey", "app_command"}
     assert all(CATALOG[n].needs_approval and CATALOG[n].risk == "high" for n in tools())
 
 
@@ -97,3 +97,26 @@ def test_modelo_de_nuvem_nao_recebe_ferramentas_de_controle_sem_o_usuario_pedir(
 def test_modelo_de_nuvem_recebe_o_controle_quando_a_pessoa_pede():
     assert {"type_text", "press_hotkey"} <= set(select_tools("digita olá no bloco de notas", list(CATALOG), offer_all=True))
     assert "close_app" in select_tools("fecha o chrome", list(CATALOG), offer_all=True)
+
+
+def test_app_command_traduz_erros_e_chama_o_conector(b, monkeypatch):
+    from src.jefrey.core import appconnectors as AC
+    chamado = {}
+
+    async def falso(app, command, args=None):
+        chamado.update(app=app, command=command, args=args)
+        return "Criei Cube."
+    monkeypatch.setattr(AC, "run_command", falso)
+    assert call("app_command", app="blender", command="add_cube", args={"x": 1}) == "Criei Cube."
+    assert chamado == {"app": "blender", "command": "add_cube", "args": {"x": 1}}
+
+    async def ruim(app, command, args=None):
+        raise AC.ConnectorError("O Blender ainda não está ligado ao Jefrey.")
+    monkeypatch.setattr(AC, "run_command", ruim)
+    assert "Blender" in call("app_command", app="blender", command="add_cube")
+
+
+def test_app_command_pede_aprovacao_e_so_aparece_se_a_pessoa_pede():
+    assert CATALOG["app_command"].needs_approval and CATALOG["app_command"].risk == "high"
+    assert "app_command" in select_tools("crie um cubo no blender", list(CATALOG), offer_all=True)
+    assert "app_command" not in select_tools("resuma este e-mail", list(CATALOG), offer_all=True)
