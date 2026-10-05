@@ -160,3 +160,19 @@ def test_pagina_de_skills_mostra_o_risco_real_de_cada_ferramenta():
     riscos = {t["name"]: t["risk"] for s in describe_skills() for t in s["tools"]}
     assert riscos["close_app"] == "high" and riscos["alexa_routine"] == "high" and riscos["open_folder"] == "low"
     assert "unknown" not in set(riscos.values()) and None not in set(riscos.values())
+
+
+def test_script_que_embute_o_google_nao_mostra_os_valores(tmp_path, monkeypatch, capsys):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("seed_google", "scripts/seed_google_defaults.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    env = tmp_path / ".env"
+    env.write_text('JEFREY_OAUTH__CLIENT_ID="123-abc.apps.googleusercontent.com"\nJEFREY_OAUTH__CLIENT_SECRET=GOCSPX-segredo-bem-comprido\nOUTRA=1\n', encoding="utf-8")
+    assert m.from_env_file(env) == {"JEFREY_OAUTH__CLIENT_ID": "123-abc.apps.googleusercontent.com", "JEFREY_OAUTH__CLIENT_SECRET": "GOCSPX-segredo-bem-comprido"}
+    monkeypatch.setattr(m, "ROOT", tmp_path)
+    monkeypatch.setattr(m.sys, "argv", ["x"])
+    assert m.main() == 0
+    out = capsys.readouterr().out
+    assert "GOCSPX" not in out and "123-abc" not in out
+    assert json.loads((tmp_path / "packaging" / "defaults" / "google_oauth.json").read_text(encoding="utf-8"))["installed"]["client_id"].startswith("123-abc")
