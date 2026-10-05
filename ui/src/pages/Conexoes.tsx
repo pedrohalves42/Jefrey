@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { useSearchParams } from "react-router-dom"
 import ListenButton from "@/components/ListenButton"
-import { disconnectGoogle, getGoogle, googleReturnMessage, SERVICE_LABEL, startGoogle, type GoogleService, type GoogleStatus } from "@/lib/connections"
+import { disconnectGoogle, getGoogle, saveGoogleCredentials, googleReturnMessage, SERVICE_LABEL, startGoogle, type GoogleService, type GoogleStatus } from "@/lib/connections"
 import AlexaTab from "@/components/AlexaTab"
 import Cerebros from "@/components/Cerebros"
 import {
@@ -27,6 +27,38 @@ function Note({ msg }: { msg: Msg }) {
 function Badge({ on, yes, no }: { on: boolean; yes: string; no: string }) {
   return (
     <span className={`rounded-full px-3 py-1 text-sm ${on ? "bg-emerald-400/15 text-emerald-200" : "bg-white/10 text-white/60"}`}>{on ? yes : no}</span>
+  )
+}
+
+/** Configuracao unica do app Google: cola o ID e a chave do Google Cloud (quem entrega o Jefrey pode deixar isso pronto). */
+function GoogleSetup({ onDone }: { onDone: () => void }) {
+  const [id, setId] = useState("")
+  const [secret, setSecret] = useState("")
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState("")
+  async function save() {
+    setBusy(true)
+    setErr("")
+    const r = await saveGoogleCredentials(id, secret)
+    setBusy(false)
+    if (r.ok) {
+      setSecret("")
+      onDone()
+    } else setErr(((r.data as { detail?: unknown } | null)?.detail as string) || "Não consegui guardar agora. Tente de novo.")
+  }
+  const field = "w-full rounded-lg border border-white/15 bg-black/30 px-3 py-3 text-base text-white placeholder:text-white/30"
+  return (
+    <div className="mt-4 rounded-xl border border-amber-300/30 p-4">
+      <p className="text-base text-amber-100">Falta uma configuração, feita uma vez só. Quem te entregou o Jefrey pode deixar pronta; se for você, siga o guia <b>docs/GOOGLE.md</b>, crie o acesso no Google Cloud (tipo “Aplicativo para computador”) e cole abaixo.</p>
+      <label className="mt-3 block text-base text-white/85">ID do cliente
+        <input className={`${field} mt-1`} value={id} onChange={e => setId(e.target.value)} placeholder="123456-abc.apps.googleusercontent.com" autoComplete="off" spellCheck={false} />
+      </label>
+      <label className="mt-3 block text-base text-white/85">Chave secreta
+        <input className={`${field} mt-1`} type="password" value={secret} onChange={e => setSecret(e.target.value)} autoComplete="off" spellCheck={false} />
+      </label>
+      {err && <p role="alert" className="mt-2 text-base text-red-200">{err}</p>}
+      <button type="button" onClick={() => void save()} disabled={busy || !id.trim() || !secret.trim()} className={`${big} mt-3`}>{busy ? "Guardando…" : "Guardar"}</button>
+    </div>
   )
 }
 
@@ -107,11 +139,7 @@ function Google() {
             </button>
             <ListenButton text={listen} />
           </div>
-          {st && !st.configured && (
-            <p className="mt-3 text-sm text-amber-200/90">
-              Esta cópia do Jefrey ainda não foi liberada para o Google. Quando for, o botão acima funciona sozinho.
-            </p>
-          )}
+          {st && !st.configured && <GoogleSetup onDone={() => void load()} />}
         </>
       )}
       <Note msg={msg} />
@@ -156,7 +184,7 @@ function WhatsApp() {
   }
   async function openFolder() {
     const r = await waOpenFolder()
-    setMsg(r.ok ? { ok: true, text: "Abri a pasta da extensão. Siga os passos abaixo." } : { ok: false, text: "Não consegui abrir a pasta. Peça ajuda a quem instalou o Jefrey." })
+    setMsg(r.ok ? { ok: true, text: `Abri a pasta da extensão${r.data?.path ? ` (${r.data.path})` : ""}. Se não abrir, procure por ela em Documentos > Jefrey. Siga os passos abaixo.` } : { ok: false, text: "Não consegui abrir a pasta. Peça ajuda a quem instalou o Jefrey." })
   }
   async function mode(c: WaChat, m: WaMode) {
     const r = await waSetMode(c.id, m)

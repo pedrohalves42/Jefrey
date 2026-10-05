@@ -90,6 +90,22 @@ async def google_callback(code: str = "", state: str = "", error: str = ""):
     return await finish(code, state, error)
 
 
+class CredsBody(BaseModel):
+    client_id: str = Field(..., max_length=200)
+    client_secret: str = Field(..., max_length=200)
+
+
+@router.put("/credentials")
+async def set_credentials(request: Request, body: CredsBody):
+    """Cola as credenciais do app Google (uma vez). Nunca devolve a chave."""
+    _user(request)
+    try:
+        G.save_credentials(body.client_id, body.client_secret)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return {"configured": G.credentials() is not None}
+
+
 @router.delete("")
 async def google_disconnect(request: Request):
     tokens = G.delete_tokens(_user(request))

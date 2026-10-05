@@ -21,3 +21,25 @@ def extension_dir() -> Optional[Path]:
         if (c / "manifest.json").is_file():
             return c
     return None
+
+
+def public_extension_dir() -> Optional[Path]:
+    """Copia da extensao numa pasta facil de achar e que nao muda quando o Jefrey e atualizado (Documentos/Jefrey/extensao-chrome).
+
+    O Chrome carrega a extensao direto dessa pasta, entao ela precisa continuar no mesmo lugar depois das atualizacoes.
+    """
+    import shutil
+
+    src = extension_dir()
+    if src is None:
+        return None
+    docs = Path.home() / "Documents"
+    dest = (docs if docs.is_dir() else Path.home()) / "Jefrey" / "extensao-chrome"
+    try:
+        dest.mkdir(parents=True, exist_ok=True)
+        for f in src.iterdir():
+            if f.is_file():
+                shutil.copy2(f, dest / f.name)
+        return dest if (dest / "manifest.json").is_file() else src
+    except OSError:
+        return src

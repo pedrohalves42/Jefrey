@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import re
 import logging
 import os
 import secrets
@@ -55,6 +56,18 @@ def credentials() -> Optional[dict]:
     except (OSError, ValueError, AttributeError):
         pass
     return None
+
+
+def save_credentials(client_id: str, client_secret: str) -> None:
+    """Guarda as credenciais do app Google (colar na tela, sem editar arquivos). Valida o formato antes."""
+    cid, sec = (client_id or "").strip(), (client_secret or "").strip()
+    if not re.fullmatch(r"[0-9]+-[0-9a-z]+\.apps\.googleusercontent\.com", cid):
+        raise ValueError("O ID do cliente parece errado. Ele termina com .apps.googleusercontent.com")
+    if not re.fullmatch(r"[A-Za-z0-9_\-]{16,100}", sec):
+        raise ValueError("A chave secreta parece errada. Copie de novo, sem espaços.")
+    f = _config_file()
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(json.dumps({"installed": {"client_id": cid, "client_secret": sec}}), encoding="utf-8")
 
 
 def scopes_for(services: list[str]) -> list[str]:

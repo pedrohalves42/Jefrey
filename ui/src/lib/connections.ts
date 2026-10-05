@@ -20,6 +20,8 @@ async function json<T>(path: string, init?: RequestInit): Promise<{ ok: boolean;
 }
 
 export const getGoogle = () => json<GoogleStatus>("/connections/google")
+export const saveGoogleCredentials = (client_id: string, client_secret: string) =>
+  json<{ configured: boolean }>("/connections/google/credentials", { method: "PUT", body: JSON.stringify({ client_id, client_secret }) })
 export const disconnectGoogle = () => json<{ ok: boolean }>("/connections/google", { method: "DELETE" })
 
 /** Leva a pessoa ao site do Google para entrar. Devolve um erro legivel se nao der. */

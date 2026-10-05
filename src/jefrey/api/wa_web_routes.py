@@ -85,13 +85,13 @@ async def open_extension_folder(request: Request):
     import os
     import sys
 
-    from src.jefrey.core.paths import extension_dir
+    from src.jefrey.core.paths import public_extension_dir
 
-    folder = extension_dir()
+    folder = public_extension_dir()
     if folder is None or sys.platform != "win32":
         raise HTTPException(status_code=404, detail="Não achei a pasta da extensão neste computador.")
     os.startfile(str(folder))  # type: ignore[attr-defined]
-    return {"ok": True, "path": folder.name}
+    return {"ok": True, "path": str(folder)}
 
 
 @router.put("/paused")

@@ -129,3 +129,34 @@ def test_agente_pede_aprovacao_antes_de_acionar_rotina_da_alexa(tmp_path, monkey
     rt = ToolRuntime(user_id="ana", thread_id="t", resolver=lambda n: tools.get(n), approval_timeout=0.3)
     out = run(rt.run("alexa_routine", {"name": "boa noite"}))
     assert chamadas == [] and out.status == "approval_expired"  # sem aprovacao, a rotina nao e acionada
+
+
+# ---------------- Google: colar as credenciais na tela ----------------
+def test_credenciais_do_google_coladas_na_tela(tmp_path, monkeypatch):
+    from src.jefrey.core import google_oauth as G
+    monkeypatch.setenv("JEFREY_CONFIG_DIR", str(tmp_path))
+    monkeypatch.delenv("JEFREY_OAUTH__CLIENT_ID", raising=False)
+    monkeypatch.delenv("JEFREY_OAUTH__CLIENT_SECRET", raising=False)
+    assert G.credentials() is None
+    for ruim in [("abc", "x" * 30), ("123-abc.apps.googleusercontent.com", "curta"), ("123-abc.apps.googleusercontent.com", "tem espaco " * 3)]:
+        with pytest.raises(ValueError):
+            G.save_credentials(*ruim)
+    G.save_credentials(" 123-abc.apps.googleusercontent.com ", "GOCSPX-abcdefghijklmnop1234")
+    assert G.credentials() == {"client_id": "123-abc.apps.googleusercontent.com", "client_secret": "GOCSPX-abcdefghijklmnop1234"}
+
+
+def test_extensao_do_whatsapp_ganha_pasta_facil_em_documentos(tmp_path, monkeypatch):
+    from src.jefrey.core import paths
+    monkeypatch.setattr(paths.Path, "home", classmethod(lambda cls: tmp_path))
+    (tmp_path / "Documents").mkdir()
+    pasta = paths.public_extension_dir()
+    assert pasta == tmp_path / "Documents" / "Jefrey" / "extensao-chrome"
+    assert (pasta / "manifest.json").is_file() and (pasta / "background.js").is_file()
+    assert paths.public_extension_dir() == pasta  # repetir nao quebra
+
+
+def test_pagina_de_skills_mostra_o_risco_real_de_cada_ferramenta():
+    from src.jefrey.api.skills_routes import describe_skills
+    riscos = {t["name"]: t["risk"] for s in describe_skills() for t in s["tools"]}
+    assert riscos["close_app"] == "high" and riscos["alexa_routine"] == "high" and riscos["open_folder"] == "low"
+    assert "unknown" not in set(riscos.values()) and None not in set(riscos.values())
