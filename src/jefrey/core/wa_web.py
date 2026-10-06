@@ -269,6 +269,16 @@ class WAStore:
             rows = c.execute(self.drafts.select().where((self.drafts.c.user_id == user_id) & (self.drafts.c.status == "approved")).order_by(self.drafts.c.created_at).limit(5)).fetchall()
         return [{"id": r.id, "chat": r.display, "text": r.reply} for r in rows]
 
+    def queue_message(self, user_id: str, chat_id: str, text: str) -> dict:
+        """Mensagem escrita (ou revisada) pela PESSOA: vai direto para a fila da extensao. Nunca com dado sensivel."""
+        chat = next((c for c in self.list_chats(user_id) if c["id"] == chat_id), None)
+        if chat is None:
+            raise LookupError("conversa nao encontrada")
+        clean = " ".join((text or "").split())[:MAX_REPLY]
+        if not clean or has_secret(clean):
+            raise ValueError("Esse texto não pode ser enviado (vazio ou com dado sensível).")
+        return self.add_draft(user_id, chat, "", clean, "escrita por você", "approved", [])
+
     def mark_sent(self, user_id: str, did: str, ok: bool) -> bool:
         with self.engine.begin() as c:
             return bool(c.execute(self.drafts.update().where((self.drafts.c.id == did) & (self.drafts.c.user_id == user_id) & (self.drafts.c.status == "approved"))
@@ -322,6 +332,25 @@ async def draft_reply(client: Any, name: str, known: list[str], context: list[di
         return clean_reply(await client.chat(messages))
     except Exception as e:
         logger.info("whatsapp: modelo indisponivel (%s)", type(e).__name__)
+        return None
+
+
+_COMPOSE_SYSTEM = (
+    "Voce escreve mensagens de WhatsApp em nome de {name}, em portugues do Brasil: curtas, naturais e informais, como a pessoa falaria. "
+    "Escreva SO o texto da mensagem, pronto para enviar, sem aspas e sem explicacao. Use apenas o que a pessoa pediu: nunca invente fatos, "
+    "valores, enderecos nem horarios. Nunca inclua senhas, numeros de cartao ou documentos.{known}"
+)
+
+
+async def compose_message(client: Any, name: str, known: list[str], contact: str, instruction: str) -> Optional[str]:
+    """Transforma a ideia da pessoa ('diga que chego as 8h') em uma mensagem pronta (SEM ferramentas). None = nao deu."""
+    known_txt = ("\nO que voce sabe sobre " + name + " (use so se ajudar): " + "; ".join(known[:8])) if known else ""
+    messages = [{"role": "system", "content": _COMPOSE_SYSTEM.format(name=name or "a pessoa", known=known_txt)},
+                {"role": "user", "content": f"<contato>{contact[:80]}</contato>\n<ideia>\n{instruction[:MAX_TEXT]}\n</ideia>"}]
+    try:
+        return clean_reply(await client.chat(messages))
+    except Exception as e:
+        logger.info("whatsapp: modelo indisponivel para escrever (%s)", type(e).__name__)
         return None
 
 

@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom"
 import ListenButton from "@/components/ListenButton"
 import { disconnectGoogle, getGoogle, saveGoogleCredentials, googleReturnMessage, SERVICE_LABEL, startGoogle, type GoogleService, type GoogleStatus } from "@/lib/connections"
 import AlexaTab from "@/components/AlexaTab"
+import WaCompose from "@/components/WaCompose"
 import Cerebros from "@/components/Cerebros"
 import {
   MODE_LABEL, minutesLeft, sortChats, waForgetAll, waOpenFolder, waPairing, waRevoke, waSetMode, waSetPaused, waStatus, WA_PRIVACY_NOTE, WA_RISK_NOTE,
@@ -298,6 +299,7 @@ function WhatsApp() {
                     </button>
                   ))}
                 </div>
+                {c.mode !== "off" && <WaCompose chat={c} onQueued={() => void load()} />}
               </li>
             ))}
           </ul>

@@ -422,3 +422,32 @@ def test_conversa_nova_aparece_na_lista_de_perguntas_ate_a_pessoa_escolher(db, m
     s.set_mode("ana", maria["id"], "ask")
     out = run(R.pending(object()))
     assert [c["display"] for c in out["new_chats"]] == ["João"]
+
+
+# ---------------- mensagem escrita pela pessoa (compor e enviar) ----------------
+def test_mensagem_da_pessoa_vai_para_a_fila_so_da_conversa_dela(db):
+    s = W.WAStore()
+    c = liberar(s, "ask")
+    d = s.queue_message("ana", c["id"], "Chego   às 8h, pode ser?")
+    assert d["status"] == "approved" and d["reply"] == "Chego às 8h, pode ser?"
+    assert s.outbox("ana") == [{"id": d["id"], "chat": "Maria", "text": "Chego às 8h, pode ser?"}]
+    with pytest.raises(LookupError):
+        s.queue_message("bia", c["id"], "oi")  # conversa de outra pessoa
+
+
+def test_mensagem_vazia_ou_com_dado_sensivel_nao_entra_na_fila(db):
+    s = W.WAStore()
+    c = liberar(s, "ask")
+    for ruim in ("", "   ", "minha senha é 1234 e o cartão 4111 1111 1111 1111"):
+        with pytest.raises(ValueError):
+            s.queue_message("ana", c["id"], ruim)
+    assert s.outbox("ana") == []
+
+
+def test_compor_usa_o_modelo_sem_ferramentas_e_a_ideia_fica_entre_marcas(db):
+    llm = FakeLLM("Oi! Chego às 8h, tá bom?")
+    out = run(W.compose_message(llm, "Ana", [], "Maria", "diga que chego às 8h"))
+    assert out == "Oi! Chego às 8h, tá bom?"
+    user_msg = llm.prompts[0][1]["content"]
+    assert "<ideia>" in user_msg and "diga que chego às 8h" in user_msg
+    assert run(W.compose_message(FakeLLM(RuntimeError("fora")), "Ana", [], "Maria", "oi")) is None

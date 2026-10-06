@@ -115,6 +115,52 @@ async def set_mode(chat_id: str, body: ModeBody, request: Request):
     return row
 
 
+class ComposeBody(BaseModel):
+    instruction: str = Field(min_length=2, max_length=600)
+
+
+class SendBody(BaseModel):
+    text: str = Field(min_length=1, max_length=W.MAX_REPLY)
+
+
+@router.post("/chats/{chat_id}/compose")
+async def compose(chat_id: str, body: ComposeBody, request: Request):
+    """A pessoa diz a ideia; o Jefrey escreve a mensagem para ela REVISAR (nada e enviado aqui)."""
+    uid = _user(request)
+    s = W.WAStore()
+    chat = next((c for c in s.list_chats(uid) if c["id"] == chat_id), None)
+    if chat is None:
+        raise HTTPException(status_code=404, detail="conversa nao encontrada")
+    client = None
+    try:
+        from src.jefrey.core.llm_provider import get_llm_client
+
+        client = get_llm_client()
+    except Exception:
+        client = None
+    from src.jefrey.core.learning import FactStore
+    from src.jefrey.core.profile import ProfileStore
+
+    name = ProfileStore().get_name(uid) or ""
+    text = await W.compose_message(client, name, FactStore().profile_lines(uid, 8), chat["display"], body.instruction) if client is not None else None
+    if not text:
+        raise HTTPException(status_code=503, detail="Não consegui escrever agora. Você pode digitar a mensagem.")
+    return {"text": text}
+
+
+@router.post("/chats/{chat_id}/send")
+async def send_message(chat_id: str, body: SendBody, request: Request):
+    """Poe na fila a mensagem que a PESSOA aprovou; a extensao envia quando essa conversa estiver aberta no WhatsApp Web."""
+    uid = _user(request)
+    try:
+        d = W.WAStore().queue_message(uid, chat_id, body.text)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="conversa nao encontrada")
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return {"ok": True, "draft": d["id"], "chat": d["chat"]}
+
+
 @router.delete("/chats/{chat_id}")
 async def delete_chat(chat_id: str, request: Request):
     if not W.WAStore().delete_chat(_user(request), chat_id):
