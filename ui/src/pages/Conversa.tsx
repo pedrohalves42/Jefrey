@@ -17,6 +17,8 @@ import { HudOverlay, Wave } from "@/components/hud/JarvisHud"
 import { haltComputer } from "@/lib/halt"
 import QuickActions from "@/components/QuickActions"
 import LearnedToast from "@/components/LearnedToast"
+import TodayPopup from "@/components/TodayPopup"
+import DayStrip from "@/components/DayStrip"
 import AvatarPicker from "@/components/AvatarPicker"
 import { LivePanel } from "@/components/hud/LivePanel"
 import { getToday, spokenSummary } from "@/lib/today"
@@ -113,6 +115,20 @@ export default function Conversa() {
   const [drawer, setDrawer] = useState(false)
   const [voiceLvl, setVoiceLvl] = useState(0)
   const [summaryBusy, setSummaryBusy] = useState(false)
+  const [todayOpen, setTodayOpen] = useState(false)
+  useEffect(() => {
+    // 1a vez do dia: mostra o resumo por cima da conversa (uma vez so por dia; a pessoa fecha com Esc ou "Fechar")
+    try {
+      const day = new Date().toISOString().slice(0, 10)
+      if (localStorage.getItem("jefrey_today_seen") !== day) {
+        localStorage.setItem("jefrey_today_seen", day)
+        const id = window.setTimeout(() => setTodayOpen(true), 1500)
+        return () => window.clearTimeout(id)
+      }
+    } catch {
+      /* sem armazenamento: nao abre sozinho */
+    }
+  }, [])
   const tiltRef = useRef<HTMLDivElement | null>(null)
   const [opts, setOpts] = useState(false)
   const stageRef = useRef<HTMLDivElement>(null)
@@ -274,6 +290,7 @@ export default function Conversa() {
   async function speakSummary() {
     setSummaryBusy(true)
     try {
+      setTodayOpen(true)
       const r = await getToday()
       if (r.data) speaker.say(spokenSummary(r.data, myName ?? undefined))
       else speaker.say("Não consegui buscar o resumo agora. Verifique a internet.")
@@ -519,12 +536,15 @@ export default function Conversa() {
         {/* topo: relogio, estado e atalhos */}
         <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between p-3">
           <button type="button" onClick={() => setShowList(v => !v)} className={`jf-focus pointer-events-auto rounded-md border border-white/15 bg-black/40 px-2.5 py-1 text-xs text-white/75 md:hidden ${easy ? "hidden" : ""}`}>Conversas</button>
-          <span className="ml-auto text-xs tabular-nums tracking-[0.3em] text-[hsl(var(--hue)_80%_75%)] opacity-80">
+          <button type="button" onClick={() => setTodayOpen(true)} className="jf-focus jf-chip pointer-events-auto ml-auto mr-3 rounded-full border border-white/20 bg-black/40 px-3 py-1 text-xs text-white/85">☀️ Hoje</button>
+          <span className="text-xs tabular-nums tracking-[0.3em] text-[hsl(var(--hue)_80%_75%)] opacity-80">
             {clock.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
           </span>
         </div>
         {hud && <HudOverlay messages={active.messages} activity={activity} />}
         {hud && <LivePanel />}
+
+        {todayOpen && <TodayPopup name={myName ?? undefined} onClose={() => setTodayOpen(false)} />}
 
         {/* aprovacao de acao de risco */}
         {pendingApproval !== undefined && (
@@ -545,13 +565,16 @@ export default function Conversa() {
         </div>
 
         {/* doca: legenda, atalhos, voz, texto e opcoes (fora do cerebro, nunca por cima dele) */}
-        <div className="relative z-30 flex max-h-[44%] shrink-0 flex-col items-center gap-1.5 overflow-y-auto border-t border-white/10 bg-black/50 px-3 pb-3 pt-3">
+        <div className="relative z-30 flex max-h-[46%] shrink-0 flex-col items-center gap-3 overflow-y-auto border-t border-white/10 bg-black/50 px-4 pb-4 pt-4">
           <div className="w-full max-w-lg"><BriefingCard /></div>
           {empty && (
-            <div className="max-w-xl text-center">
-              <h2 className="text-base font-semibold text-white">{greeting(clock.getHours(), myName)}</h2>
-              <p className="text-xs text-white/60">{myName ? "O que vamos resolver agora?" : "Eu sou o Jefrey. Como posso te chamar?"}</p>
-            </div>
+            <>
+              <div className="max-w-xl text-center">
+                <h2 className="text-lg font-semibold text-white">{greeting(clock.getHours(), myName)}</h2>
+                <p className="text-sm text-white/60">{myName ? "O que vamos resolver agora?" : "Eu sou o Jefrey. Como posso te chamar?"}</p>
+              </div>
+              <DayStrip onOpen={() => setTodayOpen(true)} />
+            </>
           )}
           <LearnedToast streaming={streaming} />
           <QuickActions onAsk={t => void send(t)} onSummary={() => void speakSummary()} busy={summaryBusy} />

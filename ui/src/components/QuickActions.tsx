@@ -15,9 +15,9 @@ export default function QuickActions({ onAsk, onSummary, busy = false }: Props) 
     { icon: "💡", label: "O que posso pedir?", run: () => onAsk("O que você consegue fazer por mim?") },
   ]
   return (
-    <ul className="flex w-full max-w-3xl snap-x gap-2 overflow-x-auto pb-1" aria-label="Atalhos">
+    <ul className="flex w-full max-w-3xl flex-wrap justify-center gap-2" aria-label="Atalhos">
       {items.map(i => (
-        <li key={i.label} className="snap-start">
+        <li key={i.label}>
           <button
             type="button"
             onClick={i.run}

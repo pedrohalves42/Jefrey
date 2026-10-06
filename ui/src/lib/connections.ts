@@ -40,6 +40,9 @@ export async function startGoogle(services: GoogleService[]): Promise<string | n
 export function googleReturnMessage(value: string | null): { ok: boolean; text: string } | null {
   if (value === "ok") return { ok: true, text: "Pronto! O Google foi conectado. Agora o Jefrey pode ver a sua agenda e ajudar com o seu e-mail." }
   if (value === "erro") return { ok: false, text: "A conexão com o Google não foi concluída. Se você cancelou, está tudo bem. Para tentar de novo, aperte o botão." }
+  if (value === "chave") return { ok: false, text: "O Google chegou até aqui, mas recusou a chave secreta deste app: ela não confere com o ID. No Google Cloud, copie a chave atual do seu cliente e cole em “Trocar o ID e a chave”, aqui embaixo." }
+  if (value === "retorno") return { ok: false, text: "O Google não conhece o endereço de retorno. Cadastre no Google Cloud o endereço que aparece aqui embaixo." }
+  if (value === "codigo") return { ok: false, text: "O código de acesso do Google venceu ou já foi usado. É só apertar o botão de novo." }
   return null
 }
 

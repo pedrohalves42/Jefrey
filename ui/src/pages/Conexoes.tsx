@@ -146,6 +146,12 @@ function Google() {
             <p className="mt-3 break-all text-sm text-white/50">Se o Google disser “redirect_uri_mismatch”, cadastre este endereço no Google Cloud: <code className="text-white/80">{st.redirect_uri}</code></p>
           )}
           {st && !st.configured && <GoogleSetup onDone={() => void load()} />}
+          {st?.configured && (
+            <details className="mt-3 rounded-xl border border-white/10 p-3">
+              <summary className="cursor-pointer text-base text-white/75">Trocar o ID e a chave do Google</summary>
+              <GoogleSetup onDone={() => void load()} />
+            </details>
+          )}
         </>
       )}
       <Note msg={msg} />

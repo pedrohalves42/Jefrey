@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Optional
 from urllib.parse import urlsplit
 
@@ -59,6 +60,14 @@ def _back(entry: Optional[dict], result: str) -> RedirectResponse:
     return RedirectResponse(f"{base}/conexoes?google={result}", status_code=303)
 
 
+def _google_error(r: httpx.Response) -> str:
+    try:
+        v = r.json().get("error", "")
+        return v if isinstance(v, str) and re.fullmatch(r"[a-z_]{3,40}", v) else "desconhecido"
+    except Exception:
+        return "desconhecido"
+
+
 async def finish(code: str, state: str, error: str) -> RedirectResponse:
     """Conclui a conexao (usado pelos dois enderecos de retorno)."""
     entry = G.consume_state(state)
@@ -70,7 +79,10 @@ async def finish(code: str, state: str, error: str) -> RedirectResponse:
             r = await c.post(G.TOKEN_URL, data={"code": code, "client_id": creds["client_id"], "client_secret": creds["client_secret"],
                                                 "redirect_uri": entry["redirect"], "grant_type": "authorization_code",
                                                 "code_verifier": entry["verifier"]})
-            r.raise_for_status()
+            if r.status_code >= 400:
+                reason = _google_error(r)
+                logger.warning("google recusou a troca do codigo: %s (HTTP %s)", reason, r.status_code)  # so o MOTIVO, nunca codigo nem chave
+                return _back(entry, {"invalid_client": "chave", "redirect_uri_mismatch": "retorno", "invalid_grant": "codigo"}.get(reason, "erro"))
             tok = r.json()
             if not tok.get("access_token"):
                 raise ValueError("sem token")

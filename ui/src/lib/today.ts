@@ -11,7 +11,7 @@ export type TodayData = {
     economy: { status: Status; items: NewsItem[] }
     region: { status: Status; items: NewsItem[] }
     market: { status: Status; usd?: Quote; eur?: Quote; btc?: Quote; ibov?: Quote }
-    weather: { status: Status; summary?: string; place?: string }
+    weather: { status: Status; summary?: string; place?: string; temp?: number }
     agenda: { status: Status; items: { title: string; time: string }[] }
     reminders: { status: Status; items: { text: string; due_label: string }[] }
   }
@@ -77,4 +77,39 @@ export function spokenSummary(d: TodayData, name?: string): string {
   if (s.market.usd) parts.push(`O dólar está em ${money(s.market.usd.value).replace("R$ ", "")} reais.`)
   if (s.news.status === "ok" && s.news.items.length) parts.push(`Principais notícias: ${s.news.items.slice(0, 3).map(i => i.title).join(". ")}.`)
   return parts.join(" ")
+}
+
+let cache: { at: number; data: TodayData } | null = null
+let inflight: Promise<Res<TodayData>> | null = null
+
+/** Uma busca so a cada 5 minutos para todos os lugares da tela (painel, popup, faixa do dia). `force` ignora o cache. */
+export async function getTodayCached(force = false): Promise<Res<TodayData>> {
+  if (!force && cache && Date.now() - cache.at < 5 * 60 * 1000) return { ok: true, status: 200, data: cache.data }
+  if (inflight) return inflight
+  inflight = getToday()
+    .then(r => {
+      if (r.data) cache = { at: Date.now(), data: r.data }
+      return r
+    })
+    .finally(() => {
+      inflight = null
+    })
+  return inflight
+}
+
+export function resetTodayCache(): void {
+  cache = null
+}
+
+/** Faixa de uma linha com o essencial do dia, para a tela principal. */
+export function dayStrip(d: TodayData): string[] {
+  const s = d.sections
+  const out: string[] = []
+  if (s.weather.status === "ok" && s.weather.temp !== undefined) out.push(`🌤 ${Math.round(Number((s.weather as { temp?: number }).temp))} °C${s.weather.place ? ` em ${s.weather.place.split(",")[0]}` : ""}`)
+  const first = s.agenda.items[0]
+  if (first) out.push(`📅 ${first.time ? first.time + " " : ""}${first.title}`)
+  else if (s.reminders.items[0]) out.push(`🔔 ${s.reminders.items[0].text}`)
+  else if (s.agenda.status === "ok" || s.reminders.status === "ok") out.push("📅 Nada marcado hoje")
+  if (s.market.usd) out.push(`💵 ${money(s.market.usd.value)}`)
+  return out
 }

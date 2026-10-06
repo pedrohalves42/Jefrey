@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
-import { change, getToday, money, points, type Quote, type TodayData } from "@/lib/today"
+import { change, getTodayCached, money, points, type Quote, type TodayData } from "@/lib/today"
 
 function Row({ label, q, fmt }: { label: string; q?: Quote; fmt: (v: number) => string }) {
   if (!q) return null
@@ -18,7 +18,7 @@ export function LivePanel() {
   const [d, setD] = useState<TodayData | null>(null)
   useEffect(() => {
     let alive = true
-    const load = () => void getToday().then(r => alive && r.data && setD(r.data))
+    const load = () => void getTodayCached().then(r => alive && r.data && setD(r.data))
     load()
     const id = window.setInterval(load, 10 * 60 * 1000)
     return () => {

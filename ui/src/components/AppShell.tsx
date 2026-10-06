@@ -20,8 +20,8 @@ const ITEMS: NavItem[] = [
   { to: "/estudos", label: "Estudos", icon: "M4 19V6a2 2 0 012-2h12v15H6a2 2 0 00-2 2m0 0h14M8 8h6M8 12h6" },
   { to: "/memoria", label: "Memória", icon: "M12 3a7 7 0 00-4 12.7V19h8v-3.3A7 7 0 0012 3zm-2 18h4" },
   { to: "/skills", label: "Skills", icon: "M13 2L4 14h6l-1 8 9-12h-6l1-8z" },
-  { to: "/configuracoes", label: "Configurações", icon: "M12 8a4 4 0 100 8 4 4 0 000-8zm0-5v3m0 12v3M3 12h3m12 0h3" },
-  { to: "/privacidade", label: "Privacidade", icon: "M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6l7-3z" },
+  { to: "/configuracoes", label: "Configurações", icon: "M12 8a4 4 0 100 8 4 4 0 000-8zm0-5v3m0 12v3M3 12h3m12 0h3", easy: true },
+  { to: "/privacidade", label: "Privacidade", icon: "M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6l7-3z", easy: true },
   { to: "/avancado", label: "Avançado", icon: "M4 6h16M4 12h16M4 18h10" },
   { to: "/ajuda", label: "Ajuda", icon: "M9.5 9a2.5 2.5 0 115 0c0 1.7-2.5 2-2.5 4M12 17h.01M12 3a9 9 0 100 18 9 9 0 000-18z", easy: true },
 ]

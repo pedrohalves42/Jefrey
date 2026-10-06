@@ -214,8 +214,14 @@ class AutoEmbeddings:
             if key is None and saved.backend == "openai":
                 from src.jefrey.core.llm_provider import load_saved_key
                 key = load_saved_key() or os.getenv("JEFREY_LLM__API_KEY")
-            impl = self._builder(saved, key)
-            self._probe(impl)
+            try:
+                impl = self._builder(saved, key)
+                self._probe(impl)
+            except EmbeddingsUnavailable as first:
+                # A escolha gravada caiu (ex.: Ollama desligado). Em vez de deixar a memoria MORTA, usa outra opcao so ENQUANTO
+                # a gravada estiver fora: a escolha gravada nao muda e cada modelo tem a sua colecao (nada se mistura). Quando
+                # a gravada voltar, as memorias antigas voltam a aparecer.
+                impl = self._temporary(cands, saved, first)
             self._impl = impl
             return impl
         last: Optional[Exception] = None
@@ -233,6 +239,22 @@ class AutoEmbeddings:
             logger.info("embeddings: usando %s/%s", choice.backend, choice.model)
             return impl
         raise EmbeddingsUnavailable(UNAVAILABLE_MSG) from last
+
+    fallback_from: Optional[str] = None  # modelo gravado que esta fora do ar (para a tela avisar), ou None
+
+    def _temporary(self, cands, saved: "Choice", first: Exception):
+        for choice, key in cands:
+            if choice.backend == saved.backend and choice.model == saved.model:
+                continue
+            try:
+                impl = self._builder(choice, key)
+                self._probe(impl)
+            except EmbeddingsUnavailable:
+                continue
+            logger.warning("embeddings: %s/%s fora do ar; usando %s/%s por enquanto", saved.backend, saved.model, choice.backend, choice.model)
+            self.fallback_from = f"{saved.backend}/{saved.model}"
+            return impl
+        raise first
 
     @property
     def model_id(self) -> str:

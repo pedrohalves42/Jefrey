@@ -206,3 +206,23 @@ describe("aprende entre conversas: o que e novo", () => {
   })
   it("nada novo = lista vazia", () => expect(newFacts(new Set(["1", "2"]), [f("1"), f("2")])).toEqual([]))
 })
+
+import { dayStrip } from "../lib/today"
+
+describe("faixa do dia na tela principal", () => {
+  const base = { status: "ok" as const, items: [] }
+  const mk = (over: Partial<TodayData["sections"]>): TodayData => ({
+    generated_at: "2026-10-05T08:00",
+    region: { city: "São Paulo", uf: "sp" },
+    sections: { news: base, economy: base, region: base, market: { status: "ok" }, weather: { status: "ok" }, agenda: base, reminders: base, ...over },
+  })
+  it("junta tempo, proximo compromisso e dolar", () => {
+    const d = mk({ weather: { status: "ok", temp: 16.4, place: "São Paulo, São Paulo" }, agenda: { status: "ok", items: [{ title: "Consulta", time: "09:30" }] }, market: { status: "ok", usd: { value: 5, pct: 0 } } })
+    expect(dayStrip(d)).toEqual(["🌤 16 °C em São Paulo", "📅 09:30 Consulta", "💵 R$ 5,00"])
+  })
+  it("sem compromisso mostra lembrete ou 'nada marcado'; sem dados, lista vazia", () => {
+    expect(dayStrip(mk({ reminders: { status: "ok", items: [{ text: "Beber água", due_label: "hoje" }] } }))).toContain("🔔 Beber água")
+    expect(dayStrip(mk({}))).toContain("📅 Nada marcado hoje")
+    expect(dayStrip(mk({ agenda: { status: "erro", items: [] }, reminders: { status: "erro", items: [] }, weather: { status: "erro" } }))).toEqual([])
+  })
+})

@@ -297,3 +297,30 @@ def test_redirect_do_google_usa_localhost_quando_o_programa_abre_em_127_0_0_1(tm
     (tmp_path / "google_oauth.json").write_text(json.dumps({"installed": {"client_id": "1-a.apps.googleusercontent.com", "client_secret": "x" * 20,
                                                                            "redirect_uris": ["http://127.0.0.1:8000/connections/google/callback"]}}), encoding="utf-8")
     assert G.redirect_uri("http://127.0.0.1:8000") == "http://127.0.0.1:8000/connections/google/callback"  # o cadastrado vence
+
+
+# ---------------- Google: o motivo da recusa vira uma frase util ----------------
+@pytest.mark.parametrize("erro,codigo", [("invalid_client", "chave"), ("redirect_uri_mismatch", "retorno"), ("invalid_grant", "codigo"), ("outra_coisa", "erro")])
+def test_recusa_do_google_na_troca_do_codigo_diz_o_motivo(monkeypatch, tmp_path, erro, codigo):
+    import httpx
+    from src.jefrey.api import google_connect as GC
+    from src.jefrey.core import google_oauth as G
+    monkeypatch.setattr(G, "consume_state", lambda s: {"user": "ana", "services": ["calendar"], "redirect": "http://localhost:8000/x", "verifier": "v", "return_to": "http://127.0.0.1:8000"})
+    monkeypatch.setattr(G, "credentials", lambda: {"client_id": "1-a.apps.googleusercontent.com", "client_secret": "segredo-antigo-123456"})
+
+    class FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, url, **k):
+            return httpx.Response(401, json={"error": erro, "error_description": "Unauthorized"}, request=httpx.Request("POST", url))
+    monkeypatch.setattr(GC.httpx, "AsyncClient", FakeClient)
+    r = asyncio.run(GC.finish("codigo-secreto", "estado", ""))
+    assert r.headers["location"].endswith(f"/conexoes?google={codigo}")
+    assert "segredo-antigo" not in r.headers["location"] and "codigo-secreto" not in r.headers["location"]
