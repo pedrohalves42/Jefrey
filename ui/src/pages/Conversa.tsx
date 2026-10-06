@@ -24,6 +24,7 @@ import { LivePanel } from "@/components/hud/LivePanel"
 import { getToday, spokenSummary } from "@/lib/today"
 import { useVoicePulse } from "@/hooks/useVoicePulse"
 import { SentenceBuffer } from "@/lib/voice/sentences"
+import { isDesktop, publishOrb } from "@/lib/shell"
 import { authedFetch, ensureSession } from "@/lib/session"
 import {
   loadActiveId, loadThreads, newThread, saveActiveId, saveThreads, streamChat, titleFrom, uid,
@@ -172,6 +173,12 @@ export default function Conversa() {
     : streaming
       ? gotToken ? "responding" : "thinking"
       : listeningNow ? "listening" : note ? "thinking" : "idle"
+
+  // o orbe (outra janela do app) copia o estado do cerebro; so quando muda, e com o nivel arredondado
+  const orbLevel = Math.round((speaker.speaking ? Math.max(micLevel, voiceLvl, 0.25) : micLevel) * 10) / 10
+  useEffect(() => {
+    if (isDesktop()) publishOrb({ state: brainState, level: orbLevel })
+  }, [brainState, orbLevel])
 
   async function send(textArg?: string) {
     const text = (textArg ?? input).trim()
@@ -524,7 +531,7 @@ export default function Conversa() {
 
       {/* palco: o avatar ocupa quase toda a tela e as opcoes ficam pequenas por cima */}
       <section className="jf-stage relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl" aria-label="Conversa com o Jefrey">
-        <div className="relative min-h-[52%] flex-1" onPointerMove={onTilt} onPointerLeave={offTilt}>
+        <div className="relative min-h-[36%] flex-1" onPointerMove={onTilt} onPointerLeave={offTilt}>
         <div ref={stageRef} className="jf-stage-core absolute inset-0 will-change-transform">
         <div className="jf-rings" aria-hidden="true" />
           <div ref={tiltRef} className="jf-tilt h-full w-full cursor-pointer" role="button" tabIndex={0} aria-label="Toque no avatar para falar com o Jefrey" onClick={() => void toggleVoiceMode()} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); void toggleVoiceMode() } }}>

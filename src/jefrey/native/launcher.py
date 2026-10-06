@@ -251,7 +251,7 @@ def find_free_port(start: int = DEFAULT_PORT, tries: int = 20) -> int:
     raise OSError(f"nenhuma porta livre entre {start} e {start + tries - 1}")
 
 
-def start_tray(url: str, logs_dir: Path, on_quit) -> "object | None":
+def start_tray(url: str, logs_dir: Path, on_quit, on_open=None, on_orb=None) -> "object | None":
     """Icone na bandeja com Abrir / Ver registros / Sair. Sem pystray ou sem bandeja, segue sem (nunca derruba)."""
     try:
         import pystray
@@ -263,7 +263,14 @@ def start_tray(url: str, logs_dir: Path, on_quit) -> "object | None":
         image = Image.open(icon_path) if icon_path.is_file() else Image.new("RGB", (64, 64), (6, 182, 212))
 
         def open_app(_icon=None, _item=None):
-            webbrowser.open(url)
+            if on_open is not None:
+                on_open()
+            else:
+                webbrowser.open(url)
+
+        def orb(_icon=None, _item=None):
+            if on_orb is not None:
+                on_orb()
 
         def open_logs(_icon=None, _item=None):
             try:
@@ -276,6 +283,7 @@ def start_tray(url: str, logs_dir: Path, on_quit) -> "object | None":
 
         menu = pystray.Menu(
             pystray.MenuItem("Abrir o Jefrey", open_app, default=True),
+            *([pystray.MenuItem("Mostrar o orbe (bolinha na tela)", orb)] if on_orb is not None else []),
             pystray.MenuItem("Ver registros (para suporte)", open_logs),
             pystray.MenuItem("Sair", quit_),
         )
@@ -338,7 +346,7 @@ def start_halt_hotkey():
         return None
 
 
-def start_global_hotkey(url: str, no_browser: bool):
+def start_global_hotkey(url: str, no_browser: bool, on_show=None):
     """Atalho global (Ctrl+Alt+J): traz o Jefrey para a frente (ou abre) e manda ele comecar a ouvir."""
     if os.getenv("JEFREY_NO_HOTKEY"):
         return None
@@ -348,7 +356,9 @@ def start_global_hotkey(url: str, no_browser: bool):
 
         def on_press() -> None:
             wake.request()
-            if wake.ui_alive():
+            if on_show is not None:
+                on_show()
+            elif wake.ui_alive():
                 hotkey.focus_window()
             elif not no_browser:
                 webbrowser.open(url)  # a tela nova pergunta pelo pedido ao abrir
@@ -405,11 +415,17 @@ def main(argv: Optional[list[str]] = None) -> int:
     args = argv if argv is not None else sys.argv[1:]
     no_browser = "--no-browser" in args or bool(os.getenv("JEFREY_NO_BROWSER"))
     no_tray = "--no-tray" in args or bool(os.getenv("JEFREY_NO_TRAY"))
+    minimized = "--minimized" in args  # iniciado junto com o Windows: fica so na bandeja
     desired = int(os.getenv("JEFREY_API_PORT", str(DEFAULT_PORT)))
+    from src.jefrey.native import shell as shell_mod
+
+    use_window = not no_browser and shell_mod.webview_available()
     if native_running(desired):
         url = f"http://127.0.0.1:{desired}"
         print(f"O Jefrey ja esta aberto em {url}")
-        if not no_browser:
+        if use_window:
+            shell_mod.ask_running_to_show(Path(os.getenv("JEFREY_HOME") or default_home()))  # traz a janela que ja existe
+        elif not no_browser:
             webbrowser.open(url)
         return 0
     try:
@@ -445,7 +461,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         if wait_ready(port) and not no_browser:
             webbrowser.open(url)
 
-    threading.Thread(target=open_when_ready, daemon=True).start()
+    if not use_window:
+        threading.Thread(target=open_when_ready, daemon=True).start()
 
     import uvicorn
 
@@ -457,13 +474,37 @@ def main(argv: Optional[list[str]] = None) -> int:
         logging.getLogger("jefrey.launcher").info("pedido para sair")
         server.should_exit = True
 
-    control.set_quit_hook(quit_now)
-    tray = None if no_tray else start_tray(url, logs_dir, quit_now)
+    shell = shell_mod.DesktopShell(url, home, quit_now, start_hidden=minimized) if use_window else None
+
+    def quit_all() -> None:
+        quit_now()
+        if shell is not None:
+            shell.quit()
+
+    control.set_quit_hook(quit_all)
+    if shell is not None:
+        control.set_window_hooks(shell.show, shell.show_orb)
+    tray =None if no_tray else start_tray(url, logs_dir, quit_all, on_open=shell.show if shell else None, on_orb=shell.show_orb if shell else None)
+    if shell is not None and tray is not None:
+        shell.set_tray_notice(lambda title, text: tray.notify(text, title))
     tray_updates = start_tray_updates(tray) if tray is not None else None
-    stop_hotkey = start_global_hotkey(url, no_browser)
+    stop_hotkey = start_global_hotkey(url, no_browser, on_show=shell.show if shell else None)
     stop_halt = start_halt_hotkey()
     try:
-        server.run()
+        if shell is not None:
+            server_thread = threading.Thread(target=server.run, daemon=True, name="jefrey-server")
+            server_thread.start()
+            try:
+                shell.run(lambda: wait_ready(port))  # bloqueia ate a pessoa escolher Sair
+            except Exception:
+                logger.exception("a janela falhou; seguindo pelo navegador")
+                if wait_ready(port):
+                    webbrowser.open(url)
+                    server_thread.join()
+            server.should_exit = True
+            server_thread.join(timeout=15)
+        else:
+            server.run()
     finally:
         if stop_hotkey is not None:
             stop_hotkey()
@@ -472,6 +513,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         if tray_updates is not None:
             tray_updates.set()
         control.set_quit_hook(None)
+        control.set_window_hooks(None, None)
         if tray is not None:
             try:
                 tray.stop()

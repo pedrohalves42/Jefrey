@@ -35,6 +35,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0write_build_info.ps1" 
   --collect-all piper ^
   --copy-metadata chromadb --copy-metadata langchain-core ^
   --hidden-import pystray._win32 ^
+  --collect-all webview ^
+  --collect-all pythonnet ^
+  --collect-all clr_loader ^
+  --hidden-import webview.platforms.edgechromium ^
   packaging\jefrey_entry.py || exit /b 1
 
 REM A extensao do Chrome (WhatsApp) vai numa pasta visivel, para a pessoa "Carregar sem compactacao".

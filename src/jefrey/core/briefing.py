@@ -197,6 +197,27 @@ async def briefing_tick(now: Optional[datetime] = None, store: Optional[Briefing
 _notified: set[str] = set()
 
 
+_nudged: set[str] = set()
+NUDGE_AFTER = timedelta(hours=1)
+
+
+def _nudge_overdue(uid: str, r: dict, now: Optional[datetime]) -> None:
+    """Uma hora depois, se a pessoa nao deu ciente, um toque gentil (uma vez so; respeita o silencio da noite e o limite do dia)."""
+    from src.jefrey.core import notify
+
+    if r["id"] in _nudged:
+        return
+    try:
+        due = datetime.fromisoformat(r["due_at"])
+        ref = now or datetime.now(due.tzinfo or timezone.utc)
+        if ref - due < NUDGE_AFTER:
+            return
+    except (KeyError, ValueError, TypeError):
+        return
+    if notify.notify(uid, "Passou do horário", f"{r['text']} ficou em aberto. Quer que eu remarque?", now=now):
+        _nudged.add(r["id"])
+
+
 async def reminder_tick(now: Optional[datetime] = None) -> list[str]:
     """Avisa (balao do Windows) os lembretes que venceram, uma vez cada. A tela continua mostrando ate a pessoa dar ciente."""
     from src.jefrey.core import notify
@@ -208,6 +229,7 @@ async def reminder_tick(now: Optional[datetime] = None) -> list[str]:
         try:
             for r in store.due(uid, now.astimezone(timezone.utc) if now else None):
                 if r["id"] in _notified:
+                    _nudge_overdue(uid, r, now)
                     continue
                 _notified.add(r["id"])
                 if notify.notify(uid, "Lembrete", r["text"], urgent=True, now=now):

@@ -11,8 +11,8 @@ from typing import Optional
 
 import httpx
 
-SPA_PAGES = ("/", "/aprender", "/conexoes", "/skills", "/aprendi", "/estudos", "/configuracoes", "/ajuda")
-API_GET = ("health", "legal/status", "brains", "connections/google", "voice/cloud", "updates/check", "system/telemetry", "alexa", "studies/sources")
+SPA_PAGES = ("/", "/aprender", "/conexoes", "/skills", "/aprendi", "/estudos", "/configuracoes", "/ajuda", "/orb")
+API_GET = ("health", "legal/status", "brains", "connections/google", "voice/cloud", "updates/check", "system/telemetry", "system/shell", "system/autostart", "alexa", "studies/sources")
 
 Result = tuple[str, bool, str]
 

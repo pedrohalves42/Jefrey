@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { lazy, Suspense, useEffect } from "react"
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { AppShell } from "@/components/AppShell"
@@ -20,12 +20,16 @@ import Aprender from "@/pages/Aprender"
 import Termos from "@/pages/Termos"
 import Privacidade from "@/pages/Privacidade"
 import { applyEasy, getEasy } from "@/lib/easy"
+import { isDesktop } from "@/lib/shell"
+
+const Orb = lazy(() => import("@/pages/Orb"))
 
 const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true } } })
 
 export default function App() {
   useEffect(() => {
     applyEasy(getEasy())
+    isDesktop() // guarda ?app=1 (janela propria do programa) antes de a rota mudar a URL
     void ensureSession()
   }, [])
   return (
@@ -33,6 +37,7 @@ export default function App() {
       <AppearanceProvider>
         <BrowserRouter>
           <Routes>
+            <Route path="/orb" element={<Suspense fallback={null}><Orb /></Suspense>} />
             <Route element={<AppShell />}>
               <Route path="/" element={<Conversa />} />
               <Route path="/memoria" element={<Memoria />} />

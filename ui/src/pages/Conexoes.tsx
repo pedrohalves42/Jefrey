@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { isDesktop } from "@/lib/shell"
 import { useSearchParams } from "react-router-dom"
 import ListenButton from "@/components/ListenButton"
 import { disconnectGoogle, getGoogle, saveGoogleCredentials, googleReturnMessage, SERVICE_LABEL, startGoogle, type GoogleService, type GoogleStatus } from "@/lib/connections"
@@ -91,7 +92,26 @@ function Google() {
     if (err) {
       setMsg({ ok: false, text: err })
       setBusy(false)
+    } else if (isDesktop()) {
+      setMsg({ ok: true, text: "Abri o Google no seu navegador. Entre na sua conta, aceite e volte aqui: eu aviso quando conectar." })
+      void waitConnected()
     }
+  }
+
+  /** No app o login acontece no navegador; aqui a tela espera (ate 4 min) o Google ficar conectado. */
+  async function waitConnected() {
+    for (let i = 0; i < 80; i++) {
+      await new Promise(r => setTimeout(r, 3000))
+      const s = (await getGoogle()).data
+      if (s?.connected) {
+        setSt(s)
+        setBusy(false)
+        setMsg({ ok: true, text: "Pronto! O Google foi conectado. Agora o Jefrey pode ver a sua agenda e ajudar com o seu e-mail." })
+        return
+      }
+    }
+    setBusy(false)
+    setMsg({ ok: false, text: "Não vi a conexão terminar. Se o Google mostrou algum erro no navegador, me conte; senão, aperte o botão de novo." })
   }
 
   async function leave() {
@@ -145,16 +165,17 @@ function Google() {
           {st?.configured && st.redirect_uri && (
             <p className="mt-3 break-all text-sm text-white/50">Se o Google disser “redirect_uri_mismatch”, cadastre este endereço no Google Cloud: <code className="text-white/80">{st.redirect_uri}</code></p>
           )}
+          <Note msg={msg} />
           {st && !st.configured && <GoogleSetup onDone={() => void load()} />}
           {st?.configured && (
-            <details className="mt-3 rounded-xl border border-white/10 p-3">
-              <summary className="cursor-pointer text-base text-white/75">Trocar o ID e a chave do Google</summary>
+            <details key={msg && !msg.ok ? "aberto" : "fechado"} open={!!msg && !msg.ok} className="mt-3 rounded-xl border border-white/10 p-3">
+              <summary className="cursor-pointer text-base text-white/85">Trocar o ID e a chave do Google</summary>
               <GoogleSetup onDone={() => void load()} />
             </details>
           )}
         </>
       )}
-      <Note msg={msg} />
+      {st?.connected && <Note msg={msg} />}
     </section>
   )
 }

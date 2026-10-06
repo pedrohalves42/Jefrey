@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/system", tags=["system"])
 
@@ -44,3 +45,68 @@ async def quit_app(request: Request, background: BackgroundTasks):
         raise HTTPException(status_code=404, detail="indisponivel neste modo")
     background.add_task(control.request_quit)  # depois de responder, para a tela receber o aviso
     return {"ok": True, "message": "O Jefrey vai fechar."}
+
+
+class OpenBody(BaseModel):
+    url: str = Field(max_length=2000)
+
+
+@router.post("/open-external")
+async def open_external(body: OpenBody, request: Request):
+    """Abre no navegador de verdade (o Google nao deixa entrar por dentro da janela do app). So enderecos do Google."""
+    _login(request)
+    from src.jefrey.native import shell
+
+    if not shell.open_external(body.url):
+        raise HTTPException(status_code=422, detail="endereco nao permitido")
+    return {"ok": True}
+
+
+class AutostartBody(BaseModel):
+    enabled: bool
+
+
+@router.get("/autostart")
+async def autostart_status(request: Request):
+    _login(request)
+    from src.jefrey.native import autostart
+
+    return {"available": autostart.available(), "enabled": autostart.is_enabled()}
+
+
+@router.put("/autostart")
+async def autostart_set(body: AutostartBody, request: Request):
+    _login(request)
+    from src.jefrey.native import autostart
+
+    if not autostart.available():
+        raise HTTPException(status_code=404, detail="so no programa instalado")
+    ok = autostart.set_enabled(body.enabled)
+    return {"available": True, "enabled": autostart.is_enabled(), "ok": ok}
+
+
+@router.get("/shell")
+async def shell_info(request: Request):
+    """A tela esta dentro da janela propria do app (e nao em um navegador)? Quem sabe e o programa."""
+    _login(request)
+    from src.jefrey.native import control
+
+    return {"window": control.has_window()}
+
+
+@router.post("/orb")
+async def show_orb(request: Request):
+    _login(request)
+    from src.jefrey.native import control
+
+    if not control.show_orb():
+        raise HTTPException(status_code=404, detail="indisponivel neste modo")
+    return {"ok": True}
+
+
+@router.post("/show")
+async def show_window(request: Request):
+    _login(request)
+    from src.jefrey.native import control
+
+    return {"ok": control.show_window()}
