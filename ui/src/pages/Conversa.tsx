@@ -531,7 +531,7 @@ export default function Conversa() {
 
       {/* palco: o avatar ocupa quase toda a tela e as opcoes ficam pequenas por cima */}
       <section className="jf-stage relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl" aria-label="Conversa com o Jefrey">
-        <div className="relative min-h-[36%] flex-1" onPointerMove={onTilt} onPointerLeave={offTilt}>
+        <div className="relative min-h-[26%] flex-1" onPointerMove={onTilt} onPointerLeave={offTilt}>
         <div ref={stageRef} className="jf-stage-core absolute inset-0 will-change-transform">
         <div className="jf-rings" aria-hidden="true" />
           <div ref={tiltRef} className="jf-tilt h-full w-full cursor-pointer" role="button" tabIndex={0} aria-label="Toque no avatar para falar com o Jefrey" onClick={() => void toggleVoiceMode()} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); void toggleVoiceMode() } }}>
@@ -572,7 +572,7 @@ export default function Conversa() {
         </div>
 
         {/* doca: legenda, atalhos, voz, texto e opcoes (fora do cerebro, nunca por cima dele) */}
-        <div className="relative z-30 flex max-h-[46%] shrink-0 flex-col items-center gap-3 overflow-y-auto border-t border-white/10 bg-black/50 px-4 pb-4 pt-4">
+        <div className="relative z-30 flex max-h-[68%] shrink-0 flex-col items-center gap-2 overflow-y-auto border-t border-white/10 bg-black/50 px-4 pb-3 pt-3">
           <div className="w-full max-w-lg"><BriefingCard /></div>
           {empty && (
             <>
@@ -622,7 +622,7 @@ export default function Conversa() {
               {voiceReady.error && <p role="alert" className="text-center text-sm text-red-200">{voiceReady.error}</p>}
             </div>
           )}
-          <Wave level={micLevel} speaking={speaker.speaking} className="max-w-md opacity-80" />
+          <Wave level={micLevel} speaking={speaker.speaking} className={`max-w-md opacity-80 ${speaker.speaking || micLevel > 0.02 ? "" : "hidden"}`} />
 
           <div className="flex w-full max-w-2xl items-end gap-1.5">
             <div className="relative">
