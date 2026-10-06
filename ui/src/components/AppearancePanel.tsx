@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { BrainStage } from "@/components/brain/BrainStage"
 import { PRESETS, useAppearance, type BrainShape } from "@/lib/appearance"
 import { clearAvatarImage, loadAvatarImage, processImageFile, saveAvatarImage } from "@/lib/avatarImage"
@@ -10,20 +10,42 @@ const SHAPES: { id: BrainShape; label: string; hint: string }[] = [
   { id: "hologram", label: "Holograma", hint: "qualquer imagem sua, em estilo holograma animado" },
 ]
 
+/** O valor so e aplicado quando a pessoa para de arrastar (ou apos 300 ms): antes cada pontinho do controle RECRIAVA a cena 3D inteira e a pagina travava. */
 function Slider(props: { label: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void; display?: string; style?: React.CSSProperties }) {
+  const [local, setLocal] = useState(props.value)
+  const timer = useRef<number>(0)
+  const dragging = useRef(false)
+  useEffect(() => {
+    if (!dragging.current) setLocal(props.value)
+  }, [props.value])
+  useEffect(() => () => window.clearTimeout(timer.current), [])
+  const commit = (v: number) => {
+    window.clearTimeout(timer.current)
+    props.onChange(v)
+  }
+  const pct = (v: number) => `${Math.round(v * 100)}%`
+  const label = local === props.value ? (props.display ?? pct(props.value)) : local > 1 ? `${Math.round(local)}` : pct(local) // arrastando: mostra o valor novo
   return (
     <label className="block text-sm">
       <span className="flex justify-between text-white/80">
         {props.label}
-        <span className="text-white/45">{props.display ?? Math.round(props.value * 100) + "%"}</span>
+        <span className="text-white/45">{label}</span>
       </span>
       <input
         type="range"
         min={props.min}
         max={props.max}
         step={props.step}
-        value={props.value}
-        onChange={e => props.onChange(Number(e.target.value))}
+        value={local}
+        onPointerDown={() => { dragging.current = true }}
+        onPointerUp={() => { dragging.current = false; commit(local) }}
+        onKeyUp={() => commit(local)}
+        onChange={e => {
+          const v = Number(e.target.value)
+          setLocal(v)
+          window.clearTimeout(timer.current)
+          timer.current = window.setTimeout(() => commit(v), 300)
+        }}
         className="jf-focus mt-1 w-full"
         style={props.style}
       />
@@ -44,6 +66,7 @@ function Toggle({ label, hint, checked, onChange }: { label: string; hint: strin
 }
 
 export function AppearancePanel() {
+  const [preview, setPreview] = useState(false)
   const { appearance: a, set, reset, exportJson, importJson } = useAppearance()
   const [msg, setMsg] = useState<string | null>(null)
   const [pasted, setPasted] = useState("")
@@ -68,8 +91,18 @@ export function AppearancePanel() {
       <p className="mb-3 text-sm text-white/55">Deixe o Jefrey com a sua cara. Tudo muda na hora e fica salvo neste computador.</p>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(220px,1fr)_1.2fr]">
-        <div className="jf-panel h-56 lg:h-auto lg:min-h-[260px]">
-          <BrainStage state="thinking" className="h-full" />
+        <div className="jf-panel flex h-56 items-center justify-center lg:h-auto lg:min-h-[260px]">
+          {preview ? (
+            <div className="relative h-full w-full">
+              <BrainStage state="thinking" className="h-full" />
+              <button type="button" onClick={() => setPreview(false)} className="jf-focus absolute right-2 top-2 rounded-md border border-white/20 bg-black/50 px-2 py-1 text-xs text-white/80 hover:bg-white/10">Ocultar prévia</button>
+            </div>
+          ) : (
+            <div className="px-4 text-center">
+              <p className="text-sm text-white/60">A prévia em 3D pesa no computador, por isso fica desligada. As mudanças aparecem na tela principal.</p>
+              <button type="button" onClick={() => setPreview(true)} className="jf-btn jf-focus mt-3 px-4 py-2 text-sm">Ver a prévia</button>
+            </div>
+          )}
         </div>
 
         <div className="space-y-4">

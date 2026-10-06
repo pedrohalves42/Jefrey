@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react"
 import ListenButton from "@/components/ListenButton"
-import { waDecide, waPending, whyText, type WaDraft } from "@/lib/wa"
+import { waDecide, waPending, waSetMode, whyText, type WaChat, type WaDraft, type WaMode } from "@/lib/wa"
 
 /** Pop-up de aprovacao: aparece em qualquer tela quando uma resposta do WhatsApp precisa da sua decisao. */
 export default function WaApprovals() {
   const [drafts, setDrafts] = useState<WaDraft[]>([])
+  const [fresh, setFresh] = useState<WaChat[]>([])
   const [text, setText] = useState("")
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -13,7 +14,10 @@ export default function WaApprovals() {
     let alive = true
     const tick = async () => {
       const r = await waPending()
-      if (alive && r.data) setDrafts(r.data.pending)
+      if (alive && r.data) {
+        setDrafts(r.data.pending)
+        setFresh(r.data.new_chats ?? [])
+      }
     }
     void tick()
     const t = window.setInterval(() => void tick(), 4000)
@@ -29,6 +33,29 @@ export default function WaApprovals() {
     setErr(null)
   }, [d?.id, d?.reply])
 
+  async function choose(chat: WaChat, mode: WaMode) {
+    const r = await waSetMode(chat.id, mode)
+    if (r.ok) setFresh(prev => prev.filter(c => c.id !== chat.id))
+  }
+
+  const nc = fresh[0]
+  if (!d && nc) {
+    return (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4" role="alertdialog" aria-modal="true" aria-label="Nova conversa do WhatsApp">
+        <div className="jf-panel w-full max-w-lg border border-cyan-300/40 bg-[#07141b] p-5">
+          <p className="text-sm text-cyan-200">WhatsApp · conversa nova</p>
+          <h2 className="mt-1 text-2xl font-semibold text-white">{nc.display || "Alguém"} te escreveu</h2>
+          <p className="mt-2 text-base text-white/80">O que o Jefrey deve fazer nas conversas com essa pessoa? Enquanto você não escolher, ele <b>não responde</b>.</p>
+          <div className="mt-4 flex flex-col gap-2">
+            <button type="button" onClick={() => void choose(nc, "ask")} className="jf-btn jf-focus px-5 py-3 text-lg">Preparar a resposta e perguntar antes de enviar</button>
+            <button type="button" onClick={() => void choose(nc, "auto")} className="jf-focus rounded-lg border border-white/30 px-5 py-3 text-lg text-white/90 hover:bg-white/5">Responder sozinho (só o que for simples)</button>
+            <button type="button" onClick={() => void choose(nc, "off")} className="jf-focus rounded-lg border border-white/20 px-5 py-3 text-lg text-white/70 hover:bg-white/5">Ignorar essa pessoa</button>
+          </div>
+          <p className="mt-3 text-sm text-white/50">Dinheiro, dados pessoais, compromissos e assuntos delicados sempre pedem a sua aprovação. Você muda isso depois em Conexões → WhatsApp.</p>
+        </div>
+      </div>
+    )
+  }
   if (!d) return null
 
   async function decide(decision: "approve" | "reject") {

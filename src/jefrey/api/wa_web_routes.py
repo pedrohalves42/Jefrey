@@ -75,7 +75,9 @@ async def pending(request: Request):
     """Respostas esperando a aprovacao da pessoa (a tela pergunta de poucos em poucos segundos para abrir o aviso)."""
     uid = _user(request)
     s = W.WAStore()
-    return {"pending": s.list_drafts(uid, "pending", 5), "paired": bool(s.devices(uid))}
+    # conversas novas (ainda sem escolha): enquanto a pessoa nao disser o que fazer, o Jefrey NAO responde. A tela pergunta.
+    new_chats = [c for c in s.list_chats(uid) if c["mode"] == "pending"][:3]
+    return {"pending": s.list_drafts(uid, "pending", 5), "paired": bool(s.devices(uid)), "new_chats": new_chats}
 
 
 @router.post("/open-extension-folder")

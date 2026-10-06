@@ -347,7 +347,7 @@ def test_api_aviso_de_aprovacao_e_pasta_da_extensao(api, monkeypatch):
     import src.jefrey.core.llm_provider as LP
     monkeypatch.setattr(LP, "get_llm_client", lambda: FakeLLM("Oi!"))
     assert c.get("/wa/pending").status_code == 401
-    assert c.get("/wa/pending", headers=h).json() == {"pending": [], "paired": False}
+    assert c.get("/wa/pending", headers=h).json() == {"pending": [], "paired": False, "new_chats": []}
     tok = c.post("/wa/device/pair", json={"code": c.post("/wa/pairing", headers=h).json()["code"]}).json()["token"]
     dh = {"Authorization": f"Bearer {tok}"}
     c.post("/wa/device/inbound", headers=dh, json=entrada())
@@ -406,3 +406,19 @@ def test_guarda_continua_recusando_paginas_da_web_inclusive_na_porta_do_aparelho
     assert c.post("/wa/device/inbound", headers={"Origin": "https://evil.example"}).status_code == 403
     assert c.post("/wa/device/inbound", headers={"Origin": "https://web.whatsapp.com", "Sec-Fetch-Site": "cross-site"}).status_code == 403
     assert c.post("/wa/device/inbound", headers={"Host": "evil.example"}).status_code == 400  # DNS rebinding continua barrado
+
+
+def test_conversa_nova_aparece_na_lista_de_perguntas_ate_a_pessoa_escolher(db, monkeypatch):
+    """O Jefrey nao responde conversa nova; antes a pessoa nao sabia por que. Agora a tela pergunta o que fazer."""
+    from src.jefrey.api import wa_web_routes as R
+    s = W.WAStore()
+    monkeypatch.setattr(R, "_user", lambda request: "ana")
+    s.touch_chat("ana", "Maria")
+    s.touch_chat("ana", "João")
+    s.touch_chat("bob", "Pedro")  # de outra pessoa: nunca aparece
+    out = run(R.pending(object()))
+    assert sorted(c["display"] for c in out["new_chats"]) == ["João", "Maria"] and all(c["mode"] == "pending" for c in out["new_chats"])
+    maria = next(c for c in out["new_chats"] if c["display"] == "Maria")
+    s.set_mode("ana", maria["id"], "ask")
+    out = run(R.pending(object()))
+    assert [c["display"] for c in out["new_chats"]] == ["João"]
