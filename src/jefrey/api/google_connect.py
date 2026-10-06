@@ -1,6 +1,7 @@
 """Rotas do botao "Conectar Google". O retorno do Google e uma navegacao (sem login do Jefrey): protegido pelo state."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from typing import Optional
@@ -25,12 +26,15 @@ def _user(request: Request) -> str:
 
 
 class StartBody(BaseModel):
-    services: list[str] = Field(default_factory=lambda: ["calendar", "email"], min_length=1, max_length=3)
+    services: list[str] = Field(default_factory=lambda: ["calendar", "email"], min_length=1, max_length=5)
 
 
 @router.get("")
 async def google_status(request: Request):
-    out = G.status(_user(request))
+    uid = _user(request)
+    out = G.status(uid)
+    if out.get("connected"):
+        out["health"] = await asyncio.to_thread(G.check_health, uid)  # ok | chave | entrar | desconhecido
     out["available_services"] = [{"id": k, "label": v["label"]} for k, v in G.SERVICES.items()]
     diag = G.diagnose(str(request.base_url).rstrip("/"))
     out["redirect_uri"] = diag["redirect_uri"]  # o que o Google vai receber: precisa estar cadastrado no Cloud Console

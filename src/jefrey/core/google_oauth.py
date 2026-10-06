@@ -72,6 +72,7 @@ def save_credentials(client_id: str, client_secret: str) -> None:
     f = _config_file()
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text(json.dumps({"installed": {"client_id": cid, "client_secret": sec}}), encoding="utf-8")
+    _health_cache.clear()  # chave nova: a proxima verificacao e de verdade
 
 
 def scopes_for(services: list[str]) -> list[str]:
@@ -82,6 +83,59 @@ def scopes_for(services: list[str]) -> list[str]:
     for s in dict.fromkeys(services):
         out += [sc for sc in SERVICES[s]["scope"].split() if sc not in out]
     return out
+
+
+_health_cache: dict[str, tuple[float, str]] = {}
+HEALTH_TTL_S = 600
+
+
+def check_health(user_id: str, *, post=None, now: Optional[float] = None) -> str:
+    """O Google ainda aceita a conexao desta pessoa? 'ok' | 'chave' (chave secreta recusada: provavelmente apagada/trocada no Google Cloud) |
+    'entrar' (a permissao venceu ou foi retirada: entrar de novo) | 'desconhecido' (sem internet etc.). Guarda o resultado por 10 min."""
+    import httpx
+
+    from src.jefrey.core.db import get_db
+    from src.jefrey.core.secret_store import unprotect
+
+    t = time.time() if now is None else now
+    hit = _health_cache.get(user_id)
+    if hit and t - hit[0] < HEALTH_TTL_S:
+        return hit[1]
+    cred = credentials()
+    if cred is None:
+        return "chave"
+    OAuthToken = _table_model()
+    with get_db() as s:
+        row = s.query(OAuthToken).filter(OAuthToken.user_id == user_id, OAuthToken.provider.in_([m["provider"] for m in SERVICES.values()]),
+                                         OAuthToken.refresh_token.isnot(None)).first()
+        refresh = unprotect(row.refresh_token) if row is not None and row.refresh_token else None
+    if not refresh:
+        return "entrar"
+    send = post or (lambda url, data: httpx.post(url, data=data, timeout=15))
+    try:
+        r = send(TOKEN_URL, {"client_id": cred["client_id"], "client_secret": cred["client_secret"], "refresh_token": refresh, "grant_type": "refresh_token"})
+    except Exception as e:
+        logger.info("google: verificacao sem internet (%s)", type(e).__name__)
+        return "desconhecido"
+    if r.status_code == 200:
+        verdict = "ok"
+    else:
+        err = ""
+        try:
+            err = str(r.json().get("error", ""))
+        except Exception:
+            err = ""
+        verdict = "chave" if err in ("invalid_client", "unauthorized_client") else "entrar" if err == "invalid_grant" else "desconhecido"
+    _health_cache[user_id] = (t, verdict)
+    return verdict
+
+
+def forget_health(user_id: str | None = None) -> None:
+    """Apaga o resultado guardado (ao trocar a chave ou reconectar, a proxima olhada e de verdade)."""
+    if user_id is None:
+        _health_cache.clear()
+    else:
+        _health_cache.pop(user_id, None)
 
 
 def access_token(user_id: str, service: str) -> str:

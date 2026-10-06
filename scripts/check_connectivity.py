@@ -49,9 +49,10 @@ def run(base: str = "http://127.0.0.1:8000", user: str = "demo", transport: http
             add("FALHOU", "cerebro de IA (chat)", type(e).__name__)
         try:
             b = get("/brains").json()
-            brains = b.get("brains", b if isinstance(b, list) else [])
-            conectados = [x.get("id") for x in brains if isinstance(x, dict) and (x.get("connected") or x.get("configured"))]
-            add("OK" if conectados else "AVISO", "cerebros conectados", ", ".join(map(str, conectados)) or "nenhum")
+            brains = [x for x in b.get("brains", []) if isinstance(x, dict)]
+            principal = next((x for x in brains if x.get("role") == "principal"), None)
+            reservas = [str(x.get("id")) for x in brains if x.get("role") != "principal"]
+            add("OK" if principal else "AVISO", "cerebros conectados", (f"principal {principal.get('id')} ({principal.get('model')})" if principal else "sem principal") + (f"; reservas: {', '.join(reservas)}" if reservas else ""))
         except Exception as e:
             add("AVISO", "cerebros conectados", type(e).__name__)
 
@@ -101,6 +102,12 @@ def run(base: str = "http://127.0.0.1:8000", user: str = "demo", transport: http
             add("OK" if engines.get("local") or engines.get("cloud") else "FALHOU", "voz natural disponivel", ", ".join(k for k, v in engines.items() if v) or "nenhuma")
             sp = c.post("/voice/speak", headers=auth, json={"text": "Teste de voz do Jefrey."})
             add("OK" if sp.status_code == 200 and len(sp.content) > 2000 else "FALHOU", "voz: gerar fala", f"{sp.headers.get('x-voice-engine', '?')} · {len(sp.content)} bytes" if sp.status_code == 200 else f"HTTP {sp.status_code}")
+            if engines.get("cloud"):
+                cl = c.post("/voice/speak", headers=auth, json={"text": "Teste.", "engine": "cloud"})
+                if cl.status_code == 200:
+                    add("OK", "voz da nuvem (OpenAI)", f"{len(cl.content)} bytes")
+                else:
+                    add("AVISO", "voz da nuvem (OpenAI)", str((cl.json() if cl.content else {}).get("detail", f"HTTP {cl.status_code}"))[:140] + " (usando a voz do computador)")
         except Exception as e:
             add("FALHOU", "voz", type(e).__name__)
         try:

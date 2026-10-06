@@ -138,6 +138,19 @@ function Google() {
           <p className="mt-3 text-base text-white/85">
             Conectado{st.email ? ` como ${st.email}` : ""}: {st.services.map(s => SERVICE_LABEL[s]).join(", ")}.
           </p>
+          {st.health === "chave" && (
+            <div role="alert" className="mt-3 rounded-xl border border-amber-300/40 bg-amber-400/10 p-3">
+              <p className="text-base text-amber-100">O Google parou de aceitar a chave secreta que o Jefrey guardou (ela pode ter sido apagada ou trocada no Google Cloud). Por isso a agenda não atualiza.</p>
+              <p className="mt-1 text-base text-white/80">Cole a chave atual abaixo. Você <b>não</b> precisa entrar de novo.</p>
+              <GoogleSetup onDone={() => void load()} />
+            </div>
+          )}
+          {st.health === "entrar" && (
+            <div role="alert" className="mt-3 rounded-xl border border-amber-300/40 bg-amber-400/10 p-3">
+              <p className="text-base text-amber-100">A permissão do Google venceu. É só entrar de novo.</p>
+              <button type="button" disabled={busy} onClick={() => void go(st.services)} className={`${big} mt-2`}>Entrar de novo</button>
+            </div>
+          )}
           {ALL_SERVICES.some(k => !st.services.includes(k)) && (
             <fieldset className="mt-4 rounded-xl border border-white/10 p-3">
               <legend className="px-1 text-base text-white/80">Liberar mais coisas</legend>

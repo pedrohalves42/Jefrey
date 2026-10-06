@@ -6,6 +6,22 @@ from datetime import datetime, timedelta, timezone
 from src.jefrey.domain.event_alerts import UpcomingEvent
 
 
+async def calendar_events(user_id: str, time_min: datetime, time_max: datetime, max_results: int = 10) -> list[dict]:
+    """Eventos da agenda do Google ({id, summary, start}); `start` vem como texto ISO (ou AAAA-MM-DD em evento de dia inteiro).
+
+    A skill expoe a ferramenta como StructuredTool: o jeito certo de chamar e `ainvoke` com um dicionario.
+    """
+    from src.jefrey.skills.calendar import CalendarSkill
+
+    raw = await CalendarSkill().list_events.ainvoke(
+        {"time_min": time_min.isoformat(), "time_max": time_max.isoformat(), "max_results": max_results, "user_id": user_id})
+    if raw and isinstance(raw, list) and isinstance(raw[0], dict) and "error" in raw[0]:
+        if any(k in str(raw[0].get("error", "")) for k in ("invalid_client", "invalid_grant", "unauthorized_client")):
+            raise LookupError("google precisa de uma chave nova ou de um novo login")  # o painel mostra "conecte o Google"
+        raise RuntimeError("agenda do Google indisponivel")
+    return [e for e in (raw or []) if isinstance(e, dict)]
+
+
 class GoogleCalendarAdapter:
     """CalendarPort sobre a skill do Google Agenda. Quem nao conectou o Google simplesmente nao tem eventos."""
 
@@ -14,13 +30,12 @@ class GoogleCalendarAdapter:
 
         if not G.status(user_id).get("connected"):
             return []
-        from src.jefrey.skills.calendar import CalendarSkill
-
         now = datetime.now(timezone.utc)
-        raw = await CalendarSkill().list_events(time_min=now.isoformat(), time_max=(now + within).isoformat(), max_results=10, user_id=user_id)
         out: list[UpcomingEvent] = []
-        for e in raw or []:
-            start = str((e.get("start") or {}).get("dateTime", ""))  # eventos de dia inteiro nao tem hora: nao avisam
+        for e in await calendar_events(user_id, now, now + within, 10):
+            start = str(e.get("start") or "")  # evento de dia inteiro vem so com a data (AAAA-MM-DD): nao tem hora, nao avisa
+            if "T" not in start:
+                continue
             try:
                 when = datetime.fromisoformat(start.replace("Z", "+00:00"))
             except ValueError:

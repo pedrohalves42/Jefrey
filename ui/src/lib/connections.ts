@@ -9,6 +9,7 @@ export type GoogleStatus = {
   email: string | null
   services: GoogleService[]
   redirect_uri?: string
+  health?: "ok" | "chave" | "entrar" | "desconhecido"
   diagnosis?: { ok: boolean; advice: string; client_type: string }
   available_services: { id: GoogleService; label: string }[]
 }

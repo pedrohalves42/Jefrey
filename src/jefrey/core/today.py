@@ -205,12 +205,12 @@ async def _agenda(user_id: str) -> list[dict]:
 
     if not G.status(user_id).get("connected"):
         raise LookupError("google nao conectado")
-    from src.jefrey.skills.calendar import CalendarSkill
+    from src.jefrey.adapters.outbound.system_adapters import calendar_events
 
     now = datetime.now(timezone.utc)
     end = now.replace(hour=23, minute=59, second=59)
-    evs = await CalendarSkill().list_events(time_min=now.isoformat(), time_max=end.isoformat(), max_results=6, user_id=user_id)
-    return [{"title": _clean(e.get("summary", "Compromisso"), 80), "time": str((e.get("start") or {}).get("dateTime", ""))[11:16]} for e in (evs or [])]
+    evs = await calendar_events(user_id, now, end, 6)
+    return [{"title": _clean(e.get("summary", "Compromisso"), 80), "time": str(e.get("start") or "")[11:16] if "T" in str(e.get("start") or "") else ""} for e in evs]
 
 
 async def _reminders(user_id: str) -> list[dict]:
