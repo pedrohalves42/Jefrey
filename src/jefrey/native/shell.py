@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 TITLE = "Jefrey"
 MAIN_SIZE = (1180, 780)
 MIN_SIZE = (860, 560)
-ORB_SIZE = (150, 150)
+ORB_SIZE = (276, 299)  # o Windows tira ~16 px de largura e ~39 de altura: o orbe fica com ~260 x 260
 SIGNAL_FILE = "show.signal"
 STATE_FILE = "window.json"
 EXTERNAL_HOSTS = ("accounts.google.com", "console.cloud.google.com", "myaccount.google.com")
@@ -86,7 +86,7 @@ def clamp_state(state: dict, screen: tuple[int, int]) -> dict:
     """Posicao/tamanho salvos so valem se a janela ficaria visivel (o monitor pode ter mudado)."""
     w = max(MIN_SIZE[0], min(int(state.get("w", MAIN_SIZE[0])), screen[0]))
     h = max(MIN_SIZE[1], min(int(state.get("h", MAIN_SIZE[1])), screen[1]))
-    out: dict = {"w": w, "h": h}
+    out: dict = {"w": w, "h": h, "fullscreen": bool(state.get("fullscreen", True))}  # tela cheia sem bordas e o padrao
     x, y = state.get("x"), state.get("y")
     if isinstance(x, int) and isinstance(y, int) and -50 <= x <= screen[0] - 120 and 0 <= y <= screen[1] - 120:
         out.update(x=x, y=y)
@@ -106,7 +106,10 @@ def save_state(home: Path, state: dict) -> None:
         f = home / "config" / STATE_FILE
         f.parent.mkdir(parents=True, exist_ok=True)
         tmp = f.with_suffix(".tmp")
-        tmp.write_text(json.dumps({k: state[k] for k in ("w", "h", "x", "y") if isinstance(state.get(k), int)}), encoding="utf-8")
+        data = {k: state[k] for k in ("w", "h", "x", "y") if isinstance(state.get(k), int)}
+        if isinstance(state.get("fullscreen"), bool):
+            data["fullscreen"] = state["fullscreen"]
+        tmp.write_text(json.dumps(data), encoding="utf-8")
         os.replace(tmp, f)
     except OSError as e:
         logger.debug("estado da janela nao salvo (%s)", type(e).__name__)
@@ -129,6 +132,20 @@ class Api:
         self._shell.show()
         return True
 
+    def toggle_fullscreen(self) -> bool:
+        return self._shell.toggle_fullscreen()
+
+    def is_fullscreen(self) -> bool:
+        return self._shell.fullscreen
+
+    def minimize(self) -> bool:
+        self._shell.minimize()
+        return True
+
+    def hide_window(self) -> bool:
+        self._shell.hide()
+        return True
+
 
 class DesktopShell:
     def __init__(self, url: str, home: Path, quit_cb: Callable[[], None], start_hidden: bool = False):
@@ -143,6 +160,7 @@ class DesktopShell:
         self._state: dict = {}
         self._on_tray_notice: Optional[Callable[[str, str], None]] = None
         self._stop = threading.Event()
+        self.fullscreen = True
 
     # ---- acoes (podem ser chamadas de qualquer thread)
     def show(self) -> None:
@@ -157,6 +175,26 @@ class DesktopShell:
             hotkey.focus_window(TITLE)
         except Exception as e:
             logger.info("nao consegui mostrar a janela (%s)", type(e).__name__)
+
+    def toggle_fullscreen(self) -> bool:
+        """Tela cheia sem bordas <-> janela comum. Devolve se ficou em tela cheia. A escolha fica guardada."""
+        if self.main is None:
+            return self.fullscreen
+        try:
+            self.main.toggle_fullscreen()
+            self.fullscreen = not self.fullscreen
+            self._state["fullscreen"] = self.fullscreen
+            save_state(self.home, self._state)
+        except Exception as e:
+            logger.info("tela cheia indisponivel (%s)", type(e).__name__)
+        return self.fullscreen
+
+    def minimize(self) -> None:
+        try:
+            if self.main is not None:
+                self.main.minimize()
+        except Exception as e:
+            logger.debug("minimize: %s", type(e).__name__)
 
     def hide(self) -> None:
         try:
@@ -212,7 +250,9 @@ class DesktopShell:
     def _snapshot(self) -> None:
         try:
             if self.main is not None:
-                self._state.update(w=int(self.main.width), h=int(self.main.height), x=int(self.main.x), y=int(self.main.y))
+                if not self.fullscreen:  # em tela cheia o tamanho e o da tela: nao vale guardar
+                    self._state.update(w=int(self.main.width), h=int(self.main.height), x=int(self.main.x), y=int(self.main.y))
+                self._state["fullscreen"] = self.fullscreen
                 save_state(self.home, self._state)
         except Exception as e:
             logger.debug("snapshot: %s", type(e).__name__)
@@ -264,13 +304,15 @@ class DesktopShell:
         api = Api(self)
         st = clamp_state(load_state(self.home), self._screen())
         self._state = dict(st)
+        self.fullscreen = bool(st.get("fullscreen", True))
         self.main = webview.create_window(
             TITLE, html=splash("Acordando…"), width=st["w"], height=st["h"], x=st.get("x"), y=st.get("y"),
             min_size=MIN_SIZE, background_color="#030a10", js_api=api, text_select=True, hidden=self.start_hidden,
+            fullscreen=self.fullscreen,
         )
         self.orb = webview.create_window(
             "Jefrey orbe", url=f"{self.url}/orb?app=1", width=ORB_SIZE[0], height=ORB_SIZE[1], frameless=True,
-            easy_drag=True, on_top=True, resizable=False, hidden=True, min_size=(100, 100), background_color="#030a10", js_api=api, shadow=False,
+            easy_drag=True, on_top=True, resizable=False, hidden=True, min_size=(200, 200), background_color="#030a10", js_api=api, shadow=False,
         )
         self.main.events.closing += self._on_closing
         self.main.events.loaded += lambda: self._allow_microphone() if not getattr(self, '_mic_done', False) and not setattr(self, '_mic_done', True) else None

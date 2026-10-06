@@ -28,7 +28,8 @@ FILES: dict[str, dict] = {
 }
 MAX_CHARS = 700
 # Mais variacao e um pouco mais calma que o padrao do modelo (0,667 / 1,0 / 0,8): menos "voz de GPS", mais natural.
-PROSODY = {"length_scale": 1.04, "noise_scale": 0.78, "noise_w_scale": 0.95}
+# ritmo um pouco mais vivo (length < 1) e entonacao mais solta (noise maiores): menos "GPS", mais animado e firme
+PROSODY = {"length_scale": 0.94, "noise_scale": 0.88, "noise_w_scale": 1.08}
 CHUNK = 1024 * 256
 _cache: dict = {}
 

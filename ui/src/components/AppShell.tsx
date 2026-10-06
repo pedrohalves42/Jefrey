@@ -8,6 +8,7 @@ import { StatusPill } from "@/components/StatusPill"
 import VersionLabel from "@/components/VersionLabel"
 import { ReminderBanner } from "@/components/ReminderBanner"
 import WaApprovals from "@/components/WaApprovals"
+import WindowControls from "@/components/WindowControls"
 import { UpdateBanner } from "@/components/UpdateBanner"
 
 // easy: aparece no modo Fácil (padrao): so o essencial para quem nao e tecnico
@@ -58,6 +59,7 @@ export function AppShell() {
   if (loc.pathname !== "/bem-vindo" && loc.pathname !== "/primeira-vez" && loc.pathname !== "/termos" && needsWelcome(cfg.data, welcomeSkipped())) return <Navigate to="/primeira-vez" replace />
   return (
     <div className="flex h-dvh flex-col md:flex-row">
+      <WindowControls />
       <ReminderBanner />
       <WaApprovals />
       <UpdateBanner />

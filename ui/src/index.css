@@ -288,3 +288,22 @@ html[data-easy="1"] .text-white\/65, html[data-easy="1"] .text-white\/70 { color
 .jf-chip:hover { transform: translateY(-2px); box-shadow: 0 4px 18px hsl(var(--hue) 90% 60% / 0.25); }
 .jf-chip:active { transform: translateY(0) scale(0.97); }
 @media (prefers-reduced-motion: reduce) { .jf-tilt, .jf-chip { transition: none; } .jf-chip:hover { transform: none; } }
+
+/* Pagina Hoje: movimento leve (desligado para quem pede menos movimento) */
+@keyframes jfRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes jfMarquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes jfFlashUp { 0% { background-color: hsl(150 80% 45% / .45); } 100% { background-color: transparent; } }
+@keyframes jfFlashDown { 0% { background-color: hsl(0 80% 55% / .45); } 100% { background-color: transparent; } }
+@keyframes jfFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes jfProgress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.jf-rise { animation: jfRise .5s ease both; }
+.jf-ticker { display: flex; width: max-content; animation: jfMarquee 38s linear infinite; }
+.jf-ticker:hover { animation-play-state: paused; }
+.jf-flash-up { animation: jfFlashUp 1.4s ease-out; }
+.jf-flash-down { animation: jfFlashDown 1.4s ease-out; }
+.jf-fade { animation: jfFade .45s ease both; }
+.jf-progress { transform-origin: left; animation: jfProgress 8s linear forwards; }
+@media (prefers-reduced-motion: reduce) {
+  .jf-rise, .jf-fade, .jf-flash-up, .jf-flash-down, .jf-progress { animation: none; }
+  .jf-ticker { animation: none; flex-wrap: wrap; width: auto; }
+}

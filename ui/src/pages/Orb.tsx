@@ -3,12 +3,6 @@ import { BrainStage } from "@/components/brain/BrainStage"
 import { ensureSession } from "@/lib/session"
 import { listenOrb, showMainWindow, type OrbState } from "@/lib/shell"
 
-declare global {
-  interface Window {
-    pywebview?: { api?: { expand?: () => Promise<boolean> } }
-  }
-}
-
 /** Bolinha pequena, sempre visivel: mostra o que o Jefrey esta fazendo; um clique abre a janela grande. */
 export default function Orb() {
   const [s, setS] = useState<OrbState>({ state: "idle", level: 0 })

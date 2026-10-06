@@ -18,6 +18,7 @@ import { haltComputer } from "@/lib/halt"
 import QuickActions from "@/components/QuickActions"
 import LearnedToast from "@/components/LearnedToast"
 import TodayPopup from "@/components/TodayPopup"
+import NewsPopup from "@/components/NewsPopup"
 import DayStrip from "@/components/DayStrip"
 import AvatarPicker from "@/components/AvatarPicker"
 import { LivePanel } from "@/components/hud/LivePanel"
@@ -531,7 +532,7 @@ export default function Conversa() {
 
       {/* palco: o avatar ocupa quase toda a tela e as opcoes ficam pequenas por cima */}
       <section className="jf-stage relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl" aria-label="Conversa com o Jefrey">
-        <div className="relative min-h-[26%] flex-1" onPointerMove={onTilt} onPointerLeave={offTilt}>
+        <div className="relative min-h-[46%] flex-1" onPointerMove={onTilt} onPointerLeave={offTilt}>
         <div ref={stageRef} className="jf-stage-core absolute inset-0 will-change-transform">
         <div className="jf-rings" aria-hidden="true" />
           <div ref={tiltRef} className="jf-tilt h-full w-full cursor-pointer" role="button" tabIndex={0} aria-label="Toque no avatar para falar com o Jefrey" onClick={() => void toggleVoiceMode()} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); void toggleVoiceMode() } }}>
@@ -551,6 +552,7 @@ export default function Conversa() {
         {hud && <HudOverlay messages={active.messages} activity={activity} />}
         {hud && <LivePanel />}
 
+        <NewsPopup />
         {todayOpen && <TodayPopup name={myName ?? undefined} onClose={() => setTodayOpen(false)} />}
 
         {/* aprovacao de acao de risco */}
@@ -572,13 +574,13 @@ export default function Conversa() {
         </div>
 
         {/* doca: legenda, atalhos, voz, texto e opcoes (fora do cerebro, nunca por cima dele) */}
-        <div className="relative z-30 flex max-h-[68%] shrink-0 flex-col items-center gap-2 overflow-y-auto border-t border-white/10 bg-black/50 px-4 pb-3 pt-3">
+        <div className="relative z-30 flex max-h-[54%] shrink-0 flex-col items-center gap-2 overflow-y-auto border-t border-white/10 bg-black/50 px-4 pb-3 pt-3">
           <div className="w-full max-w-lg"><BriefingCard /></div>
           {empty && (
             <>
               <div className="max-w-xl text-center">
-                <h2 className="text-lg font-semibold text-white">{greeting(clock.getHours(), myName)}</h2>
-                <p className="text-sm text-white/60">{myName ? "O que vamos resolver agora?" : "Eu sou o Jefrey. Como posso te chamar?"}</p>
+                <h2 className="text-base font-semibold text-white">{greeting(clock.getHours(), myName)}</h2>
+                <p className="text-xs text-white/55">{myName ? "O que vamos resolver agora?" : "Eu sou o Jefrey. Como posso te chamar?"}</p>
               </div>
               <DayStrip onOpen={() => setTodayOpen(true)} />
             </>

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom"
 import ListenButton from "@/components/ListenButton"
 import { change, getTodayCached, money, points, resetTodayCache, saveRegion, spokenSummary, UFS, type NewsItem, type Quote, type TodayData } from "@/lib/today"
 import { getProfile } from "@/lib/llm"
+import { Count, ForYou, LiveHeader, Ticker } from "@/components/TodayLive"
 
 const h2 = "text-lg font-medium text-white"
 
@@ -34,7 +35,7 @@ function Q({ label, q, fmt }: { label: string; q?: Quote; fmt: (v: number) => st
   return (
     <li className="flex items-baseline justify-between gap-3 text-base">
       <span className="text-white/70">{label}</span>
-      <span className="text-white">{fmt(q.value)} <span className={c.tone === "up" ? "text-emerald-300" : c.tone === "down" ? "text-red-300" : "text-white/50"}>{c.text}</span></span>
+      <span className="text-white"><Count value={q.value} fmt={fmt} /> <span className={c.tone === "up" ? "text-emerald-300" : c.tone === "down" ? "text-red-300" : "text-white/50"}>{c.text}</span></span>
     </li>
   )
 }
@@ -69,27 +70,38 @@ function RegionForm({ onSaved }: { onSaved: () => void }) {
 export function useToday() {
   const [d, setD] = useState<TodayData | null>(null)
   const [failed, setFailed] = useState(false)
+  const [busy, setBusy] = useState(false)
   const load = useCallback(async (force = false) => {
     if (force) resetTodayCache()
+    setBusy(true)
     const r = await getTodayCached(force)
     if (r.data) {
       setD(r.data)
       setFailed(false)
     } else setFailed(true)
+    setBusy(false)
   }, [])
   useEffect(() => {
     void load()
-    const id = window.setInterval(() => void load(true), 15 * 60 * 1000)
-    return () => window.clearInterval(id)
+    const id = window.setInterval(() => void load(true), 5 * 60 * 1000)
+    const onVisible = () => {
+      if (!document.hidden) void load(false) // volta para a janela: usa o cache de 5 min ou busca de novo
+    }
+    document.addEventListener("visibilitychange", onVisible)
+    return () => {
+      window.clearInterval(id)
+      document.removeEventListener("visibilitychange", onVisible)
+    }
   }, [load])
-  return { d, failed, reload: () => load(true) }
+  return { d, failed, busy, reload: () => load(true) }
 }
 
 /** Os cartoes do dia. Usado na pagina Hoje e no popup da tela principal. */
-export function TodayCards({ d, reload }: { d: TodayData; reload: () => void }) {
+export function TodayCards({ d, reload, withForYou = false }: { d: TodayData; reload: () => void; withForYou?: boolean }) {
   const s = d.sections
   return (
     <div className="grid gap-5 md:grid-cols-2">
+      {withForYou && <ForYou items={s.foryou.items} status={s.foryou.status} onChanged={reload} />}
       <Card title="Tempo" status={s.weather.status}>
         {s.weather.status === "falta_regiao" ? (
           <>
@@ -139,23 +151,23 @@ export function TodayFooter({ d }: { d: TodayData }) {
 
 /** Pagina "Hoje". */
 export default function Hoje() {
-  const { d, failed, reload } = useToday()
+  const { d, failed, busy, reload } = useToday()
   const [name, setName] = useState<string | undefined>()
   useEffect(() => {
     void getProfile().then(r => setName(r.data?.display_name ?? undefined))
   }, [])
   return (
     <div className="mx-auto h-full max-w-5xl space-y-5 overflow-y-auto pb-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-white">Hoje</h1>
-          <p className="text-base text-white/60">O que importa agora, num lugar só.</p>
+      <header className="space-y-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1"><LiveHeader name={name} generatedAt={d?.generated_at ?? ""} onRefresh={reload} busy={busy} /></div>
+          {d && <ListenButton text={spokenSummary(d, name)} label="Ouvir o resumo" />}
         </div>
-        {d && <ListenButton text={spokenSummary(d, name)} />}
+        {d && <Ticker d={d} />}
       </header>
       {failed && !d && <p role="alert" className="text-base text-red-200">Não consegui montar o painel agora. Verifique a internet.</p>}
       {!d && !failed && <p className="text-base text-white/60">Buscando as novidades…</p>}
-      {d && <TodayCards d={d} reload={reload} />}
+      {d && <TodayCards d={d} reload={reload} withForYou />}
       {d && <TodayFooter d={d} />}
     </div>
   )

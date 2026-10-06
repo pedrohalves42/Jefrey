@@ -41,7 +41,11 @@ export default function AppSettings() {
           <button type="button" onClick={() => void showOrb()} className="jf-btn jf-focus px-5 py-3 text-base">
             Mostrar a bolinha (orbe) na tela
           </button>
-          <p className="mt-1 text-sm text-white/50">Uma bolinha pequena que fica sempre à vista. Clique nela para abrir o Jefrey.</p>
+          <p className="mt-1 text-sm text-white/50">Uma bolinha que fica sempre à vista. Clique nela para abrir o Jefrey.</p>
+          <button type="button" onClick={() => void window.pywebview?.api?.toggle_fullscreen?.()} className="jf-focus mt-4 rounded-lg border border-white/25 px-5 py-3 text-base text-white/85 hover:bg-white/5">
+            Alternar tela cheia (sem bordas) e janela comum
+          </button>
+          <p className="mt-1 text-sm text-white/50">Também funciona com a tecla F11. Em tela cheia, os botões de minimizar e esconder ficam no canto de cima, à direita.</p>
         </div>
       )}
       <p role="status" className="mt-2 text-sm text-cyan-200">{msg}</p>

@@ -140,6 +140,7 @@ describe("painel Hoje: formatacao", () => {
       sections: {
         news: { status: "ok", items: [{ title: "Governo anuncia plano", link: "https://g1.globo.com/a" }] },
         economy: base,
+        foryou: base,
         region: base,
         market: { status: "ok", usd: { value: 5, pct: 0.1 } },
         weather: { status: "ok", summary: "Agora 24 °C, chuva fraca." },
@@ -214,7 +215,7 @@ describe("faixa do dia na tela principal", () => {
   const mk = (over: Partial<TodayData["sections"]>): TodayData => ({
     generated_at: "2026-10-05T08:00",
     region: { city: "São Paulo", uf: "sp" },
-    sections: { news: base, economy: base, region: base, market: { status: "ok" }, weather: { status: "ok" }, agenda: base, reminders: base, ...over },
+    sections: { news: base, economy: base, foryou: base, region: base, market: { status: "ok" }, weather: { status: "ok" }, agenda: base, reminders: base, ...over },
   })
   it("junta tempo, proximo compromisso e dolar", () => {
     const d = mk({ weather: { status: "ok", temp: 16.4, place: "São Paulo, São Paulo" }, agenda: { status: "ok", items: [{ title: "Consulta", time: "09:30" }] }, market: { status: "ok", usd: { value: 5, pct: 0 } } })

@@ -26,7 +26,7 @@ def test_open_external_refuses_other_hosts(monkeypatch):
 
 def test_clamp_state_keeps_window_reachable():
     ok = shell.clamp_state({"w": 1000, "h": 700, "x": 100, "y": 80}, (1920, 1080))
-    assert ok == {"w": 1000, "h": 700, "x": 100, "y": 80}
+    assert ok == {"w": 1000, "h": 700, "x": 100, "y": 80, "fullscreen": True}
     off = shell.clamp_state({"w": 5000, "h": 10, "x": 4000, "y": -500}, (1920, 1080))  # monitor que sumiu
     assert "x" not in off and "y" not in off
     assert off["w"] == 1920 and off["h"] == shell.MIN_SIZE[1]
@@ -94,3 +94,10 @@ def test_build_bundles_the_window_engine():
     for flag in ("--collect-all webview", "--collect-all pythonnet", "--collect-all clr_loader", "webview.platforms.edgechromium"):
         assert flag in bat
     assert "pywebview" in (Path(__file__).resolve().parents[1] / "requirements.txt").read_text(encoding="utf-8")
+
+
+def test_fullscreen_is_default_and_remembered(tmp_path: Path):
+    assert shell.clamp_state({}, (1920, 1080))["fullscreen"] is True
+    assert shell.clamp_state({"fullscreen": False}, (1920, 1080))["fullscreen"] is False
+    shell.save_state(tmp_path, {"fullscreen": False, "w": 900})
+    assert shell.load_state(tmp_path) == {"w": 900, "fullscreen": False}

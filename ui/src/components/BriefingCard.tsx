@@ -10,10 +10,10 @@ export default function BriefingCard() {
   }, [])
   if (!shouldShowBriefing(b)) return null
   return (
-    <section className="jf-panel mb-2 border border-cyan-400/30 p-4" aria-label="Resumo do dia">
-      <h2 className="text-lg font-medium text-white">Resumo do dia</h2>
-      <p className="mt-1 whitespace-pre-line text-base text-white/85">{b.text}</p>
-      <div className="mt-3 flex flex-wrap gap-2">
+    <section className="jf-panel mb-1 border border-cyan-400/30 px-3 py-2" aria-label="Resumo do dia">
+      <h2 className="text-sm font-medium text-cyan-200">Resumo do dia</h2>
+      <p className="mt-0.5 max-h-20 overflow-y-auto whitespace-pre-line text-sm leading-snug text-white/80">{b.text}</p>
+      <div className="mt-2 flex flex-wrap gap-2">
         <ListenButton text={b.text} label="Ouvir o resumo" />
         <button
           type="button"
@@ -21,7 +21,7 @@ export default function BriefingCard() {
             setB(null)
             void markBriefingSeen()
           }}
-          className="jf-btn jf-focus px-4 py-2 text-base"
+          className="jf-btn jf-focus px-3 py-1.5 text-sm"
         >
           Entendi
         </button>

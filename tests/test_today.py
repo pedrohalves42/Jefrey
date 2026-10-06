@@ -91,7 +91,7 @@ def test_clima_em_frase_simples():
 # ---------------- preferencias ----------------
 def test_regiao_so_aceita_estado_valido_e_cidade_curta():
     T.save_prefs("São Paulo", "sp")
-    assert T.load_prefs() == {"city": "São Paulo", "uf": "sp"}
+    assert T.load_prefs() == {"city": "São Paulo", "uf": "sp", "interests": []}
     for city, uf in [("x" * 61, "sp"), ("Cidade", "zz"), ("<script>", "sp")]:
         with pytest.raises(ValueError):
             T.save_prefs(city, uf)
@@ -213,7 +213,7 @@ def test_rotas_exigem_login_e_validam_regiao(monkeypatch):
     with pytest.raises(HTTPException) as e:
         run(R.set_region(Req("ana"), R.RegionBody(city="<script>", uf="sp")))
     assert e.value.status_code == 422
-    assert run(R.set_region(Req("ana"), R.RegionBody(city="Belo Horizonte", uf="MG"))) == {"city": "Belo Horizonte", "uf": "mg"}
+    assert run(R.set_region(Req("ana"), R.RegionBody(city="Belo Horizonte", uf="MG"))) == {"city": "Belo Horizonte", "uf": "mg", "interests": []}
 
 
 # ---------------- achados com dados REAIS (g1 tem ~420 KB; uma falha de rede nao pode "grudar" por 15 min) ----------------
@@ -239,3 +239,30 @@ def test_falha_de_rede_no_mercado_nao_fica_em_cache(monkeypatch):
     estado["cai"] = False
     d = run(T.build(user_id="ana", transport=t))  # a rede voltou: o painel se recupera na hora, sem esperar 15 minutos
     assert d["sections"]["market"]["status"] == "ok" and d["sections"]["market"]["usd"]["value"] == 4.9988
+
+
+# ---------------- assuntos escolhidos: "Para voce" ----------------
+def test_assuntos_so_aceita_os_conhecidos_sem_repetir_e_no_maximo_seis():
+    ids = ["tecnologia", "tecnologia", "inventado", "politica", "mundo", "esportes", "cultura", "carros", "educacao"]
+    assert T.save_interests(ids) == ["tecnologia", "politica", "mundo", "esportes", "cultura", "carros"]
+    assert T.load_prefs()["interests"] == ["tecnologia", "politica", "mundo", "esportes", "cultura", "carros"]
+    T.save_prefs("Curitiba", "PR")  # trocar a cidade nao apaga os assuntos
+    assert T.load_prefs()["interests"][0] == "tecnologia"
+    assert T.save_interests([]) == []
+
+
+def test_mistura_intercala_assuntos_e_nao_repete_link():
+    a = [{"title": "A1", "link": "https://x/1"}, {"title": "A2", "link": "https://x/2"}]
+    b = [{"title": "B1", "link": "https://x/1"}, {"title": "B2", "link": "https://x/3"}]
+    out = T.mix_interest_news({"tecnologia": a, "politica": b}, limit=9)
+    assert [n["title"] for n in out] == ["A1", "B2", "A2"]
+    assert out[0]["topic"] == "Tecnologia" and out[1]["topic"] == "Política"
+
+
+def test_painel_traz_para_voce_so_com_assuntos_escolhidos():
+    sem = run(T.build(user_id="u", transport=servidor()))
+    assert sem["sections"]["foryou"] == {"status": "sem_interesses", "items": []}
+    T.save_interests(["tecnologia"])
+    com = run(T.build(user_id="u", transport=servidor()))
+    f = com["sections"]["foryou"]
+    assert f["status"] == "ok" and f["items"] and all(i["topic"] == "Tecnologia" for i in f["items"])

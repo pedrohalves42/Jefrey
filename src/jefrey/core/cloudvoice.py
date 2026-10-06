@@ -15,7 +15,9 @@ URL = "https://api.openai.com/v1/audio/speech"  # endereco fixo: nada vindo de f
 MODEL = "gpt-4o-mini-tts"
 VOICE = "nova"
 MAX_CHARS = 700
-STYLE = "Fale em português do Brasil, de forma calorosa, natural e informal, como um amigo atencioso falando devagar e com clareza."
+STYLE = ("Fale em português do Brasil com energia e entusiasmo de verdade, voz confiante e firme, sorrindo ao falar. "
+         "Ritmo animado e fluido, sem pausas arrastadas; varie a entonação e destaque as palavras importantes. "
+         "Soe como um amigo seguro de si dando uma boa notícia, nunca monótono, robótico ou lento.")
 
 
 class CloudVoiceError(Exception):

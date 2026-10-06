@@ -114,4 +114,4 @@ def test_voz_usa_ritmo_e_variacao_mais_naturais(monkeypatch):
     monkeypatch.setattr(LV, "_load", lambda: Falsa())
     LV.synth("Oi, tudo bem?")
     c = vistos[0]
-    assert (c.length_scale, c.noise_scale, c.noise_w_scale) == (1.04, 0.78, 0.95)
+    assert (c.length_scale, c.noise_scale, c.noise_w_scale) == (0.94, 0.88, 1.08)

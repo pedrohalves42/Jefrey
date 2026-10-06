@@ -31,6 +31,21 @@ MAX_FEED = 2_000_000  # o feed real do g1 tem ~420 KB
 UFS = {"ac", "al", "ap", "am", "ba", "ce", "df", "es", "go", "ma", "mt", "ms", "mg", "pa", "pb", "pr", "pe", "pi", "rj", "rn", "rs", "ro", "rr", "sc", "sp", "se", "to"}
 G1 = "https://g1.globo.com/rss/g1/"
 FEEDS = {"news": G1, "economy": G1 + "economia/"}
+# Assuntos que a pessoa pode escolher: "Para voce" mostra so o que ela marcou (nada de manchete aleatoria).
+INTERESTS = {
+    "tecnologia": ("Tecnologia", G1 + "tecnologia/"),
+    "ciencia": ("Ciência e saúde", G1 + "ciencia-e-saude/"),
+    "politica": ("Política", G1 + "politica/"),
+    "mundo": ("Mundo", G1 + "mundo/"),
+    "economia": ("Dinheiro e economia", G1 + "economia/"),
+    "esportes": ("Esportes", "https://ge.globo.com/rss/ge/"),
+    "cultura": ("Cultura e famosos", G1 + "pop-arte/"),
+    "carros": ("Carros", G1 + "carros/"),
+    "educacao": ("Educação", G1 + "educacao/"),
+    "natureza": ("Natureza", G1 + "natureza/"),
+    "viagem": ("Turismo e viagem", G1 + "turismo-e-viagem/"),
+}
+MAX_INTERESTS = 6
 _cache: dict[str, tuple[float, Any]] = {}
 _TAG = re.compile(r"<[^>]+>")
 _WEATHER_CODES = {0: "céu limpo", 1: "poucas nuvens", 2: "parcialmente nublado", 3: "nublado", 45: "neblina", 48: "neblina", 51: "garoa", 53: "garoa", 55: "garoa forte",
@@ -45,9 +60,12 @@ def _prefs_file() -> Path:
 def load_prefs() -> dict:
     try:
         d = json.loads(_prefs_file().read_text(encoding="utf-8"))
-        return {"city": str(d.get("city", ""))[:60], "uf": str(d.get("uf", "")).lower() if str(d.get("uf", "")).lower() in UFS else ""}
+        raw = d.get("interests", [])
+        picked = [i for i in raw if isinstance(i, str) and i in INTERESTS][:MAX_INTERESTS] if isinstance(raw, list) else []
+        return {"city": str(d.get("city", ""))[:60], "uf": str(d.get("uf", "")).lower() if str(d.get("uf", "")).lower() in UFS else "",
+                "interests": picked}
     except (OSError, ValueError, AttributeError):
-        return {"city": "", "uf": ""}
+        return {"city": "", "uf": "", "interests": []}
 
 
 def save_prefs(city: str, uf: str) -> None:
@@ -58,8 +76,41 @@ def save_prefs(city: str, uf: str) -> None:
         raise ValueError("Escreva o nome da sua cidade (só letras, até 60).")
     f = _prefs_file()
     f.parent.mkdir(parents=True, exist_ok=True)
-    f.write_text(json.dumps({"city": city, "uf": uf}, ensure_ascii=False), encoding="utf-8")
+    f.write_text(json.dumps({"city": city, "uf": uf, "interests": load_prefs()["interests"]}, ensure_ascii=False), encoding="utf-8")
     _cache.clear()
+
+
+def save_interests(ids: list[str]) -> list[str]:
+    """Guarda os assuntos escolhidos (so os conhecidos, sem repetir, no maximo MAX_INTERESTS)."""
+    clean: list[str] = []
+    for i in ids or []:
+        if isinstance(i, str) and i in INTERESTS and i not in clean:
+            clean.append(i)
+    clean = clean[:MAX_INTERESTS]
+    cur = load_prefs()
+    f = _prefs_file()
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(json.dumps({"city": cur["city"], "uf": cur["uf"], "interests": clean}, ensure_ascii=False), encoding="utf-8")
+    _cache.clear()
+    return clean
+
+
+def mix_interest_news(per_topic: dict[str, list[dict]], limit: int = 9) -> list[dict]:
+    """Intercala os assuntos (um de cada, em rodizio) para nenhum dominar, sem repetir link."""
+    out: list[dict] = []
+    seen: set[str] = set()
+    pools = {k: list(v) for k, v in per_topic.items()}
+    while len(out) < limit and any(pools.values()):
+        for k in list(pools):
+            while pools[k]:
+                n = pools[k].pop(0)
+                if n["link"] not in seen:
+                    seen.add(n["link"])
+                    out.append({**n, "topic": INTERESTS[k][0]})
+                    break
+            if len(out) >= limit:
+                break
+    return out
 
 
 # ---------------- noticias ----------------
@@ -217,12 +268,26 @@ async def build(*, user_id: str, transport: Optional[httpx.AsyncBaseTransport] =
     async def weather():
         return await _cached_call("weather:" + prefs["city"], lambda: fetch_weather(prefs["city"], transport=transport))
 
+    async def foryou():
+        topics = prefs["interests"]
+        lists = await asyncio.gather(*[feed(INTERESTS[t][1]) for t in topics], return_exceptions=True)
+        got = {t: l[:4] for t, l in zip(topics, lists) if isinstance(l, list)}
+        items = mix_interest_news(got)
+        if not items:
+            raise RuntimeError("sem noticias")
+        return items
+
     secs = ["news", "economy", "market", "agenda", "reminders"] + (["region", "weather"] if has_region else [])
     jobs = [_section("news", feed(FEEDS["news"])), _section("economy", feed(FEEDS["economy"])), _section("market", market()),
             _section("agenda", _agenda(user_id), empty_ok=True), _section("reminders", _reminders(user_id), empty_ok=True)]
     if has_region:
         jobs += [_section("region", region()), _section("weather", weather())]
+    if prefs["interests"]:
+        secs.append("foryou")
+        jobs.append(_section("foryou", foryou()))
     res = dict(zip(secs, await asyncio.gather(*jobs)))
+    if "foryou" not in res:
+        res["foryou"] = {"status": "sem_interesses", "items": []}
     if "market" in res and res["market"].get("status_override"):
         res["market"]["status"] = res["market"].pop("status_override")
     if not has_region:

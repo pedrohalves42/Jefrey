@@ -1,7 +1,7 @@
 import { authedFetch } from "@/lib/session"
 
-export type Status = "ok" | "parcial" | "erro" | "vazio" | "desconectado" | "falta_regiao"
-export type NewsItem = { title: string; link: string }
+export type Status = "ok" | "parcial" | "erro" | "vazio" | "desconectado" | "falta_regiao" | "sem_interesses"
+export type NewsItem = { title: string; link: string; topic?: string }
 export type Quote = { value: number; pct: number }
 export type TodayData = {
   generated_at: string
@@ -10,6 +10,7 @@ export type TodayData = {
     news: { status: Status; items: NewsItem[] }
     economy: { status: Status; items: NewsItem[] }
     region: { status: Status; items: NewsItem[] }
+    foryou: { status: Status; items: NewsItem[] }
     market: { status: Status; usd?: Quote; eur?: Quote; btc?: Quote; ibov?: Quote }
     weather: { status: Status; summary?: string; place?: string; temp?: number }
     agenda: { status: Status; items: { title: string; time: string }[] }
@@ -40,7 +41,7 @@ export function normalizeToday(raw: unknown): TodayData | null {
     generated_at: typeof r.generated_at === "string" ? r.generated_at : "",
     region: { city: r.region?.city ?? "", uf: r.region?.uf ?? "" },
     sections: {
-      news: list(s.news), economy: list(s.economy), region: list(s.region), agenda: list(s.agenda), reminders: list(s.reminders),
+      news: list(s.news), economy: list(s.economy), region: list(s.region), foryou: s.foryou ? list(s.foryou) : { status: "sem_interesses" as Status, items: [] }, agenda: list(s.agenda), reminders: list(s.reminders),
       market: { status: s.market?.status ?? "erro", ...(s.market ?? {}) },
       weather: { status: s.weather?.status ?? "erro", ...(s.weather ?? {}) },
     },
@@ -51,6 +52,10 @@ export async function getToday(): Promise<Res<TodayData>> {
   const r = await json<unknown>("/today")
   return { ok: r.ok, status: r.status, data: r.ok ? normalizeToday(r.data) : null }
 }
+export type InterestOption = { id: string; label: string }
+export type Interests = { selected: string[]; options: InterestOption[]; max: number }
+export const getInterests = () => json<Interests>("/today/interests")
+export const saveInterests = (ids: string[]) => json<{ selected: string[] }>("/today/interests", { method: "PUT", body: JSON.stringify({ ids }) })
 export const saveRegion = (city: string, uf: string) => json<{ city: string; uf: string }>("/today/region", { method: "PUT", body: JSON.stringify({ city, uf }) })
 
 /** "R$ 4,99" / "131.500 pts" e variacao com seta e sinal, em portugues. */

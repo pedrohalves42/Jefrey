@@ -21,6 +21,22 @@ class RegionBody(BaseModel):
     uf: str = Field(..., max_length=2)
 
 
+class InterestsBody(BaseModel):
+    ids: list[str] = Field(default_factory=list, max_length=20)
+
+
+@router.get("/interests")
+async def get_interests(request: Request):
+    _login(request)
+    return {"selected": T.load_prefs()["interests"], "options": [{"id": k, "label": v[0]} for k, v in T.INTERESTS.items()], "max": T.MAX_INTERESTS}
+
+
+@router.put("/interests")
+async def set_interests(request: Request, body: InterestsBody):
+    _login(request)
+    return {"selected": T.save_interests(body.ids)}
+
+
 @router.get("")
 async def today(request: Request):
     return await T.build(user_id=_login(request))

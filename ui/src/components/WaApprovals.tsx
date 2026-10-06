@@ -38,6 +38,12 @@ export default function WaApprovals() {
     if (r.ok) setFresh(prev => prev.filter(c => c.id !== chat.id))
   }
 
+  async function chooseAll(mode: WaMode) {
+    const all = [...fresh]
+    for (const c of all) await waSetMode(c.id, mode)
+    setFresh([])
+  }
+
   const nc = fresh[0]
   if (!d && nc) {
     return (
@@ -45,12 +51,18 @@ export default function WaApprovals() {
         <div className="jf-panel w-full max-w-lg border border-cyan-300/40 bg-[#07141b] p-5">
           <p className="text-sm text-cyan-200">WhatsApp · conversa nova</p>
           <h2 className="mt-1 text-2xl font-semibold text-white">{nc.display || "Alguém"} te escreveu</h2>
+          {fresh.length > 1 && <p className="mt-1 text-sm text-white/60">Tem mais {fresh.length - 1} conversa{fresh.length > 2 ? "s" : ""} nova{fresh.length > 2 ? "s" : ""} esperando.</p>}
           <p className="mt-2 text-base text-white/80">O que o Jefrey deve fazer nas conversas com essa pessoa? Enquanto você não escolher, ele <b>não responde</b>.</p>
           <div className="mt-4 flex flex-col gap-2">
             <button type="button" onClick={() => void choose(nc, "ask")} className="jf-btn jf-focus px-5 py-3 text-lg">Preparar a resposta e perguntar antes de enviar</button>
             <button type="button" onClick={() => void choose(nc, "auto")} className="jf-focus rounded-lg border border-white/30 px-5 py-3 text-lg text-white/90 hover:bg-white/5">Responder sozinho (só o que for simples)</button>
             <button type="button" onClick={() => void choose(nc, "off")} className="jf-focus rounded-lg border border-white/20 px-5 py-3 text-lg text-white/70 hover:bg-white/5">Ignorar essa pessoa</button>
           </div>
+          {fresh.length > 1 && (
+            <button type="button" onClick={() => void chooseAll("ask")} className="jf-focus mt-3 w-full rounded-lg border border-cyan-300/40 px-4 py-2.5 text-base text-cyan-100 hover:bg-cyan-400/10">
+              Perguntar antes de enviar em todas as {fresh.length}
+            </button>
+          )}
           <p className="mt-3 text-sm text-white/50">Dinheiro, dados pessoais, compromissos e assuntos delicados sempre pedem a sua aprovação. Você muda isso depois em Conexões → WhatsApp.</p>
         </div>
       </div>
