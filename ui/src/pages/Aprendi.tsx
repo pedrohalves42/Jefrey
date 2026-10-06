@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import ListenButton from "@/components/ListenButton"
 import { apiMessage, deleteUserSource, getUserSources, learnMessage, learnRequest, type UserSource } from "@/lib/studies"
-import { correctFact, correctionError, forgetAll, forgetFact, getLearned, groupFacts, setLearning, type Fact } from "@/lib/learning"
+import { correctFact, correctionError, forgetAll, forgetFact, getLearned, groupFacts, setLearning, teachFact, TEACH_KINDS, type Fact } from "@/lib/learning"
 
 const card = "jf-panel p-5"
 const field = "w-full rounded-lg border border-white/15 bg-black/30 px-3 py-3 text-base text-white"
@@ -65,6 +65,42 @@ function Links() {
           ))}
         </ul>
       )}
+    </section>
+  )
+}
+
+/** A pessoa ensina algo novo sem esperar uma conversa: escolhe o tipo, escreve e pronto. */
+function Teach({ onDone }: { onDone: () => void }) {
+  const [text, setText] = useState("")
+  const [kind, setKind] = useState("gosto")
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  async function add() {
+    setBusy(true)
+    const r = await teachFact(text, kind)
+    setBusy(false)
+    if (r.ok) {
+      setMsg({ ok: true, text: r.data?.status === "same" ? "Isso eu já sabia." : "Anotado! Vou lembrar disso." })
+      setText("")
+      onDone()
+    } else setMsg({ ok: false, text: ((r.data as { detail?: string } | null)?.detail) || "Não consegui guardar agora." })
+  }
+  return (
+    <section className={card} aria-labelledby="l-teach">
+      <h2 id="l-teach" className="text-xl font-medium text-white">Ensinar algo novo</h2>
+      <p className="mt-1 text-base text-white/70">Conte o que você quer que eu saiba sobre você. Pode ser um gosto, uma data, alguém da família…</p>
+      <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Tipo">
+        {TEACH_KINDS.map(k => (
+          <button key={k.id} type="button" aria-pressed={kind === k.id} onClick={() => setKind(k.id)}
+            className={`jf-focus jf-chip rounded-full border px-3 py-1.5 text-sm ${kind === k.id ? "border-cyan-300/70 bg-cyan-400/20 text-white" : "border-white/20 bg-black/30 text-white/75"}`}>{k.label}</button>
+        ))}
+      </div>
+      <label className="mt-3 block text-base text-white/85">
+        O que devo saber?
+        <input className={`${field} mt-1`} value={text} maxLength={200} placeholder="Ex.: Meu time é o Flamengo" onChange={e => setText(e.target.value)} />
+      </label>
+      <button type="button" onClick={() => void add()} disabled={busy || text.trim().length < 3} className="jf-btn jf-focus mt-3 px-5 py-3 text-base">{busy ? "Guardando…" : "Guardar"}</button>
+      {msg && <p role={msg.ok ? "status" : "alert"} className={`mt-3 text-base ${msg.ok ? "text-emerald-100" : "text-red-200"}`}>{msg.text}</p>}
     </section>
   )
 }
@@ -148,6 +184,7 @@ export default function Aprendi() {
         </p>
       )}
 
+      <Teach onDone={() => void load()} />
       <Links />
 
       {loaded && groups.length === 0 && (

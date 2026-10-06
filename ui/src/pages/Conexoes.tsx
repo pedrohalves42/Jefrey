@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { isDesktop } from "@/lib/shell"
 import { useSearchParams } from "react-router-dom"
 import ListenButton from "@/components/ListenButton"
-import { disconnectGoogle, getGoogle, saveGoogleCredentials, googleReturnMessage, SERVICE_LABEL, startGoogle, type GoogleService, type GoogleStatus } from "@/lib/connections"
+import { disconnectGoogle, getGoogle, saveGoogleCredentials, googleReturnMessage, SERVICE_LABEL, SERVICE_HINT, ALL_SERVICES, startGoogle, type GoogleService, type GoogleStatus } from "@/lib/connections"
 import AlexaTab from "@/components/AlexaTab"
 import WaCompose from "@/components/WaCompose"
 import Cerebros from "@/components/Cerebros"
@@ -67,7 +67,7 @@ function GoogleSetup({ onDone }: { onDone: () => void }) {
 function Google() {
   const [params, setParams] = useSearchParams()
   const [st, setSt] = useState<GoogleStatus | null>(null)
-  const [pick, setPick] = useState<Record<GoogleService, boolean>>({ calendar: true, email: true, drive: false })
+  const [pick, setPick] = useState<Record<GoogleService, boolean>>({ calendar: true, email: true, drive: false, tasks: false, contacts: false })
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<Msg>(googleReturnMessage(params.get("google")))
 
@@ -82,14 +82,15 @@ function Google() {
 
   const chosen = (Object.keys(pick) as GoogleService[]).filter(k => pick[k])
 
-  async function go() {
-    if (!chosen.length) {
+  async function go(services?: GoogleService[]) {
+    const wanted = services ?? chosen
+    if (!wanted.length) {
       setMsg({ ok: false, text: "Marque pelo menos uma coisa: Agenda ou E-mail." })
       return
     }
     setBusy(true)
     setMsg(null)
-    const err = await startGoogle(chosen)
+    const err = await startGoogle(wanted)
     if (err) {
       setMsg({ ok: false, text: err })
       setBusy(false)
@@ -135,8 +136,34 @@ function Google() {
       {st?.connected ? (
         <>
           <p className="mt-3 text-base text-white/85">
-            Conectado{st.email ? ` como ${st.email}` : ""}: {st.services.map(s => SERVICE_LABEL[s]).join(" e ")}.
+            Conectado{st.email ? ` como ${st.email}` : ""}: {st.services.map(s => SERVICE_LABEL[s]).join(", ")}.
           </p>
+          {ALL_SERVICES.some(k => !st.services.includes(k)) && (
+            <fieldset className="mt-4 rounded-xl border border-white/10 p-3">
+              <legend className="px-1 text-base text-white/80">Liberar mais coisas</legend>
+              <div className="mt-1 space-y-2">
+                {ALL_SERVICES.filter(k => !st.services.includes(k)).map(k => (
+                  <label key={k} className="flex items-start gap-3 text-base text-white/85">
+                    <input type="checkbox" className="mt-1 h-5 w-5" checked={pick[k]} onChange={e => setPick(p => ({ ...p, [k]: e.target.checked }))} />
+                    <span>{SERVICE_LABEL[k]}<span className="block text-sm text-white/50">{SERVICE_HINT[k]}</span></span>
+                  </label>
+                ))}
+              </div>
+              <button
+                type="button"
+                disabled={busy || !ALL_SERVICES.some(k => !st.services.includes(k) && pick[k])}
+                onClick={() => {
+                  const more = ALL_SERVICES.filter(k => !st.services.includes(k) && pick[k])
+                  void go([...st.services, ...more])
+                }}
+                className={`${big} mt-3`}
+              >
+                {busy ? "Abrindo o Google…" : "Liberar o que marquei"}
+              </button>
+              <p className="mt-2 text-sm text-white/50">O Google vai pedir sua confirmação de novo. O que já estava liberado continua.</p>
+              <p className="mt-1 text-sm text-white/50">Primeira vez com Tarefas, Contatos ou Arquivos? No Google Cloud, em “APIs e serviços → Biblioteca”, ative: Google Tasks API, People API e Google Drive API.</p>
+            </fieldset>
+          )}
           <button type="button" onClick={() => void leave()} disabled={busy} className="jf-focus mt-3 rounded-lg border border-white/25 px-5 py-3 text-base text-white/85 hover:bg-white/5">
             Desconectar
           </button>
@@ -146,8 +173,8 @@ function Google() {
           <fieldset className="mt-3">
             <legend className="text-base text-white/80">O que o Jefrey pode usar?</legend>
             <div className="mt-2 flex flex-wrap gap-4">
-              {(["calendar", "email"] as GoogleService[]).map(k => (
-                <label key={k} className="flex items-center gap-3 text-base text-white/85">
+              {ALL_SERVICES.map(k => (
+                <label key={k} className="flex items-center gap-3 text-base text-white/85" title={SERVICE_HINT[k]}>
                   <input type="checkbox" className="h-5 w-5" checked={pick[k]} onChange={e => setPick(p => ({ ...p, [k]: e.target.checked }))} />
                   {SERVICE_LABEL[k]}
                 </label>

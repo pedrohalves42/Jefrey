@@ -53,7 +53,7 @@ export async function getToday(): Promise<Res<TodayData>> {
   return { ok: r.ok, status: r.status, data: r.ok ? normalizeToday(r.data) : null }
 }
 export type InterestOption = { id: string; label: string }
-export type Interests = { selected: string[]; options: InterestOption[]; max: number }
+export type Interests = { selected: string[]; suggested?: string[]; options: InterestOption[]; max: number }
 export const getInterests = () => json<Interests>("/today/interests")
 export const saveInterests = (ids: string[]) => json<{ selected: string[] }>("/today/interests", { method: "PUT", body: JSON.stringify({ ids }) })
 export const saveRegion = (city: string, uf: string) => json<{ city: string; uf: string }>("/today/region", { method: "PUT", body: JSON.stringify({ city, uf }) })

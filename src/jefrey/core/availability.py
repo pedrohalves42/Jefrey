@@ -10,7 +10,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # skill -> provedor de login que ela exige
-NEEDS_LOGIN = {"email": "google", "calendar": "google", "drive": "google"}
+NEEDS_LOGIN = {"email": "google", "calendar": "google", "drive": "google", "google_tasks": "google", "google_contacts": "google"}
 
 
 def connected_providers(user_id: str) -> set[str]:

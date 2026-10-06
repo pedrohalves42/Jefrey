@@ -17,6 +17,6 @@ def test_app_importa_sem_os_modulos_removidos():
 
 def test_toda_pasta_de_codigo_tem_algum_importador_ou_e_ponto_de_entrada():
     """Pacotes de primeiro nivel que sobraram: cada um tem uso real (entrada, rota, skill ou teste)."""
-    esperados = {"api", "brain2", "channels", "cli", "core", "eventbus", "interfaces", "legal", "mcp", "native", "oauth2", "skills", "static", "wake_word"}
+    esperados = {"adapters", "api", "application", "brain2", "channels", "cli", "core", "domain", "eventbus", "interfaces", "legal", "mcp", "native", "oauth2", "ports", "skills", "static"}
     atuais = {p.name for p in ROOT.iterdir() if p.is_dir() and not p.name.startswith("__")}
     assert atuais == esperados

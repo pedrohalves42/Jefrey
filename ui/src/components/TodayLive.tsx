@@ -103,6 +103,17 @@ function InterestPicker({ onChanged }: { onChanged: () => void }) {
   return (
     <div>
       <p className="text-sm text-white/60">Escolha até {it.max} assuntos. O Jefrey só traz notícias do que você marcar.</p>
+      {(it.suggested?.length ?? 0) > 0 && (
+        <p className="mt-2 text-sm text-cyan-100">
+          Pelo que aprendi de você, talvez goste de:{" "}
+          {it.suggested!.slice(0, 4).map(id => {
+            const o = it.options.find(x => x.id === id)
+            return o ? (
+              <button key={id} type="button" onClick={() => void toggle(id)} className="jf-focus mr-2 underline underline-offset-2 hover:text-white">+ {o.label}</button>
+            ) : null
+          })}
+        </p>
+      )}
       <div className="mt-2 flex flex-wrap gap-2">
         {it.options.map(o => {
           const on = it.selected.includes(o.id)

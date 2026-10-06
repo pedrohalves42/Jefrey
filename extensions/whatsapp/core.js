@@ -103,23 +103,77 @@
     return c ? (c.textContent || "").trim() : "";
   }
 
-  /* Digita no campo de mensagem como uma pessoa (o editor do WhatsApp ignora simples troca de texto). */
-  function typeText(doc, text) {
-    var c = composer(doc);
-    if (!c) return false;
-    c.focus();
+  /* Digita em um campo editavel como uma pessoa (o editor do WhatsApp ignora simples troca de texto). */
+  function insertInto(doc, el, text) {
+    if (!el) return false;
+    el.focus();
     var done = false;
     try {
       done = !!(doc.execCommand && doc.execCommand("insertText", false, text));
     } catch (e) {
       done = false;
     }
-    if (!done || composerText(doc) !== text.trim()) {
-      c.textContent = text;
+    if (!done || (el.textContent || "").trim() !== text.trim()) {
+      el.textContent = text;
       var view = doc.defaultView || g;
-      c.dispatchEvent(new view.InputEvent("input", { bubbles: true, data: text, inputType: "insertText" }));
+      el.dispatchEvent(new view.InputEvent("input", { bubbles: true, data: text, inputType: "insertText" }));
     }
-    return composerText(doc) === text.trim();
+    return (el.textContent || "").trim() === text.trim();
+  }
+
+  function typeText(doc, text) {
+    return insertInto(doc, composer(doc), text);
+  }
+
+  /* ---- abrir a conversa certa (so para enviar o que a pessoa aprovou) ---- */
+  var CELL_SELECTORS = ['#pane-side [data-testid="cell-frame-container"]', '#pane-side [role="listitem"]', '#pane-side [role="row"]'];
+
+  function cellTitle(el) {
+    var t = el.querySelector("span[title]");
+    var s = t ? t.getAttribute("title") : "";
+    if (!s) {
+      var d = el.querySelector("span[dir='auto']");
+      s = d ? d.textContent : "";
+    }
+    return (s || "").trim().slice(0, 100);
+  }
+
+  function findChatCell(doc, chat) {
+    for (var i = 0; i < CELL_SELECTORS.length; i++) {
+      var cells = Array.prototype.slice.call(doc.querySelectorAll(CELL_SELECTORS[i]));
+      for (var j = 0; j < cells.length; j++) {
+        if (sameChat(cellTitle(cells[j]), chat)) return cells[j];
+      }
+    }
+    return null;
+  }
+
+  /* Clica na conversa da lista lateral. Nunca clica em grupo (o nome so e comparado por igualdade exata, sem acento/maiuscula). */
+  function openChat(doc, chat) {
+    var cell = findChatCell(doc, chat);
+    if (!cell) return { ok: false, why: "nao-achei" };
+    var view = doc.defaultView || g;
+    ["mousedown", "mouseup", "click"].forEach(function (type) {
+      cell.dispatchEvent(new view.MouseEvent(type, { bubbles: true, cancelable: true }));
+    });
+    return { ok: true, why: "" };
+  }
+
+  function searchBox(doc) {
+    return doc.querySelector('#side div[contenteditable="true"][data-tab="3"]') || doc.querySelector('#side div[contenteditable="true"]');
+  }
+
+  function typeInSearch(doc, text) {
+    return insertInto(doc, searchBox(doc), text);
+  }
+
+  function clearSearch(doc) {
+    var b = searchBox(doc);
+    if (b) {
+      b.textContent = "";
+      var view = doc.defaultView || g;
+      b.dispatchEvent(new view.InputEvent("input", { bubbles: true, data: "", inputType: "deleteContentBackward" }));
+    }
   }
 
   /* Seguranca antes de enviar: so no chat certo, so com o campo vazio (nunca apaga o que a pessoa esta digitando). */
@@ -140,6 +194,7 @@
     norm: norm, sameChat: sameChat, chatTitle: chatTitle, isGroup: isGroup, parseRows: parseRows, newIncoming: newIncoming,
     context: context, composer: composer, sendButton: sendButton, composerText: composerText, typeText: typeText,
     canSendNow: canSendNow, humanDelayMs: humanDelayMs,
+    findChatCell: findChatCell, openChat: openChat, typeInSearch: typeInSearch, clearSearch: clearSearch, searchBox: searchBox,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   g.JefreyWACore = api;

@@ -14,6 +14,7 @@ async function json<T>(path: string, init?: RequestInit): Promise<{ ok: boolean;
 export const getLearned = () => json<{ enabled: boolean; facts: Fact[] }>("/learning")
 export const setLearning = (enabled: boolean) => json<{ enabled: boolean }>("/learning", { method: "PUT", body: JSON.stringify({ enabled }) })
 export const correctFact = (id: string, text: string) => json<Fact>(`/learning/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ text }) })
+export const teachFact = (text: string, kind: string) => json<{ status: string }>("/learning", { method: "POST", body: JSON.stringify({ text, kind }) })
 export const forgetFact = (id: string) => json<{ ok: boolean }>(`/learning/${encodeURIComponent(id)}`, { method: "DELETE" })
 export const forgetAll = () => json<{ ok: boolean; removed: number }>("/learning", { method: "DELETE" })
 
@@ -28,6 +29,10 @@ const KIND_LABEL: Record<string, string> = {
   dinheiro: "Dinheiro",
   outro: "Outras coisas",
 }
+export const TEACH_KINDS: { id: string; label: string }[] = [
+  { id: "pessoa", label: "Sobre mim" }, { id: "familia", label: "Minha família" }, { id: "gosto", label: "Gostos" }, { id: "trabalho", label: "Trabalho" },
+  { id: "projeto", label: "Projetos" }, { id: "data", label: "Datas importantes" }, { id: "saude", label: "Saúde" }, { id: "outro", label: "Outra coisa" },
+]
 const ORDER = ["pessoa", "familia", "gosto", "trabalho", "projeto", "data", "saude", "dinheiro", "outro"]
 
 export function kindLabel(kind: string): string {

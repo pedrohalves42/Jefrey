@@ -1,5 +1,6 @@
 /* Jefrey para WhatsApp Web: le a conversa ABERTA e responde, SO nas conversas que a pessoa liberou no Jefrey.
- * Nao abre conversas, nao inicia mensagens, nao envia em massa, ignora grupos. Sempre ha pausa humana antes de enviar. */
+ * Para ENVIAR algo que a pessoa aprovou, abre a conversa certa (so quando ela esta parada, sem digitar), envia e para.
+ * Nao inicia conversas com desconhecidos, nao envia em massa, ignora grupos. Sempre ha pausa humana antes de enviar. */
 "use strict";
 
 (function () {
@@ -16,6 +17,13 @@
   let pendingChat = "";
   let debounce = null;
   let busySending = false;
+  const tries = {}; // quantas vezes tentamos abrir a conversa de cada mensagem (depois de algumas, avisa que falhou)
+  const MAX_TRIES = 4;
+  const T0 = window.__JEFREY_WA_TEST__;
+  const IDLE_MS = T0 && typeof T0.idleMs === "number" ? T0.idleMs : 15000; // so troca de conversa se a pessoa esta parada
+  let lastInput = Date.now();
+  ["keydown", "mousedown", "wheel", "touchstart"].forEach((ev) => window.addEventListener(ev, () => (lastInput = Date.now()), true));
+  const isIdle = () => Date.now() - lastInput >= IDLE_MS;
   let state = { paired: false, paused: false, server: "" };
 
   const call = (path, method, body) => chrome.runtime.sendMessage({ type: "api", path, method, body });
@@ -85,9 +93,38 @@
   /* ---- enviar (so o que foi aprovado: pela regra automatica ou pela pessoa) ---- */
   const sleep = (window.__JEFREY_WA_TEST__ && window.__JEFREY_WA_TEST__.sleep) || ((ms) => new Promise((r) => setTimeout(r, ms)));
 
+  async function ensureChatOpen(chat) {
+    if (C.sameChat(C.chatTitle(document), chat)) return true;
+    if (!isIdle()) return false; // a pessoa esta mexendo no WhatsApp: nao troca a conversa debaixo dela
+    if (C.composerText(document) !== "") return false; // ha rascunho na conversa aberta
+    let r = C.openChat(document, chat);
+    if (!r.ok && C.typeInSearch(document, chat)) {
+      await sleep(1500);
+      r = C.openChat(document, chat);
+      C.clearSearch(document);
+    }
+    if (!r.ok) return false;
+    for (let i = 0; i < 8; i++) {
+      await sleep(500);
+      if (C.sameChat(C.chatTitle(document), chat)) return true;
+    }
+    return false;
+  }
+
   async function sendOne(item) {
+    if (!C.sameChat(C.chatTitle(document), item.chat)) {
+      const opened = await ensureChatOpen(item.chat);
+      if (!opened) {
+        tries[item.id] = (tries[item.id] || 0) + 1;
+        if (tries[item.id] >= MAX_TRIES && isIdle()) {
+          await call("/wa/device/sent", "POST", { id: item.id, ok: false }); // nao achei a conversa: avisa em vez de ficar na fila para sempre
+          return true;
+        }
+        return false;
+      }
+    }
     const can = C.canSendNow(document, item.chat);
-    if (!can.ok) return false; // outro chat aberto ou a pessoa digitando: fica na fila para depois
+    if (!can.ok) return false; // a pessoa digitando: fica na fila para depois
     paint("Jefrey: escrevendo…");
     await sleep(C.humanDelayMs());
     const again = C.canSendNow(document, item.chat); // a pessoa pode ter mudado de conversa ou comecado a digitar

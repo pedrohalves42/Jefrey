@@ -28,7 +28,12 @@ class InterestsBody(BaseModel):
 @router.get("/interests")
 async def get_interests(request: Request):
     _login(request)
-    return {"selected": T.load_prefs()["interests"], "options": [{"id": k, "label": v[0]} for k, v in T.INTERESTS.items()], "max": T.MAX_INTERESTS}
+    from src.jefrey.core.learning import FactStore
+    from src.jefrey.domain.interests import suggest
+
+    selected = T.load_prefs()["interests"]
+    texts = [f["text"] for f in FactStore().active(_login(request), 300)]
+    return {"selected": selected, "suggested": suggest(texts, selected), "options": [{"id": k, "label": v[0]} for k, v in T.INTERESTS.items()], "max": T.MAX_INTERESTS}
 
 
 @router.put("/interests")

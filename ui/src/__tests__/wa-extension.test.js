@@ -12,12 +12,25 @@ function row(id, text, extra = "") {
   return `<div data-id="${id}">${text ? `<span class="selectable-text copyable-text">${text}</span>` : extra}</div>`
 }
 
-function page({ title = "Maria", group = false, rows = [], composer = "" } = {}) {
+function sidebar(names) {
+  const cells = names.map(n => `<div role="listitem" data-name="${n}"><span title="${n}">${n}</span></div>`).join("")
+  return `<div id="side"><div contenteditable="true" data-tab="3"></div><div id="pane-side">${cells}</div></div>`
+}
+
+function page({ title = "Maria", group = false, rows = [], composer = "", chats = null } = {}) {
   const jid = group ? "120363@g.us" : "5511999999999@c.us"
   const body = rows.map(r => row(`${r.me ? "true" : "false"}_${jid}_${r.id}`, r.text, r.extra)).join("")
-  document.body.innerHTML = `<div id="app"><div id="main"><header><span dir="auto" title="${title}">${title}</span></header>
+  document.body.innerHTML = `<div id="app">${chats ? sidebar(chats) : ""}<div id="main"><header><span dir="auto" title="${title}">${title}</span></header>
     <div class="messages">${body}</div>
     <footer><div contenteditable="true" data-tab="10">${composer}</div><button aria-label="Enviar"></button></footer></div></div>`
+  // clicar em uma conversa da lista abre essa conversa (so troca o nome no cabecalho)
+  document.querySelectorAll("#pane-side [role='listitem']").forEach(cell => {
+    cell.addEventListener("click", () => {
+      const h = document.querySelector("#main header span")
+      h.textContent = cell.getAttribute("data-name")
+      h.setAttribute("title", cell.getAttribute("data-name"))
+    })
+  })
   const send = document.querySelector('footer button[aria-label="Enviar"]')
   send.addEventListener("click", () => {
     const c = document.querySelector("footer div[contenteditable]")
@@ -103,12 +116,12 @@ describe("leitura da pagina (core)", () => {
 describe("extensao inteira na pagina simulada", () => {
   let calls, respostas, hooks
 
-  function boot({ paired = true, paused = false } = {}) {
+  function boot({ paired = true, paused = false, idleMs = 0 } = {}) {
     calls = []
     respostas = {}
     window.__jefreyWA = false
     document.documentElement.querySelectorAll("div[style*='position:fixed']").forEach(e => e.remove())
-    window.__JEFREY_WA_TEST__ = { sleep: () => Promise.resolve() }
+    window.__JEFREY_WA_TEST__ = { sleep: () => Promise.resolve(), idleMs }
     window.chrome = {
       runtime: {
         sendMessage: vi.fn(async msg => {
@@ -212,6 +225,41 @@ describe("extensao inteira na pagina simulada", () => {
     await hooks.pollTick()
     expect(api("/wa/device/sent")).toHaveLength(0)
     expect(document.querySelector("footer div[contenteditable]").textContent).toBe("rascunho da pessoa")
+  })
+
+  it("abre sozinho a conversa certa da lista e envia o que a pessoa aprovou", async () => {
+    page({ title: "João", rows: [{ id: "A", text: "oi" }], chats: ["João", "Maria Clara", "Maria"] })
+    boot()
+    await hooks.refreshState()
+    respostas["/wa/device/poll"] = { ok: true, status: 200, data: { paused: false, send: [{ id: "D1", chat: "Maria", text: "Chego às 8h!" }] } }
+    await hooks.pollTick()
+    expect(document.querySelector("#main header span").textContent).toBe("Maria") // abriu "Maria", nao "Maria Clara"
+    expect(api("/wa/device/sent")[0].body).toEqual({ id: "D1", ok: true })
+    expect([...document.querySelectorAll(".messages [data-id]")].some(d => d.textContent === "Chego às 8h!")).toBe(true)
+  })
+
+  it("nao troca de conversa enquanto a pessoa esta mexendo no WhatsApp", async () => {
+    page({ title: "João", rows: [{ id: "A", text: "oi" }], chats: ["João", "Maria"] })
+    boot({ idleMs: 60 * 60 * 1000 }) // acabou de mexer: nao esta parada
+    await hooks.refreshState()
+    respostas["/wa/device/poll"] = { ok: true, status: 200, data: { paused: false, send: [{ id: "D1", chat: "Maria", text: "Oi!" }] } }
+    await hooks.pollTick()
+    expect(document.querySelector("#main header span").textContent).toBe("João")
+    expect(api("/wa/device/sent")).toHaveLength(0)
+  })
+
+  it("nao troca de conversa com rascunho digitado e nunca por uma conversa que nao existe; depois de algumas tentativas avisa que falhou", async () => {
+    page({ title: "João", composer: "rascunho", chats: ["João", "Maria"] })
+    boot()
+    await hooks.refreshState()
+    respostas["/wa/device/poll"] = { ok: true, status: 200, data: { paused: false, send: [{ id: "D1", chat: "Maria", text: "Oi!" }] } }
+    await hooks.pollTick()
+    expect(document.querySelector("#main header span").textContent).toBe("João")
+    page({ title: "João", chats: ["João", "Ana"] })
+    respostas["/wa/device/poll"] = { ok: true, status: 200, data: { paused: false, send: [{ id: "D2", chat: "Zeca", text: "Oi!" }] } }
+    for (let i = 0; i < 4; i++) await hooks.pollTick()
+    expect(document.querySelector("#main header span").textContent).toBe("João")
+    expect(api("/wa/device/sent").map(c => c.body)).toEqual([{ id: "D2", ok: false }])
   })
 
   it("pausado ou nao pareado: nao le e nao envia nada", async () => {

@@ -1,7 +1,7 @@
 import { authedFetch } from "@/lib/session"
 import { isDesktop, openExternal } from "@/lib/shell"
 
-export type GoogleService = "calendar" | "email" | "drive"
+export type GoogleService = "calendar" | "email" | "drive" | "tasks" | "contacts"
 
 export type GoogleStatus = {
   configured: boolean
@@ -51,4 +51,12 @@ export function googleReturnMessage(value: string | null): { ok: boolean; text: 
   return null
 }
 
-export const SERVICE_LABEL: Record<GoogleService, string> = { calendar: "Agenda", email: "E-mail", drive: "Arquivos" }
+export const SERVICE_LABEL: Record<GoogleService, string> = { calendar: "Agenda", email: "E-mail", drive: "Arquivos (Drive)", tasks: "Tarefas", contacts: "Contatos" }
+export const SERVICE_HINT: Record<GoogleService, string> = {
+  calendar: "ver e marcar compromissos, e avisar antes de cada um",
+  email: "ler e ajudar a responder e-mails",
+  drive: "achar e ler seus arquivos",
+  tasks: "ver, criar e marcar tarefas como feitas",
+  contacts: "achar telefone e e-mail de alguém",
+}
+export const ALL_SERVICES: GoogleService[] = ["calendar", "email", "drive", "tasks", "contacts"]

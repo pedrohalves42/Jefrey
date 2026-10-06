@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 
+from src.jefrey.adapters.outbound import sql_reminders as SR
 from src.jefrey.core import reminders as R
 from src.jefrey.core.agent_loop import route_intent, select_tools
 
@@ -134,7 +135,7 @@ def store(tmp_path, monkeypatch):
     import src.jefrey.core.db as db
     monkeypatch.setattr(db, "get_engine", lambda: eng)
     orig = R.describe_due
-    monkeypatch.setattr(R, "describe_due", lambda due, now=None: orig(due, now or NOW))  # "hoje" = NOW do teste, nao o relogio real
+    monkeypatch.setattr(SR, "describe_due", lambda due, now=None: orig(due, now or NOW))  # "hoje" = NOW do teste, nao o relogio real
     return R.ReminderStore()
 
 
@@ -185,7 +186,7 @@ def test_validacoes(store):
 
 
 def test_limite_de_pendentes(store, monkeypatch):
-    monkeypatch.setattr(R, "MAX_PENDING", 3)
+    monkeypatch.setattr(SR, "MAX_PENDING", 3)
     for i in range(3):
         store.add("ana", f"t{i}", NOW)
     with pytest.raises(ValueError, match="limite"):

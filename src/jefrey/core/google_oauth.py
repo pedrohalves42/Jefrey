@@ -33,7 +33,11 @@ BASE_SCOPES = ["openid", "email", "profile"]
 SERVICES: dict[str, dict] = {
     "calendar": {"label": "Agenda", "provider": "google_calendar", "scope": "https://www.googleapis.com/auth/calendar.events"},
     "email": {"label": "E-mail (Gmail)", "provider": "gmail", "scope": "https://www.googleapis.com/auth/gmail.modify"},
-    "drive": {"label": "Arquivos (Drive)", "provider": "google_drive", "scope": "https://www.googleapis.com/auth/drive.file"},
+    # ler/buscar os arquivos que ja existem (somente leitura) e guardar os que o Jefrey criar
+    "drive": {"label": "Arquivos (Drive)", "provider": "google_drive",
+              "scope": "https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.file"},
+    "tasks": {"label": "Tarefas", "provider": "google_tasks", "scope": "https://www.googleapis.com/auth/tasks"},
+    "contacts": {"label": "Contatos", "provider": "google_contacts", "scope": "https://www.googleapis.com/auth/contacts.readonly"},
 }
 
 _pending: dict[str, dict] = {}
@@ -74,7 +78,44 @@ def scopes_for(services: list[str]) -> list[str]:
     bad = [s for s in services if s not in SERVICES]
     if bad or not services:
         raise ValueError("escolha pelo menos um servico valido")
-    return BASE_SCOPES + [SERVICES[s]["scope"] for s in dict.fromkeys(services)]
+    out = list(BASE_SCOPES)
+    for s in dict.fromkeys(services):
+        out += [sc for sc in SERVICES[s]["scope"].split() if sc not in out]
+    return out
+
+
+def access_token(user_id: str, service: str) -> str:
+    """Token de acesso valido da pessoa para um servico (renova sozinho se venceu). LookupError se ela nao conectou esse servico."""
+    import httpx
+
+    from src.jefrey.core.db import get_db
+    from src.jefrey.core.secret_store import protect, unprotect
+
+    if service not in SERVICES:
+        raise LookupError("servico desconhecido")
+    OAuthToken = _table_model()
+    with get_db() as s:
+        row = s.query(OAuthToken).filter(OAuthToken.user_id == user_id, OAuthToken.provider == SERVICES[service]["provider"]).first()
+        if row is None:
+            raise LookupError("servico nao conectado")
+        access = unprotect(row.access_token)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        if row.expires_at is None or row.expires_at > now + timedelta(seconds=60):
+            return access
+        refresh = unprotect(row.refresh_token) if row.refresh_token else None
+        cred = credentials()
+        if not refresh or cred is None:
+            raise LookupError("precisa entrar de novo")
+        r = httpx.post(TOKEN_URL, data={"client_id": cred["client_id"], "client_secret": cred["client_secret"], "refresh_token": refresh,
+                                        "grant_type": "refresh_token"}, timeout=15)
+        data = r.json() if r.status_code == 200 else {}
+        new = data.get("access_token")
+        if not new:
+            raise LookupError("precisa entrar de novo")
+        row.access_token = protect(str(new))
+        if data.get("expires_in"):
+            row.expires_at = now + timedelta(seconds=int(data["expires_in"]))
+        return str(new)
 
 
 CALLBACK_PATHS = ("/connections/google/callback", "/auth/google/callback")
