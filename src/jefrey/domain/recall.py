@@ -19,6 +19,11 @@ _STOP = {"que", "qual", "quais", "como", "onde", "quando", "quem", "para", "pra"
          "tenho", "estou", "sabe", "algo", "coisa", "quero", "preciso", "gostaria", "hoje", "agora", "depois", "antes", "ontem", "seu", "sua"}
 
 
+def mentions_past(text: str) -> bool:
+    """A pessoa fala do passado ("ontem", "lembra"): vale buscar no diario."""
+    return bool(_PAST.search(_norm(text)))
+
+
 def _norm(s: str) -> str:
     return "".join(c for c in unicodedata.normalize("NFD", (s or "").lower()) if unicodedata.category(c) != "Mn")
 

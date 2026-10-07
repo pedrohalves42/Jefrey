@@ -20,6 +20,8 @@ from typing import Any, Callable, Optional
 
 import httpx
 
+from src.jefrey.domain.errors import UserFacingError
+
 logger = logging.getLogger(__name__)
 
 OLLAMA_MODEL = "embeddinggemma"
@@ -31,7 +33,7 @@ UNAVAILABLE_MSG = ("A memória precisa de um serviço de busca por sentido: o Ol
                    "(OpenRouter ou OpenAI). Conecte um em Configurações.")
 
 
-class EmbeddingsUnavailable(RuntimeError):
+class EmbeddingsUnavailable(UserFacingError):
     """Nenhum backend de embeddings esta funcionando. A mensagem e segura para mostrar ao usuario."""
 
 

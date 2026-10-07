@@ -5,6 +5,15 @@ from src.jefrey.adapters.outbound.system_adapters import DbUserDirectory, Google
 from src.jefrey.application.event_alerts import EventAlertService
 
 
+def wire() -> None:
+    """Liga cada porta ao adaptador padrao (chamado sozinho na primeira vez que um caso de uso pede uma porta)."""
+    from src.jefrey.adapters.outbound import agent_env, briefing_env, runtime_ports
+
+    runtime_ports.register()
+    agent_env.register()
+    briefing_env.register()
+
+
 def build_event_alerts() -> EventAlertService:
     return EventAlertService(GoogleCalendarAdapter(), WindowsNotifier(), DbUserDirectory(), SystemClock())
 
