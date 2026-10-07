@@ -18,6 +18,7 @@ from typing import Any, AsyncIterator, Optional
 
 from src.jefrey.core.llm_tools import ToolCall
 from src.jefrey.domain.agenda import agenda_day, day_bounds, format_agenda
+from src.jefrey.domain.email_ask import QUERY as UNREAD_QUERY, asks_unread_email, format_unread
 from src.jefrey.domain.weather_ask import weather_ask
 from src.jefrey.core.tool_catalog import CATALOG, policy_for
 from src.jefrey.core.tool_runtime import ToolOutcome, ToolRuntime, tool_spec
@@ -172,6 +173,8 @@ def route_intent(message: str) -> Optional[tuple[str, dict]]:
         return None
     if _TIME.match(msg):
         return "current_time", {}
+    if asks_unread_email(message):  # "tenho e-mail novo?": busca e responde direto (antes: ~13 s com o modelo)
+        return "search_messages", {"query": UNREAD_QUERY, "max_results": 5}
     wcity = weather_ask(message)
     if wcity is not None:  # "como esta o clima?": busca direto (antes: 2 rodadas do modelo, ~7 s)
         city = wcity
@@ -313,7 +316,13 @@ async def run_agent(
         assert outcome is not None
         yield {"type": "tool_end", "tool": name, "ok": outcome.ok, "status": outcome.status, "summary": _summary(outcome)}
         if outcome.ok and name not in SUMMARIZE_TOOLS:
-            yield {"type": "token", "content": format_agenda(outcome.content, agenda_day(_norm(user_input.strip().rstrip("?!. ")))) if name == "list_events" else outcome.content}
+            if name == "list_events":
+                shown = format_agenda(outcome.content, agenda_day(_norm(user_input.strip().rstrip("?!. "))))
+            elif name == "search_messages":
+                shown = format_unread(outcome.content)
+            else:
+                shown = outcome.content
+            yield {"type": "token", "content": shown}
             return
         # busca em notas (ou falha): o modelo responde usando SO o resultado, sem ferramentas
         msgs.append({"role": "assistant", "content": "", "tool_calls": [ToolCall("route", name, args).as_dict()]})
