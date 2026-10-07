@@ -257,6 +257,8 @@ async def n8n_health(request: Request):
     user_id = getattr(request.state, "user_id", None)
     if not user_id:
         raise HTTPException(status_code=401, detail="user_id required")
+    if (os.getenv("JEFREY_MODE", "") or "").lower() == "native" and not os.getenv("JEFREY_N8N_WEBHOOK_URL"):
+        return {"ok": False, "n8n": "off", "detail": "o programa nativo nao usa o n8n"}  # antes: 8 s de espera e erro 502
     n8n_base = os.getenv("JEFREY_N8N_WEBHOOK_URL") or "http://jefrey-n8n:5678"
     base = n8n_base.split("/webhook")[0].rstrip("/")
     for url in [base + "/healthz", base + "/healthz/", "http://localhost:5678/healthz"]:

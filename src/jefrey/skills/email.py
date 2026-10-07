@@ -19,6 +19,23 @@ def _protect(v):
     from src.jefrey.core.secret_store import protect
     return protect(v)
 
+def compact_message(msg_id: str, thread_id: str, headers: dict, detail: dict) -> dict:
+    """Um e-mail em poucas linhas: o resultado da ferramenta tem limite de tamanho (antes 10 e-mails completos estouravam
+    e o modelo recebia JSON cortado, tentava de novo e demorava ~30 s). `unread` responde "quantos nao lidos"."""
+    def cut(s: object, n: int) -> str:
+        return " ".join(str(s or "").split())[:n]
+
+    return {
+        "id": msg_id,
+        "thread_id": thread_id,
+        "subject": cut(headers.get("Subject", "(sem assunto)"), 90),
+        "from": cut(headers.get("From", ""), 60),
+        "date": cut(headers.get("Date", ""), 31),
+        "snippet": cut(detail.get("snippet", ""), 110),
+        "unread": "UNREAD" in (detail.get("labelIds") or []),
+    }
+
+
 class EmailSkill(SkillBase):
     metadata = SkillMetadata(
         name="email",
@@ -246,16 +263,10 @@ class EmailSkill(SkillBase):
 
                 headers = {h["name"]: h["value"] for h in detail.get("payload", {}).get("headers", [])}
 
-                detailed.append({
-                    "id": msg["id"],
-                    "thread_id": msg["threadId"],
-                    "subject": headers.get("Subject", "(sem assunto)"),
-                    "from": headers.get("From", ""),
-                    "to": headers.get("To", ""),
-                    "date": headers.get("Date", ""),
-                    "snippet": detail.get("snippet", ""),
-                    "labels": detail.get("labelIds", []),
-                })
+                detailed.append(compact_message(msg["id"], msg.get("threadId", ""), headers, detail))
+            total = result.get("resultSizeEstimate")
+            if isinstance(total, int) and total > len(detailed):
+                detailed.append({"total_estimado": total, "mostrando": len(detailed)})  # para o modelo nao dizer que so existem estes
 
             return detailed
         except Exception as e:

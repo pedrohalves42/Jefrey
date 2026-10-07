@@ -86,9 +86,10 @@ class ToolRegistry:
             )
 
         if overwrite and tool_name in self._registered:
-            logger.warning(
-                "Tool '%s' sendo substituída — confirmar que é intencional", tool_name
-            )
+            old = self._registered[tool_name]
+            same = (getattr(old, "risk", None), getattr(old, "required_role", None)) == (getattr(tool, "risk", None), getattr(tool, "required_role", None))
+            # recarregar as mesmas ferramentas (acontece a cada abertura) nao e novidade: so avisa quando o RISCO ou o PAPEL mudam
+            (logger.debug if same else logger.warning)("Tool '%s' sendo substituída — confirmar que é intencional", tool_name)
 
         self._registered[tool_name] = tool
 

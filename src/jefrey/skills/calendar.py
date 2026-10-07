@@ -257,9 +257,9 @@ class CalendarSkill(SkillBase):
                 "summary": e.get("summary", "(sem titulo)"),
                 "start": e["start"].get("dateTime", e["start"].get("date")),
                 "end": e["end"].get("dateTime", e["end"].get("date")),
-                "location": e.get("location"),
-                "description": e.get("description"),
-                "attendees": [a["email"] for a in e.get("attendees", [])],
+                "location": (e.get("location") or "")[:100] or None,
+                "description": " ".join((e.get("description") or "").split())[:150] or None,  # o resultado da ferramenta tem limite de tamanho
+                "attendees": [a.get("email", "") for a in e.get("attendees", [])][:5],
                 "html_link": e.get("htmlLink"),
             } for e in events]
         except Exception as e:
