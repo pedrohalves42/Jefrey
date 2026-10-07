@@ -61,7 +61,7 @@ def test_streams_topic_isolation_per_tenant():
     assert "jefrey.events" in pub
     assert "jefrey:dlq" in sub
     # garantir sem user_id label em metrics (cap5)
-    metrics = (ROOT / "src/jefrey/core/metrics.py").read_text(encoding="utf-8")
+    metrics = (ROOT / "src/jefrey/adapters/outbound/metrics.py").read_text(encoding="utf-8")
     import re
     blocks = re.findall(r"labelnames\s*=\s*\(([^)]*)\)", metrics)
     for b in blocks:
