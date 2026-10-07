@@ -72,6 +72,8 @@ def _decode_dev_jwt(token: str, secret: str) -> str | None:
 # CIPHER-307: rate limit HTTP por identidade (antes 70 req seguidas = 70x 200).
 _RL_LIMIT_PER_MIN = 60
 _RL_BURST = 20
+_RL_NATIVE_PER_MIN = 600
+_RL_NATIVE_BURST = 120
 _RL_EXEMPT_PREFIXES = ("/assets/", "/health", "/metrics", "/api/status", "/stt/health", "/tts/health", "/wa/device/",
                        "/stt/status", "/tts/status", "/favicon.ico", "/manifest.json", "/sw.js", "/vite.svg")
 def _native_mode() -> bool:
@@ -85,11 +87,14 @@ _rl_buckets: dict[str, tuple[float, float]] = {}
 def _rl_allow(key: str) -> tuple[bool, int]:
     """Token bucket em memoria: 60/min sustentado + burst 20. Retorna (permitido, retry_after_s)."""
     import os as _os
+    # programa nativo = uma pessoa so, em 127.0.0.1: abrir uma tela dispara ~20 pedidos de uma vez, entao o limite e folgado
+    # (continua protegendo contra laco descontrolado); no servidor continua 60/min
+    per_min, burst = (_RL_NATIVE_PER_MIN, _RL_NATIVE_BURST) if _native_mode() else (_RL_LIMIT_PER_MIN, _RL_BURST)
     try:
-        rate = float(_os.getenv("JEFREY_HTTP_RATE_PER_MIN", _RL_LIMIT_PER_MIN)) / 60.0
-        cap = float(_os.getenv("JEFREY_HTTP_RATE_BURST", _RL_BURST))
+        rate = float(_os.getenv("JEFREY_HTTP_RATE_PER_MIN", per_min)) / 60.0
+        cap = float(_os.getenv("JEFREY_HTTP_RATE_BURST", burst))
     except ValueError:
-        rate, cap = _RL_LIMIT_PER_MIN / 60.0, float(_RL_BURST)
+        rate, cap = per_min / 60.0, float(burst)
     now = time.monotonic()
     tokens, last = _rl_buckets.get(key, (cap, now))
     tokens = min(cap, tokens + (now - last) * rate)

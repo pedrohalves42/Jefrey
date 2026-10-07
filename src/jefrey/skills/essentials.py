@@ -166,10 +166,15 @@ class EssentialsSkill(SkillBase):
         except Exception as e:
             logger.warning("weather falhou: %s", type(e).__name__)
             return "Nao consegui consultar o clima agora (sem internet ou servico fora do ar)."
-        place = ", ".join(x for x in (r.get("name"), r.get("admin1"), r.get("country")) if x)
-        return (f"Clima em {place}: {cur.get('temperature_2m')} °C (sensacao {cur.get('apparent_temperature')} °C), "
-                f"umidade {cur.get('relative_humidity_2m')}%, vento {cur.get('wind_speed_10m')} km/h, "
-                f"chuva {cur.get('precipitation')} mm.")
+        place = ", ".join(x for x in (r.get("name"), r.get("admin1")) if x)
+
+        def n(v) -> str:  # 17.3 -> "17,3"
+            return str(v).replace(".", ",")
+
+        rain = cur.get("precipitation") or 0
+        return (f"Agora em {place}: {n(cur.get('temperature_2m'))} °C (sensação de {n(cur.get('apparent_temperature'))} °C), "
+                f"umidade de {n(cur.get('relative_humidity_2m'))}%, vento de {n(cur.get('wind_speed_10m'))} km/h, "
+                + (f"com chuva de {n(rain)} mm." if rain else "sem chuva agora."))
 
     @tool(description="Lista os arquivos da sua pasta local do Jefrey")
     async def files_list(self, folder: str = ".", user_id: str | None = None) -> str:

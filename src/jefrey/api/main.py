@@ -42,6 +42,14 @@ import httpx as _f3_httpx
 _f3_log2 = __import__("logging").getLogger(__name__)
 async def _f3_llm_probe():
     try:
+        from src.jefrey.core.llm_provider import config_from_settings as _cfg_p
+
+        if _cfg_p().provider != "ollama":  # cerebro na nuvem: nao ha Ollama para testar
+            _f3_log2.info("cerebro na nuvem: sem teste do Ollama")
+            return
+    except Exception as _e:
+        _f3_log2.debug("ignorado (main.py): %s", type(_e).__name__)
+    try:
         from src.jefrey.core.config import get_settings
         cfg = get_settings()
         base = (getattr(cfg.llm, 'base_url', None) or 'http://host.docker.internal:11434').rstrip('/')
@@ -54,10 +62,7 @@ async def _f3_llm_probe():
             if not ok:
                 _f3_log2.warning('LLM offline - modo mock visivel na UI (Axiom #1 fail-closed)')
     except Exception as e:
-        try:
-            _f3_log2.warning(f'LLM probe falhou: {e} - modo mock')
-        except:
-            pass
+        _f3_log2.warning('LLM local indisponivel (%s): o Jefrey usa o cerebro da nuvem se houver', type(e).__name__)
 
 
 def create_app() -> FastAPI:
@@ -106,6 +111,13 @@ def create_app() -> FastAPI:
         import asyncio as _aio
 
         async def _pull():
+            try:
+                from src.jefrey.core.llm_provider import config_from_settings as _cfg_q
+
+                if _cfg_q().provider != "ollama":  # cerebro na nuvem: os embeddings usam a reserva da nuvem sozinhos
+                    return
+            except Exception as _e:
+                logger.debug("ignorado (%s): %s", 'main.py', type(_e).__name__)
             try:
                 cfg2 = get_settings()
                 base = (os.getenv("JEFREY_EMBEDDINGS__BASE_URL") or getattr(cfg2.llm, "base_url", None) or "http://ollama:11434").rstrip("/")
@@ -240,12 +252,20 @@ def create_app() -> FastAPI:
         cfg = get_settings()
         base = (getattr(cfg.llm, 'base_url', None) or 'http://host.docker.internal:11434').rstrip('/')
 
-        # Check Ollama/LLM availability
+        # Check Ollama/LLM availability (so quando o cerebro e o local: com a nuvem nao ha o que testar e a resposta nao demora)
         ollama_ok = False
         try:
-            async with _f3_httpx.AsyncClient(timeout=2) as c:
-                r = await c.get(base + '/api/tags')
-                ollama_ok = r.status_code == 200
+            from src.jefrey.core.llm_provider import config_from_settings as _cfg_o
+
+            probe_ollama = _cfg_o().provider == "ollama"
+        except Exception as _e:
+            logger.debug("ignorado (%s): %s", 'main.py', type(_e).__name__)
+            probe_ollama = True
+        try:
+            if probe_ollama:
+                async with _f3_httpx.AsyncClient(timeout=2) as c:
+                    r = await c.get(base + '/api/tags')
+                    ollama_ok = r.status_code == 200
         except Exception as _e:
             logger.debug("ignorado (%s): %s", 'main.py', type(_e).__name__)
 

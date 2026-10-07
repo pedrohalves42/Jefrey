@@ -18,6 +18,7 @@ from typing import Any, AsyncIterator, Optional
 
 from src.jefrey.core.llm_tools import ToolCall
 from src.jefrey.domain.agenda import agenda_day, day_bounds, format_agenda
+from src.jefrey.domain.weather_ask import weather_ask
 from src.jefrey.core.tool_catalog import CATALOG, policy_for
 from src.jefrey.core.tool_runtime import ToolOutcome, ToolRuntime, tool_spec
 
@@ -171,6 +172,18 @@ def route_intent(message: str) -> Optional[tuple[str, dict]]:
         return None
     if _TIME.match(msg):
         return "current_time", {}
+    wcity = weather_ask(message)
+    if wcity is not None:  # "como esta o clima?": busca direto (antes: 2 rodadas do modelo, ~7 s)
+        city = wcity
+        if not city:
+            try:
+                from src.jefrey.core import today as _today
+
+                city = _today.load_prefs().get("city", "")
+            except Exception:
+                city = ""
+        if city:
+            return "weather", {"city": city}
     day = agenda_day(msg)
     if day:  # "o que tenho hoje?": le a agenda e responde direto (antes: 4 rodadas do modelo, ~20 s)
         from src.jefrey.core.reminders import local_tz

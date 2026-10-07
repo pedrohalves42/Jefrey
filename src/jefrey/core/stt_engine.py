@@ -12,6 +12,9 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_PROMPT = "Conversa em português do Brasil com o assistente pessoal Jefrey. Oi, Jefrey! Jefrey, que horas são?"
+HOTWORDS = "Jefrey"
+
 
 class STTEngine(ABC):
     """Interface base para engines de STT."""
@@ -68,6 +71,8 @@ class WhisperSTTEngine(STTEngine):
     def transcribe(self, audio_bytes: bytes, prompt: Optional[str] = None) -> str:
         if not audio_bytes:
             raise ValueError("Audio data is empty")
+        # sem dica o modelo ouvia "Jefrey" como "Diffay"/"Geferi": a dica de vocabulario ajuda o nome e a chamada pelo nome
+        prompt = prompt or DEFAULT_PROMPT
 
         # Write to temp file for whisper
         import tempfile
@@ -77,8 +82,12 @@ class WhisperSTTEngine(STTEngine):
 
         try:
             if hasattr(self._model, "transcribe"):  # faster-whisper
-                segments, info = self._model.transcribe(tmp_path, language=self._language, beam_size=3, vad_filter=True,
-                                                        initial_prompt=prompt)
+                try:
+                    segments, info = self._model.transcribe(tmp_path, language=self._language, beam_size=3, vad_filter=True,
+                                                            initial_prompt=prompt, hotwords=HOTWORDS)
+                except TypeError:  # versao do faster-whisper sem `hotwords`
+                    segments, info = self._model.transcribe(tmp_path, language=self._language, beam_size=3, vad_filter=True,
+                                                            initial_prompt=prompt)
                 text = " ".join(seg.text for seg in segments).strip()
             else:  # openai-whisper
                 result = self._model.transcribe(tmp_path, language=self._language, initial_prompt=prompt)

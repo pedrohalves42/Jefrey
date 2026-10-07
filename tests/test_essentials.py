@@ -111,7 +111,7 @@ def test_clima_com_resposta_simulada(skill, monkeypatch):
     real = httpx.AsyncClient
     monkeypatch.setattr(ess.httpx, "AsyncClient", lambda **kw: real(transport=httpx.MockTransport(handler), **kw))
     out = call(skill, "weather", city="Recife")
-    assert "Recife" in out and "28.5" in out
+    assert "Recife" in out and "28,5" in out
 
 
 def test_clima_sem_internet_nao_levanta(skill, monkeypatch):
