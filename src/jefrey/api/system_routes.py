@@ -104,6 +104,18 @@ async def show_orb(request: Request):
     return {"ok": True}
 
 
+@router.post("/restart")
+async def restart_app(request: Request, background: BackgroundTasks):
+    """Fecha e abre o Jefrey de novo (so no programa instalado/nativo)."""
+    _login(request)
+    from src.jefrey.native import control
+
+    if not control.can_restart():
+        raise HTTPException(status_code=404, detail="indisponivel neste modo")
+    background.add_task(control.request_restart)  # depois de responder
+    return {"ok": True, "message": "O Jefrey vai reiniciar."}
+
+
 @router.post("/show")
 async def show_window(request: Request):
     _login(request)

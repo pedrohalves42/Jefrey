@@ -251,7 +251,7 @@ def find_free_port(start: int = DEFAULT_PORT, tries: int = 20) -> int:
     raise OSError(f"nenhuma porta livre entre {start} e {start + tries - 1}")
 
 
-def start_tray(url: str, logs_dir: Path, on_quit, on_open=None, on_orb=None) -> "object | None":
+def start_tray(url: str, logs_dir: Path, on_quit, on_open=None, on_orb=None, on_restart=None) -> "object | None":
     """Icone na bandeja com Abrir / Ver registros / Sair. Sem pystray ou sem bandeja, segue sem (nunca derruba)."""
     try:
         import pystray
@@ -267,6 +267,10 @@ def start_tray(url: str, logs_dir: Path, on_quit, on_open=None, on_orb=None) -> 
                 on_open()
             else:
                 webbrowser.open(url)
+
+        def restart(_icon=None, _item=None):
+            if on_restart is not None:
+                on_restart()
 
         def orb(_icon=None, _item=None):
             if on_orb is not None:
@@ -285,6 +289,7 @@ def start_tray(url: str, logs_dir: Path, on_quit, on_open=None, on_orb=None) -> 
             pystray.MenuItem("Abrir o Jefrey", open_app, default=True),
             *([pystray.MenuItem("Mostrar o orbe (bolinha na tela)", orb)] if on_orb is not None else []),
             pystray.MenuItem("Ver registros (para suporte)", open_logs),
+            *([pystray.MenuItem("Reiniciar o Jefrey", restart)] if on_restart is not None else []),
             pystray.MenuItem("Sair", quit_),
         )
         icon = pystray.Icon("Jefrey", image, "Jefrey", menu)
@@ -416,8 +421,17 @@ def main(argv: Optional[list[str]] = None) -> int:
     no_browser = "--no-browser" in args or bool(os.getenv("JEFREY_NO_BROWSER"))
     no_tray = "--no-tray" in args or bool(os.getenv("JEFREY_NO_TRAY"))
     minimized = "--minimized" in args  # iniciado junto com o Windows: fica so na bandeja
+    restart = "--restart" in args  # "Reiniciar o Jefrey": fecha a copia aberta (se houver) e abre de novo
     desired = int(os.getenv("JEFREY_API_PORT", str(DEFAULT_PORT)))
     from src.jefrey.native import shell as shell_mod
+
+    home0 = Path(os.getenv("JEFREY_HOME") or default_home())
+    if restart and jefrey_running(desired):
+        shell_mod.ask_running_to_quit(home0)
+        end = time.time() + 30
+        while time.time() < end and jefrey_running(desired):
+            time.sleep(0.5)
+    shell_mod.clear_quit_signal(home0)  # sinal velho nunca fecha a copia nova
 
     use_window = not no_browser and shell_mod.webview_available()
     if native_running(desired):
@@ -481,10 +495,24 @@ def main(argv: Optional[list[str]] = None) -> int:
         if shell is not None:
             shell.quit()
 
+    def restart_self() -> None:
+        """Abre uma copia nova (que espera esta fechar) e fecha esta."""
+        try:
+            cmd = shell_mod.restart_command(bool(getattr(sys, "frozen", False)), sys.executable)
+            flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            subprocess.Popen(cmd, cwd=str(root) if not getattr(sys, "frozen", False) else None, creationflags=flags, close_fds=True)
+        except OSError as e:
+            logging.getLogger("jefrey.launcher").warning("nao consegui reiniciar (%s)", type(e).__name__)
+            return
+        quit_all()
+
     control.set_quit_hook(quit_all)
+    control.set_restart_hook(restart_self)
+    quit_watch_stop = threading.Event()
+    shell_mod.watch_quit_signal(home, quit_all, quit_watch_stop)  # "Reiniciar o Jefrey" de fora pede por arquivo
     if shell is not None:
         control.set_window_hooks(shell.show, shell.show_orb)
-    tray =None if no_tray else start_tray(url, logs_dir, quit_all, on_open=shell.show if shell else None, on_orb=shell.show_orb if shell else None)
+    tray =None if no_tray else start_tray(url, logs_dir, quit_all, on_open=shell.show if shell else None, on_orb=shell.show_orb if shell else None, on_restart=restart_self)
     if shell is not None and tray is not None:
         shell.set_tray_notice(lambda title, text: tray.notify(text, title))
     tray_updates = start_tray_updates(tray) if tray is not None else None
@@ -514,6 +542,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             tray_updates.set()
         control.set_quit_hook(None)
         control.set_window_hooks(None, None)
+        control.set_restart_hook(None)
+        quit_watch_stop.set()
         if tray is not None:
             try:
                 tray.stop()

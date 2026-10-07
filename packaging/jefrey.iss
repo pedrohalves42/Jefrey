@@ -31,7 +31,7 @@ RestartApplications=yes
 Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "Criar um atalho na Área de Trabalho"; Flags: unchecked
+Name: "desktopicon"; Description: "Criar um atalho na Área de Trabalho"
 
 [Files]
 ; "extensao-chrome" ja vem dentro de dist\Jefrey (copiada pelo build_exe.bat): fica numa pasta visivel para a extensao do WhatsApp
@@ -39,6 +39,7 @@ Source: "..\dist\Jefrey\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdir
 
 [Icons]
 Name: "{autoprograms}\Jefrey"; Filename: "{app}\Jefrey.exe"
+Name: "{autoprograms}\Reiniciar o Jefrey"; Filename: "{app}\Jefrey.exe"; Parameters: "--restart"; Comment: "Fecha o Jefrey e abre de novo"
 Name: "{autodesktop}\Jefrey"; Filename: "{app}\Jefrey.exe"; Tasks: desktopicon
 
 [Run]

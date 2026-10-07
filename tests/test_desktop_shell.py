@@ -101,3 +101,43 @@ def test_fullscreen_is_default_and_remembered(tmp_path: Path):
     assert shell.clamp_state({"fullscreen": False}, (1920, 1080))["fullscreen"] is False
     shell.save_state(tmp_path, {"fullscreen": False, "w": 900})
     assert shell.load_state(tmp_path) == {"w": 900, "fullscreen": False}
+
+
+def test_comando_de_reiniciar_programa_instalado_e_desenvolvimento():
+    assert shell.restart_command(True, r"C:\Jefrey\Jefrey.exe") == [r"C:\Jefrey\Jefrey.exe", "--restart"]
+    assert shell.restart_command(False, "python") == ["python", "-m", "src.jefrey.native", "--restart"]
+
+
+def test_sinal_de_fechar_chega_uma_vez_e_sinal_velho_e_apagado(tmp_path: Path):
+    import threading
+
+    got, stop = threading.Event(), threading.Event()
+    shell.ask_running_to_quit(tmp_path)
+    shell.clear_quit_signal(tmp_path)  # a copia nova apaga o sinal velho antes de comecar a observar
+    assert not shell.quit_signal_path(tmp_path).exists()
+    t = shell.watch_quit_signal(tmp_path, got.set, stop)
+    assert not got.wait(1.3)  # nada pedido: nada fecha
+    shell.ask_running_to_quit(tmp_path)
+    assert got.wait(4)
+    t.join(2)
+    assert not shell.quit_signal_path(tmp_path).exists()
+    stop.set()
+
+
+def test_reiniciar_so_existe_no_modo_nativo():
+    from src.jefrey.native import control
+
+    control.set_restart_hook(None)
+    assert not control.can_restart() and not control.request_restart()
+    calls = []
+    control.set_restart_hook(lambda: calls.append(1))
+    try:
+        assert control.can_restart() and control.request_restart() and calls == [1]
+    finally:
+        control.set_restart_hook(None)
+
+
+def test_instalador_cria_atalho_de_reiniciar_e_o_da_area_de_trabalho_vem_marcado():
+    iss = (Path(__file__).resolve().parents[1] / "packaging" / "jefrey.iss").read_text(encoding="utf-8")
+    assert 'Reiniciar o Jefrey' in iss and '--restart' in iss
+    assert 'Name: "desktopicon"; Description: "Criar um atalho na Área de Trabalho"\n' in iss  # sem "unchecked"

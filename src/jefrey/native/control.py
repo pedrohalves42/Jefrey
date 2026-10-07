@@ -6,6 +6,23 @@ from typing import Callable, Optional
 _quit: Optional[Callable[[], None]] = None
 _show: Optional[Callable[[], None]] = None
 _orb: Optional[Callable[[], None]] = None
+_restart: Optional[Callable[[], None]] = None
+
+
+def set_restart_hook(fn: Optional[Callable[[], None]]) -> None:
+    global _restart
+    _restart = fn
+
+
+def can_restart() -> bool:
+    return _restart is not None
+
+
+def request_restart() -> bool:
+    if _restart is None:
+        return False
+    _restart()
+    return True
 
 
 def set_quit_hook(fn: Optional[Callable[[], None]]) -> None:

@@ -82,6 +82,54 @@ def ask_running_to_show(home: Path) -> None:
         logger.info("nao consegui avisar a janela aberta (%s)", type(e).__name__)
 
 
+QUIT_FILE = "quit.signal"
+
+
+def quit_signal_path(home: Path) -> Path:
+    return home / "config" / QUIT_FILE
+
+
+def ask_running_to_quit(home: Path) -> None:
+    """`Jefrey.exe --restart`: pede por arquivo-sinal (sem rede, sem senha) para a copia aberta fechar."""
+    p = quit_signal_path(home)
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(str(time.time()), encoding="utf-8")
+    except OSError as e:
+        logger.info("nao consegui pedir para fechar (%s)", type(e).__name__)
+
+
+def clear_quit_signal(home: Path) -> None:
+    try:
+        quit_signal_path(home).unlink(missing_ok=True)
+    except OSError as e:
+        logger.debug("sinal de fechar: %s", type(e).__name__)
+
+
+def watch_quit_signal(home: Path, on_quit: Callable[[], None], stop: threading.Event) -> threading.Thread:
+    """Observa o arquivo-sinal de fechar (so de arquivos criados DEPOIS da abertura: lixo antigo e apagado no inicio)."""
+
+    def loop() -> None:
+        sig = quit_signal_path(home)
+        while not stop.wait(1.0):
+            try:
+                if sig.exists():
+                    sig.unlink(missing_ok=True)
+                    on_quit()
+                    return
+            except OSError as e:
+                logger.debug("sinal de fechar: %s", type(e).__name__)
+
+    t = threading.Thread(target=loop, daemon=True, name="jefrey-quit-signal")
+    t.start()
+    return t
+
+
+def restart_command(frozen: bool, executable: str) -> list[str]:
+    """Comando que abre uma NOVA copia pedindo para a atual fechar antes. Programa instalado: Jefrey.exe --restart."""
+    return [executable, "--restart"] if frozen else [executable, "-m", "src.jefrey.native", "--restart"]
+
+
 def clamp_state(state: dict, screen: tuple[int, int]) -> dict:
     """Posicao/tamanho salvos so valem se a janela ficaria visivel (o monitor pode ter mudado)."""
     w = max(MIN_SIZE[0], min(int(state.get("w", MAIN_SIZE[0])), screen[0]))

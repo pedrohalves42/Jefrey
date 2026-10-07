@@ -30,6 +30,14 @@ export async function showMainWindow(): Promise<void> {
   }
 }
 
+export async function restartApp(): Promise<boolean> {
+  try {
+    return (await authedFetch("/system/restart", { method: "POST" })).ok
+  } catch {
+    return false
+  }
+}
+
 export async function showOrb(): Promise<boolean> {
   try {
     return (await authedFetch("/system/orb", { method: "POST" })).ok

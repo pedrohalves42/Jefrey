@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { getAutostart, isDesktop, setAutostart, showOrb, type Autostart } from "@/lib/shell"
+import { getAutostart, isDesktop, restartApp, setAutostart, showOrb, type Autostart } from "@/lib/shell"
 
 /** O Jefrey como programa do computador: iniciar com o Windows e a bolinha (orbe) na tela. So aparece no programa instalado. */
 export default function AppSettings() {
@@ -48,6 +48,12 @@ export default function AppSettings() {
           <p className="mt-1 text-sm text-white/50">Também funciona com a tecla F11. Em tela cheia, os botões de minimizar e esconder ficam no canto de cima, à direita.</p>
         </div>
       )}
+      <div className="mt-4">
+        <button type="button" onClick={() => { setMsg("Reiniciando… a janela fecha e abre de novo em instantes."); void restartApp() }} className="jf-focus rounded-lg border border-white/25 px-5 py-3 text-base text-white/85 hover:bg-white/5">
+          Reiniciar o Jefrey
+        </button>
+        <p className="mt-1 text-sm text-white/50">Fecha e abre de novo. Também há “Reiniciar o Jefrey” no menu Iniciar e no ícone do relógio.</p>
+      </div>
       <p role="status" className="mt-2 text-sm text-cyan-200">{msg}</p>
     </section>
   )
