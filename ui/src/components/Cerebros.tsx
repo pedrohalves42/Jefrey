@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query"
 import ListenButton from "@/components/ListenButton"
-import { apiDetail, connectBrain, disconnectBrain, getBrains, makePrimary, roleOf, routingSummary, steps, type BrainCard, type BrainsState } from "@/lib/brains"
+import { apiDetail, checkBrains, connectBrain, disconnectBrain, getBrains, type BrainCheck, makePrimary, roleOf, routingSummary, steps, type BrainCard, type BrainsState } from "@/lib/brains"
 import { KEY_COST_NOTE } from "@/lib/keyGuide"
 import { startOpenRouter } from "@/lib/llm"
 
@@ -81,10 +81,21 @@ export default function Cerebros() {
   const [open, setOpen] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<Msg>(null)
+  const [checks, setChecks] = useState<BrainCheck[] | null>(null)
+  const [testing, setTesting] = useState(false)
 
   useEffect(() => {
     void getBrains().then(r => setSt(r.data))
   }, [])
+
+  async function testAll() {
+    setTesting(true)
+    setChecks(null)
+    const r = await checkBrains()
+    setTesting(false)
+    if (r.ok && r.data) setChecks(r.data.results)
+    else setMsg({ ok: false, text: "Não consegui testar agora. Tente de novo." })
+  }
 
   const names = Object.fromEntries((st?.catalog ?? []).map(c => [c.id, c.name]))
   const summary = routingSummary(st, names)
@@ -138,7 +149,21 @@ export default function Cerebros() {
       <h2 id="c-ia" className="text-xl font-medium text-white">Cérebros do Jefrey</h2>
       <p className="mt-2 text-base text-white/75">{summary}</p>
       <p className="mt-1 text-sm text-white/55">Você paga direto ao serviço, só pelo que usar. O Jefrey nunca vê a sua senha.</p>
-      <div className="mt-2"><ListenButton text={intro} /></div>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <ListenButton text={intro} />
+        <button type="button" onClick={() => void testAll()} disabled={testing} className={soft}>{testing ? "Testando…" : "Testar todos os cérebros"}</button>
+      </div>
+      {checks && (
+        <ul className="mt-3 space-y-1.5 rounded-xl border border-white/10 p-3" aria-label="Resultado do teste">
+          {checks.map(c => (
+            <li key={`${c.role}-${c.id}`} className="text-base text-white/85">
+              <span className={c.ok ? "text-emerald-300" : "text-red-300"}>{c.ok ? "✓" : "✗"}</span>{" "}
+              <b>{names[c.id] ?? c.id}</b> <span className="text-white/50">({c.role === "principal" ? "principal" : "reserva"} · {c.model})</span>
+              {c.ok ? <span className="text-white/70"> respondeu em {c.seconds.toLocaleString("pt-BR")} s</span> : <span className="text-red-200"> — {c.problem}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
       {msg && (
         <p role={msg.ok ? "status" : "alert"} className={`mt-3 rounded-lg border px-3 py-2 text-base ${msg.ok ? "border-emerald-400/40 text-emerald-100" : "border-red-400/40 text-red-100"}`}>{msg.text}</p>
       )}

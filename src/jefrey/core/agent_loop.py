@@ -13,9 +13,11 @@ import logging
 import re
 import unicodedata
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, AsyncIterator, Optional
 
 from src.jefrey.core.llm_tools import ToolCall
+from src.jefrey.domain.agenda import agenda_day, day_bounds, format_agenda
 from src.jefrey.core.tool_catalog import CATALOG, policy_for
 from src.jefrey.core.tool_runtime import ToolOutcome, ToolRuntime, tool_spec
 
@@ -168,6 +170,12 @@ def route_intent(message: str) -> Optional[tuple[str, dict]]:
         return None
     if _TIME.match(msg):
         return "current_time", {}
+    day = agenda_day(msg)
+    if day:  # "o que tenho hoje?": le a agenda e responde direto (antes: 4 rodadas do modelo, ~20 s)
+        from src.jefrey.core.reminders import local_tz
+
+        start, end = day_bounds(day, datetime.now(local_tz()))
+        return "list_events", {"time_min": start.isoformat(), "time_max": end.isoformat(), "max_results": 20}
     for pat in _RECALL:
         rm = pat.match(msg)
         if rm and rm.group(1).strip():
@@ -291,7 +299,7 @@ async def run_agent(
         assert outcome is not None
         yield {"type": "tool_end", "tool": name, "ok": outcome.ok, "status": outcome.status, "summary": _summary(outcome)}
         if outcome.ok and name not in SUMMARIZE_TOOLS:
-            yield {"type": "token", "content": outcome.content}
+            yield {"type": "token", "content": format_agenda(outcome.content, agenda_day(_norm(user_input.strip().rstrip("?!. ")))) if name == "list_events" else outcome.content}
             return
         # busca em notas (ou falha): o modelo responde usando SO o resultado, sem ferramentas
         msgs.append({"role": "assistant", "content": "", "tool_calls": [ToolCall("route", name, args).as_dict()]})

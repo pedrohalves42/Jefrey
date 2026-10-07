@@ -170,6 +170,35 @@ def _timeout() -> float:
     return float(os.getenv("JEFREY_LLM_TIMEOUT", "90"))
 
 
+# Conexao reaproveitada entre as perguntas: abrir (e fechar) uma conexao segura nova a cada resposta custava
+# de 0,2 a 0,6 s. Um cliente por laco de eventos; os testes (que passam `transport`) continuam com cliente proprio.
+_pool: dict = {}
+
+
+class _Borrowed:
+    """Empresta o cliente compartilhado sem fecha-lo ao sair do `async with`."""
+
+    def __init__(self, client: httpx.AsyncClient):
+        self._c = client
+
+    async def __aenter__(self) -> httpx.AsyncClient:
+        return self._c
+
+    async def __aexit__(self, *exc) -> bool:
+        return False
+
+
+def _pooled() -> httpx.AsyncClient:
+    import asyncio
+
+    loop = asyncio.get_running_loop()
+    c = _pool.get("client")
+    if c is None or c.is_closed or _pool.get("loop") is not loop:
+        c = httpx.AsyncClient(timeout=_timeout(), limits=httpx.Limits(max_keepalive_connections=8, keepalive_expiry=90.0))
+        _pool["client"], _pool["loop"] = c, loop
+    return c
+
+
 def _split_system(messages: list[Message]) -> tuple[str, list[Message]]:
     system = "\n\n".join(m["content"] for m in messages if m.get("role") == "system")
     rest = [m for m in messages if m.get("role") != "system"]
@@ -253,8 +282,10 @@ class LLMClient:
             body,
         )
 
-    def _client(self) -> httpx.AsyncClient:
-        return httpx.AsyncClient(timeout=_timeout(), transport=self._transport)
+    def _client(self):
+        if self._transport is not None:  # testes: cliente proprio, com o transporte falso
+            return httpx.AsyncClient(timeout=_timeout(), transport=self._transport)
+        return _Borrowed(_pooled())
 
     # ---- chat completo ----------------------------------------------------------
     async def chat(self, messages: list[Message]) -> str:

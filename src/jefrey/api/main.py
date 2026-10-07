@@ -148,6 +148,7 @@ def create_app() -> FastAPI:
             from src.jefrey import bootstrap
             bootstrap.register_jobs(scheduler)
             bootstrap.refresh_public_assets()
+            bootstrap.warm_up()
             scheduler.start()
         except Exception as e:
             logger.warning("agendador indisponivel: %s", e)

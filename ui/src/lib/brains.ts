@@ -15,6 +15,8 @@ async function json<T>(path: string, init?: RequestInit): Promise<Res<T>> {
   }
 }
 
+export type BrainCheck = { id: string; role: BrainRole; model: string; ok: boolean; seconds: number; problem: string }
+export const checkBrains = () => json<{ results: BrainCheck[] }>("/brains/check")
 export const getBrains = () => json<BrainsState>("/brains")
 export const connectBrain = (id: string, api_key?: string) =>
   json<BrainsState>(`/brains/${encodeURIComponent(id)}/connect`, { method: "POST", body: JSON.stringify({ api_key }) })

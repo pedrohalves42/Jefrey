@@ -27,6 +27,13 @@ async def list_brains(request: Request):
     return B.state()
 
 
+@router.get("/check")
+async def check(request: Request):
+    """Testa de verdade cada cerebro (uma palavra) e diz quem funciona, quanto demora e, se falhar, o motivo."""
+    _login(request)
+    return {"results": await B.check_all()}
+
+
 @router.post("/{brain_id}/connect")
 async def connect(brain_id: str, body: ConnectBody, request: Request):
     _login(request)

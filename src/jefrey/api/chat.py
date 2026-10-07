@@ -51,30 +51,12 @@ from src.jefrey.core.content_guard import sanitize_tool_output
 
 from src.jefrey.core.audit import redact_pii
 
-from src.jefrey.brain2.queue import get_brain2_queue
 
 from src.jefrey.core.hitl import ApprovalManager
 
 
 
 logger = logging.getLogger(__name__)
-
-def _brain2_enqueue_fire_and_forget(user_id: str, thread_id: str, user_input: str, response: str):
-
-    try:
-
-        q = get_brain2_queue()
-
-        mid = q.enqueue(user_id=user_id, thread_id=thread_id, user_input=user_input, response=response, meta={"source": "chat"})
-
-        logger.info("brain2 enqueue ok user=%s thread=%s id=%s", user_id, thread_id, mid)
-
-    except Exception as e:
-
-        logger.warning("brain2 enqueue failed (non-critical): %s", e, exc_info=True)
-
-
-
 
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -291,8 +273,6 @@ async def chat(request: Request, req: ChatRequest):
 
                 response_text = result.get('response', str(result)) if isinstance(result, dict) else str(result)
 
-                _brain2_enqueue_fire_and_forget(user_id, thread_id, sanitized, response_text)
-
                 return {
 
                     'status': 'complete',
@@ -384,7 +364,6 @@ async def chat_stream(request: Request, req: ChatRequest):
                 if ev.get("type") == "token":
                     full += ev.get("content", "")
                 yield _sse(ev)
-            _brain2_enqueue_fire_and_forget(user_id, thread_id, sanitized, full)
             yield _sse({"type": "done", "thread_id": thread_id})
         except asyncio.CancelledError:
             raise  # cliente desconectou

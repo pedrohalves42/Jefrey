@@ -15,6 +15,22 @@ def register_jobs(scheduler) -> None:
     scheduler.register("avisos-de-compromissos", 120, alerts.tick)
 
 
+def warm_up() -> None:
+    """Esquenta o que a primeira pergunta pagaria sozinha (carregar as ferramentas): a 1a resposta chegava ~2,8 s mais devagar."""
+    import logging
+    import threading
+
+    def work() -> None:
+        try:
+            from src.jefrey.skills import load_skills
+
+            load_skills()
+        except Exception as e:
+            logging.getLogger(__name__).debug("esquentar ferramentas: %s", type(e).__name__)
+
+    threading.Thread(target=work, daemon=True, name="jefrey-warmup").start()
+
+
 def refresh_public_assets() -> None:
     """Atualiza a copia da extensao do Chrome que fica em Documentos (o Chrome carrega dali) a cada abertura do programa."""
     import logging

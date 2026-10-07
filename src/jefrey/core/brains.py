@@ -31,7 +31,7 @@ CATALOG: list[dict[str, Any]] = [
      "provider": "openai", "base_url": "https://api.openai.com", "model": "gpt-6-luna", "prefix": "sk-",
      "key_url": "https://platform.openai.com/api-keys"},
     {"id": "groq", "name": "Groq", "tagline": "Muito rápido e tem plano gratuito.", "kind": "key",
-     "provider": "openai", "base_url": "https://api.groq.com/openai", "model": "llama-3.3-70b-versatile", "prefix": "gsk_",
+     "provider": "openai", "base_url": "https://api.groq.com/openai", "model": "openai/gpt-oss-120b", "prefix": "gsk_",
      "key_url": "https://console.groq.com/keys"},
     {"id": "deepseek", "name": "DeepSeek", "tagline": "Muito barato.", "kind": "key",
      "provider": "openai", "base_url": "https://api.deepseek.com", "model": "deepseek-chat", "prefix": "sk-",
@@ -214,6 +214,61 @@ def _health_message(h: dict) -> str:
     if "connect" in d or "timeout" in d:
         return "Não consegui chegar ao serviço. Verifique a sua internet."
     return "Não deu para conectar com esse código. Confira e tente de novo."
+
+
+def explain_failure(e: Exception) -> str:
+    """O motivo, em portugues simples, de um cerebro nao responder (sem chaves, sem URLs)."""
+    import httpx
+
+    if isinstance(e, httpx.HTTPStatusError):
+        code = e.response.status_code
+        body = ""
+        try:
+            body = e.response.text[:400].lower()
+        except Exception:
+            body = ""
+        if code == 402 or "credit" in body or "insufficient" in body or "balance" in body or "quota" in body:
+            return "sem saldo ou no limite: adicione crédito no site do serviço"
+        if code == 429:
+            return "muitas perguntas seguidas (limite do serviço): tente mais tarde"
+        if code in (401, 403):
+            return "o serviço recusou a chave: confira se ela está ativa"
+        if code == 404 or "model" in body and ("not exist" in body or "not found" in body):
+            return "esse modelo não existe mais ou a conta não tem acesso a ele: troque o modelo"
+        return f"o serviço respondeu com erro {code}"
+    if isinstance(e, (httpx.TimeoutException, httpx.ConnectError)):
+        return "não consegui chegar ao serviço (internet ou serviço fora do ar)"
+    return "não respondeu agora"
+
+
+async def check_all(timeout: float = 25.0) -> list[dict]:
+    """Pergunta algo bem curto a cada cerebro (principal e reservas) ao mesmo tempo e conta quanto cada um demorou."""
+    import asyncio
+    import time
+
+    ov = P.load_override()
+    jobs: list[tuple[str, str, P.LLMConfig]] = []
+    if ov.get("provider"):
+        cfg = P.config_from_settings()
+        if cfg.provider == "ollama" or cfg.api_key:
+            jobs.append((identify(cfg.provider, cfg.base_url), "principal", cfg))
+    fb = P.load_fallback_configs()
+    ids = [str(i.get("id", "")) for i in (ov.get("fallbacks") or [])[: P.MAX_FALLBACKS] if isinstance(i, dict) and i.get("provider") in P.PROVIDERS and i.get("model")]
+    for bid, cfg in zip(ids, fb):
+        jobs.append((bid, "reserva", cfg))
+
+    async def one(bid: str, role: str, cfg: "P.LLMConfig") -> dict:
+        t0 = time.perf_counter()
+        base = {"id": bid, "role": role, "model": cfg.model}
+        try:
+            await asyncio.wait_for(P.LLMClient(cfg).chat([{"role": "user", "content": "Responda só com a palavra: ok"}]), timeout=timeout)
+            return {**base, "ok": True, "seconds": round(time.perf_counter() - t0, 2), "problem": ""}
+        except asyncio.TimeoutError:
+            return {**base, "ok": False, "seconds": round(time.perf_counter() - t0, 2), "problem": "demorou demais para responder"}
+        except Exception as e:
+            return {**base, "ok": False, "seconds": round(time.perf_counter() - t0, 2), "problem": explain_failure(e)}
+
+    return list(await asyncio.gather(*[one(*j) for j in jobs]))
 
 
 def make_primary(brain_id: str) -> dict:
