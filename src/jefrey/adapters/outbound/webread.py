@@ -18,6 +18,8 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 
+from src.jefrey.domain.urls import site_domain
+
 logger = logging.getLogger(__name__)
 
 MAX_BYTES = 1_500_000
@@ -157,4 +159,4 @@ async def web_search(query: str, n: int = 6, searcher: Optional[Callable[[str, i
 
 
 def domain(url: str) -> str:
-    return re.sub(r"^www\.", "", (urlparse(url).hostname or "").lower())
+    return site_domain(url)

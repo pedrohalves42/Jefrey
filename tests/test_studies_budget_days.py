@@ -35,7 +35,7 @@ def _quando(monkeypatch, iso):
         @classmethod
         def now(cls, tz=None):
             return datetime.fromisoformat(iso).replace(tzinfo=tz or TZ)
-    monkeypatch.setattr(S, "datetime", FakeDT)
+    monkeypatch.setattr("src.jefrey.application.studies.datetime", FakeDT)
 
 
 def test_padrao_e_dez_centavos(st):

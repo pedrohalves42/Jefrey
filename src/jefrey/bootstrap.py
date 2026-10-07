@@ -7,11 +7,13 @@ from src.jefrey.application.event_alerts import EventAlertService
 
 def wire() -> None:
     """Liga cada porta ao adaptador padrao (chamado sozinho na primeira vez que um caso de uso pede uma porta)."""
-    from src.jefrey.adapters.outbound import agent_env, briefing_env, runtime_ports
+    from src.jefrey.adapters.outbound import agent_env, briefing_env, privacy_env, runtime_ports, studies_env
 
     runtime_ports.register()
     agent_env.register()
     briefing_env.register()
+    privacy_env.register()
+    studies_env.register()
 
 
 def build_event_alerts() -> EventAlertService:
