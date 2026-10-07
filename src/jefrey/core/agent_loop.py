@@ -18,6 +18,7 @@ from typing import Any, AsyncIterator, Optional
 
 from src.jefrey.core.llm_tools import ToolCall
 from src.jefrey.domain.agenda import agenda_day, day_bounds, format_agenda
+from src.jefrey.domain.whatsapp import asks_whatsapp_chat, asks_whatsapp_inbox
 from src.jefrey.domain.email_ask import QUERY as UNREAD_QUERY, asks_unread_email, format_unread
 from src.jefrey.domain.weather_ask import weather_ask
 from src.jefrey.core.tool_catalog import CATALOG, policy_for
@@ -49,7 +50,8 @@ GROUPS: list[tuple[tuple[str, ...], list[str]]] = [
      ["list_events", "create_event", "find_free_slots", "update_event", "delete_event"]),
     (("email", "e-mail", "caixa de entrada", "gmail", "mensagem de"),
      ["list_messages", "get_message", "search_messages", "send_message", "reply_message"]),
-    (("whatsapp", "zap", "manda pro", "manda pra", "manda para", "mande pro", "mande pra", "mande para", "envia pro", "envia pra", "envie pro", "envie pra", "manda uma mensagem", "mande uma mensagem"), ["wa_send_message"]),
+    (("whatsapp", "zap", "manda pro", "manda pra", "manda para", "mande pro", "mande pra", "mande para", "envia pro", "envia pra", "envie pro", "envie pra", "manda uma mensagem", "mande uma mensagem"), ["wa_send_message", "wa_inbox", "wa_conversation"]),
+    (("mensagem nova", "mensagens novas", "recado", "quem me escreveu", "quem me mandou", "me disse", "me falou", "me mandou"), ["wa_inbox", "wa_conversation"]),
     (("tarefa", "a fazer", "afazer", "to-do", "todo"), ["tasks_list", "tasks_add", "tasks_done"]),
     (("contato", "telefone do", "telefone da", "numero do", "numero da", "celular do", "celular da", "e-mail do", "e-mail da"), ["contacts_find"]),
     (("drive", "nuvem"), ["list_files", "search_files", "get_file_metadata", "download_file"]),
@@ -173,6 +175,11 @@ def route_intent(message: str) -> Optional[tuple[str, dict]]:
         return None
     if _TIME.match(msg):
         return "current_time", {}
+    if asks_whatsapp_inbox(message):  # "tenho mensagem no zap?": le a caixa de entrada direto
+        return "wa_inbox", {}
+    who = asks_whatsapp_chat(message)
+    if who:  # "o que a Maria me disse?": mostra as ultimas mensagens que o Jefrey leu
+        return "wa_conversation", {"contact": who}
     if asks_unread_email(message):  # "tenho e-mail novo?": busca e responde direto (antes: ~13 s com o modelo)
         return "search_messages", {"query": UNREAD_QUERY, "max_results": 5}
     wcity = weather_ask(message)

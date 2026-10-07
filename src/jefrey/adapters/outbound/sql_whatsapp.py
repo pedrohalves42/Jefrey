@@ -56,6 +56,26 @@ def _tables():
     return dev, chats, drafts, prefs, seen
 
 
+def _extra_tables():
+    """Caixa de entrada (ultimo retrato da lista de conversas) e historico lido das conversas abertas."""
+    from sqlalchemy import Boolean, Column, DateTime, Integer, String, Table, Text
+
+    from src.jefrey.core.db import Base
+
+    md = Base.metadata
+    inbox = md.tables.get("wa_inbox")
+    if inbox is None:
+        inbox = Table("wa_inbox", md, Column("user_id", String(255), primary_key=True), Column("ckey", String(100), primary_key=True),
+                      Column("display", String(100), nullable=False), Column("preview", String(200), nullable=False),
+                      Column("unread", Integer, nullable=False), Column("ts", DateTime, nullable=False))
+    msgs = md.tables.get("wa_msgs")
+    if msgs is None:
+        msgs = Table("wa_msgs", md, Column("user_id", String(255), primary_key=True), Column("ckey", String(100), primary_key=True),
+                     Column("mid", String(120), primary_key=True), Column("text", Text, nullable=False),
+                     Column("from_me", Boolean, nullable=False), Column("ts", DateTime, nullable=False))
+    return inbox, msgs
+
+
 def _hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
@@ -66,7 +86,8 @@ class WAStore:
 
         self.dev, self.chats, self.drafts, self.prefs, self.seen = _tables()
         self.engine = get_engine()
-        for t in (self.dev, self.chats, self.drafts, self.prefs, self.seen):
+        self.inbox, self.msgs = _extra_tables()
+        for t in (self.dev, self.chats, self.drafts, self.prefs, self.seen, self.inbox, self.msgs):
             t.create(self.engine, checkfirst=True)
 
     # --- pareamento ---
@@ -249,9 +270,57 @@ class WAStore:
             return bool(c.execute(self.drafts.update().where((self.drafts.c.id == did) & (self.drafts.c.user_id == user_id) & (self.drafts.c.status == "approved"))
                                   .values(status="sent" if ok else "failed")).rowcount)
 
+    # --- caixa de entrada e historico ---
+    def save_inbox(self, user_id: str, items: list[dict]) -> list[dict]:
+        """Guarda o retrato da lista de conversas. Devolve as que ganharam mensagens nao lidas desde o retrato anterior."""
+        grew: list[dict] = []
+        with self.engine.begin() as c:
+            old = {r.ckey: r.unread for r in c.execute(self.inbox.select().where(self.inbox.c.user_id == user_id)).fetchall()}
+            c.execute(self.inbox.delete().where(self.inbox.c.user_id == user_id))
+            seen_keys: set[str] = set()
+            for it in items:
+                key = chat_key(it["title"])
+                if not key or key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                c.execute(self.inbox.insert().values(user_id=user_id, ckey=key, display=it["title"], preview=it["preview"][:200], unread=it["unread"], ts=_now()))
+                if it["unread"] > old.get(key, 0):
+                    grew.append(it)
+        return grew
+
+    def inbox_items(self, user_id: str) -> list[dict]:
+        with self.engine.connect() as c:
+            rows = c.execute(self.inbox.select().where(self.inbox.c.user_id == user_id).order_by(self.inbox.c.unread.desc(), self.inbox.c.ts.desc())).fetchall()
+        return [{"title": r.display, "preview": r.preview, "unread": r.unread, "ts": r.ts.isoformat()} for r in rows]
+
+    def inbox_age_s(self, user_id: str) -> Optional[int]:
+        with self.engine.connect() as c:
+            ts = c.execute(select(func.max(self.inbox.c.ts)).where(self.inbox.c.user_id == user_id)).scalar()
+        return max(0, int((_now() - ts).total_seconds())) if ts else None
+
+    def save_history(self, user_id: str, chat: str, msgs: list[dict]) -> int:
+        key, n = chat_key(chat), 0
+        if not key:
+            return 0
+        with self.engine.begin() as c:
+            for m in msgs:
+                mid = m["id"][:120]
+                if c.execute(self.msgs.select().where((self.msgs.c.user_id == user_id) & (self.msgs.c.ckey == key) & (self.msgs.c.mid == mid))).first():
+                    continue
+                c.execute(self.msgs.insert().values(user_id=user_id, ckey=key, mid=mid, text=m["text"], from_me=bool(m["from_me"]), ts=_now()))
+                n += 1
+        return n
+
+    def history(self, user_id: str, chat: str, limit: int = 10) -> list[dict]:
+        key = chat_key(chat)
+        with self.engine.connect() as c:
+            rows = c.execute(self.msgs.select().where((self.msgs.c.user_id == user_id) & (self.msgs.c.ckey == key)).order_by(self.msgs.c.ts.desc()).limit(limit)).fetchall()
+        return [{"id": r.mid, "text": r.text, "from_me": bool(r.from_me)} for r in reversed(rows)]
+
     def purge(self, days: int = KEEP_DAYS) -> int:
         cut = _now() - timedelta(days=days)
         with self.engine.begin() as c:
+            c.execute(self.msgs.delete().where(self.msgs.c.ts < cut))
             c.execute(self.seen.delete().where(self.seen.c.ts < cut))
             return c.execute(self.drafts.delete().where(self.drafts.c.created_at < cut)).rowcount or 0
 
@@ -261,5 +330,7 @@ class WAStore:
             c.execute(self.chats.delete().where(self.chats.c.user_id == user_id))
             c.execute(self.seen.delete().where(self.seen.c.user_id == user_id))
             c.execute(self.dev.delete().where(self.dev.c.user_id == user_id))
+            c.execute(self.inbox.delete().where(self.inbox.c.user_id == user_id))
+            c.execute(self.msgs.delete().where(self.msgs.c.user_id == user_id))
             c.execute(self.prefs.delete().where(self.prefs.c.user_id == user_id))
         return n

@@ -93,3 +93,118 @@ _COMPOSE_SYSTEM = (
     "Escreva SO o texto da mensagem, pronto para enviar, sem aspas e sem explicacao. Use apenas o que a pessoa pediu: nunca invente fatos, "
     "valores, enderecos nem horarios. Nunca inclua senhas, numeros de cartao ou documentos.{known}"
 )
+
+
+# ---------------- caixa de entrada, historico e canal "mensagem para voce mesmo" ----------------
+BOT_PREFIX = "🤖 "  # toda resposta do Jefrey na conversa consigo mesmo comeca assim (nunca e tratada como pedido)
+MAX_PREVIEW = 120
+HISTORY_PER_CHAT = 40
+INBOX_MAX = 60
+_SELF_RX = re.compile(r"\((voc[eê]|you|tu|eu)\)\s*$", re.I)
+
+
+def is_self_chat(title: str) -> bool:
+    """A conversa da pessoa com ela mesma ('Pedro (Você)')."""
+    return bool(_SELF_RX.search((title or "").strip()))
+
+
+def is_bot_text(text: str) -> bool:
+    return (text or "").lstrip().startswith(BOT_PREFIX.strip())
+
+
+def clean_inbox_items(raw) -> list[dict]:
+    """Entrada vinda da extensao -> itens seguros: so conversas individuais, texto curto, numeros reais."""
+    out: list[dict] = []
+    if not isinstance(raw, list):
+        return out
+    for it in raw[:INBOX_MAX]:
+        if not isinstance(it, dict) or it.get("group"):
+            continue
+        title = " ".join(str(it.get("title") or "").split())[:100]
+        if not chat_key(title) or is_self_chat(title):
+            continue
+        try:
+            unread = max(0, min(int(it.get("unread") or 0), 999))
+        except (TypeError, ValueError):
+            unread = 0
+        preview = " ".join(str(it.get("preview") or "").split())[:MAX_PREVIEW]
+        if has_secret(preview):
+            preview = ""
+        out.append({"title": title, "preview": preview, "unread": unread})
+    return out
+
+
+def clean_history(raw) -> list[dict]:
+    out: list[dict] = []
+    if not isinstance(raw, list):
+        return out
+    for m in raw[-HISTORY_PER_CHAT:]:
+        if not isinstance(m, dict):
+            continue
+        text = " ".join(str(m.get("text") or "").split())[:500]
+        mid = str(m.get("id") or "")[:120]
+        if mid and text and not has_secret(text):
+            out.append({"id": mid, "text": text, "from_me": bool(m.get("from_me"))})
+    return out
+
+
+_ASK_INBOX = [
+    re.compile(r"^(?:eu\s+)?tenho\s+(?:alguma\s+)?(?:mensagem|mensagens|recado|recados)(?:\s+(?:nova|novas|nao lidas?))?(?:\s+(?:no|do|pelo)\s+(?:whats\s?app|zap))?$"),
+    re.compile(r"^(?:chegou|chegaram)\s+(?:alguma\s+)?(?:mensagem|mensagens)(?:\s+(?:no|do)\s+(?:whats\s?app|zap))?$"),
+    re.compile(r"^(?:quem|quais)\s+(?:me\s+)?(?:escreveu|mandou mensagem|chamou|falou comigo)(?:\s+(?:no|do)\s+(?:whats\s?app|zap))?$"),
+    re.compile(r"^(?:ve|veja|ver|mostra|mostre|le|leia)\s+(?:minhas\s+|as\s+)?(?:mensagens|conversas)\s+(?:novas\s+)?(?:do|no)\s+(?:whats\s?app|zap)$"),
+    re.compile(r"^(?:mensagens|recados)\s+(?:novas?|novos?|nao lidas?)(?:\s+(?:do|no)\s+(?:whats\s?app|zap))?$"),
+]
+
+
+def asks_whatsapp_inbox(original: str) -> bool:
+    msg = chat_key((original or "").strip().rstrip("?!. "))
+    return bool(msg) and len(msg) <= 80 and any(p.match(msg) for p in _ASK_INBOX)
+
+
+def format_inbox(items: list[dict], connected: bool = True) -> str:
+    """Texto para a pessoa a partir da lista de conversas (so as com mensagem nao lida)."""
+    if not connected:
+        return "Ainda não consigo ver seu WhatsApp. Abra o WhatsApp Web no Chrome com a extensão do Jefrey ligada."
+    unread = [i for i in items if i.get("unread")]
+    if not unread:
+        return "Nenhuma mensagem nova no WhatsApp. Tudo em dia!"
+    total = sum(int(i["unread"]) for i in unread)
+    head = f"Você tem {total} {'mensagens novas' if total != 1 else 'mensagem nova'} no WhatsApp, de {len(unread)} conversa{'s' if len(unread) != 1 else ''}."
+    lines = []
+    for i in unread[:6]:
+        prev = f": {i['preview']}" if i.get("preview") else ""
+        lines.append(f"- {i['title']} ({i['unread']}){prev}")
+    return head + "\n" + "\n".join(lines)
+
+
+def format_history(contact: str, msgs: list[dict]) -> str:
+    if not msgs:
+        return f"Ainda não li nenhuma conversa com {contact}. Abra a conversa dela no WhatsApp Web e eu leio."
+    lines = [f"{'Você' if m['from_me'] else contact}: {m['text']}" for m in msgs[-10:]]
+    return f"Últimas mensagens com {contact}:\n" + "\n".join(lines)
+
+
+_ASK_CHAT = [
+    re.compile(r"^(?:o que|oque)\s+(?:o|a)\s+(?P<c>.{2,40}?)\s+(?:me\s+)?(?:disse|falou|mandou|escreveu)(?:\s+(?:no|do|pelo)\s+(?:whats\s?app|zap))?$"),
+    re.compile(r"^(?:le|leia|ler|ve|veja|ver|mostra|mostre)\s+(?:a\s+)?(?:conversa|mensagens?)\s+(?:do|da|de|com\s+(?:o|a))\s+(?P<c>.{2,40}?)(?:\s+(?:no|do)\s+(?:whats\s?app|zap))?$"),
+    re.compile(r"^(?:o que|oque)\s+(?:esta|ta)\s+(?:escrito|rolando)\s+(?:na\s+)?conversa\s+(?:com\s+(?:o|a)|do|da)\s+(?P<c>.{2,40}?)$"),
+]
+
+
+def asks_whatsapp_chat(original: str) -> Optional[str]:
+    """"o que a Maria me disse?" -> "Maria" (so a pergunta pura; None se nao e isso)."""
+    orig = (original or "").strip().rstrip("?!. ")
+    msg = chat_key(orig)
+    if not msg or len(msg) > 80:
+        return None
+    for rx in _ASK_CHAT:
+        m = rx.match(msg)
+        if m:
+            who = m.group("c").strip()
+            if who in ("voce", "vc", "senhor", "pessoa", "gente", "mundo", "povo", "pessoal") or who.split()[0] in ("meu", "minha", "um", "uma"):
+                return None
+            if len(orig) == len(msg):  # mantem os acentos da pessoa
+                return orig[m.start("c"):m.end("c")].strip()
+            return who
+    return None

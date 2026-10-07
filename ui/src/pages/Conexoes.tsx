@@ -7,8 +7,8 @@ import AlexaTab from "@/components/AlexaTab"
 import WaCompose from "@/components/WaCompose"
 import Cerebros from "@/components/Cerebros"
 import {
-  MODE_LABEL, minutesLeft, sortChats, waForgetAll, waOpenFolder, waPairing, waRevoke, waSetMode, waSetPaused, waStatus, WA_PRIVACY_NOTE, WA_RISK_NOTE,
-  type WaChat, type WaMode, type WaStatus,
+  MODE_LABEL, minutesLeft, sortChats, waForgetAll, waInbox, waOpenFolder, waPairing, waRevoke, waSetMode, waSetPaused, waStatus, WA_PRIVACY_NOTE, WA_RISK_NOTE,
+  type WaChat, type WaInboxItem, type WaMode, type WaStatus,
 } from "@/lib/wa"
 
 const card = "jf-panel p-5"
@@ -229,10 +229,13 @@ function WhatsApp() {
   const [now, setNow] = useState(() => Date.now())
   const [msg, setMsg] = useState<Msg>(null)
   const [confirmWipe, setConfirmWipe] = useState(false)
+  const [inbox, setInbox] = useState<WaInboxItem[]>([])
 
   async function load() {
     const r = await waStatus()
     if (r.data) setSt(r.data)
+    const i = await waInbox()
+    if (i.data) setInbox(i.data.items.filter(x => x.unread > 0))
   }
   useEffect(() => {
     void load()
@@ -319,6 +322,23 @@ function WhatsApp() {
               {st.paused ? "Continuar" : "Pausar tudo"}
             </button>
           </div>
+
+          <h3 className="mt-5 text-lg font-medium text-white">Mensagens novas</h3>
+          {inbox.length === 0 ? (
+            <p className="mt-1 text-base text-white/70">Nenhuma mensagem nova agora.</p>
+          ) : (
+            <ul className="mt-2 space-y-2" aria-live="polite">
+              {inbox.slice(0, 6).map(i => (
+                <li key={i.title} className="rounded-lg border border-white/10 p-3 text-base text-white/90">
+                  <b>{i.title}</b> <span className="text-sm text-white/55">({i.unread})</span>
+                  {i.preview && <span className="block text-white/70">{i.preview}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-3 text-sm text-white/60">
+            Dica: escreva para você mesmo no WhatsApp (a conversa com o seu nome) e o Jefrey responde ali. Pergunte, por exemplo, "que horas são?" ou "o que tenho na agenda hoje?".
+          </p>
 
           <h3 className="mt-5 text-lg font-medium text-white">Conversas</h3>
           {st.chats.length === 0 && <p className="mt-1 text-base text-white/70">Ainda não vi nenhuma conversa. Abra o WhatsApp Web no Chrome e clique em uma conversa.</p>}

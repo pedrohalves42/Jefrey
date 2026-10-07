@@ -336,3 +336,108 @@ describe("extensao inteira na pagina simulada", () => {
     expect(manifest.permissions).toEqual(["storage"])
   })
 })
+
+describe("lista de conversas, historico e conversa comigo mesmo", () => {
+  let C
+  beforeEach(() => {
+    C = loadCore()
+  })
+
+  const cell = (name, preview, unread = 0, time = "10:32", icon = "") =>
+    `<div role="listitem"><span title="${name}">${name}</span><span dir="ltr">${time}</span><span dir="ltr" title="${preview}">${preview}</span>${
+      unread ? `<span aria-label="${unread} mensagens não lidas">${unread}</span>` : ""
+    }${icon}</div>`
+
+  it("le quem escreveu, a previa e as nao lidas sem abrir nada", () => {
+    document.body.innerHTML = `<div id="side"><div id="pane-side">${cell("Maria", "vamos jantar?", 2)}${cell("José", "ok, valeu", 0, "ontem")}${cell("Família", "foto", 5, "09:00", '<span data-icon="default-group"></span>')}</div></div>`
+    const items = C.parseSidebar(document)
+    expect(items.map(i => [i.title, i.preview, i.unread, i.group])).toEqual([
+      ["Maria", "vamos jantar?", 2, false],
+      ["José", "ok, valeu", 0, false],
+      ["Família", "foto", 5, true],
+    ])
+  })
+
+  it("reconhece a conversa comigo mesmo e as respostas do proprio Jefrey", () => {
+    expect(C.isSelfChat("Pedro (Você)")).toBe(true)
+    expect(C.isSelfChat("Pedro (You)")).toBe(true)
+    expect(C.isSelfChat("Pedro")).toBe(false)
+    expect(C.isBotText("🤖 São 10 horas")).toBe(true)
+    expect(C.isBotText("São 10 horas")).toBe(false)
+    page({ title: "Pedro (Você)", rows: [{ id: "A", text: "que horas são?", me: true }, { id: "B", text: "🤖 São 10 horas", me: true }, { id: "C", text: "oi", me: false }] })
+    const rows = C.parseRows(document)
+    expect(C.newCommands(rows, new Set()).map(r => r.text)).toEqual(["que horas são?"])
+  })
+})
+
+describe("extensao: caixa de entrada, historico e comandos", () => {
+  let calls, hooks
+  function boot() {
+    calls = []
+    window.__jefreyWA = false
+    window.__JEFREY_WA_TEST__ = { sleep: () => Promise.resolve(), idleMs: 0 }
+    window.chrome = {
+      runtime: {
+        id: "jefrey-test",
+        sendMessage: vi.fn(async msg => {
+          calls.push(msg)
+          if (msg.type === "status") return { paired: true, paused: false }
+          if (msg.type === "api") return { ok: true, status: 200, data: msg.path === "/wa/device/command" ? { action: "working" } : {} }
+          return { ok: true }
+        }),
+      },
+    }
+    loadCore()
+    window.eval(CONTENT_SRC)
+    hooks = window.__JEFREY_WA_TEST__.hooks
+  }
+  const api = path => calls.filter(c => c.type === "api" && c.path === path)
+
+  it("manda a lista de conversas uma vez e de novo so quando muda", async () => {
+    page({ chats: ["Maria", "José"], rows: [] })
+    document.querySelector("#pane-side").innerHTML =
+      '<div role="listitem"><span title="Maria">Maria</span><span dir="ltr" title="oi">oi</span><span aria-label="1 mensagem não lida">1</span></div>'
+    boot()
+    await hooks.refreshState()
+    await hooks.inboxTick()
+    await hooks.inboxTick()
+    expect(api("/wa/device/inbox")).toHaveLength(1)
+    expect(api("/wa/device/inbox")[0].body.items[0]).toMatchObject({ title: "Maria", unread: 1, preview: "oi" })
+    document.querySelector("#pane-side span[aria-label]").setAttribute("aria-label", "3 mensagens não lidas")
+    await hooks.inboxTick()
+    expect(api("/wa/device/inbox")).toHaveLength(2)
+  })
+
+  it("manda o historico da conversa aberta (nao de grupo)", async () => {
+    page({ rows: [{ id: "A", text: "bom dia" }, { id: "B", text: "bom dia!", me: true }] })
+    boot()
+    await hooks.refreshState()
+    await hooks.readTick()
+    await Promise.resolve()
+    const h = api("/wa/device/history")
+    expect(h).toHaveLength(1)
+    expect(h[0].body.messages.map(m => m.text)).toEqual(["bom dia", "bom dia!"])
+    page({ group: true, title: "Família", rows: [{ id: "G", text: "oi grupo" }] })
+    await hooks.readTick()
+    await Promise.resolve()
+    expect(api("/wa/device/history")).toHaveLength(1)
+  })
+
+  it("conversa comigo mesmo: o que antes ja estava la e ignorado; o pedido novo vai ao Jefrey uma vez", async () => {
+    page({ title: "Pedro (Você)", rows: [{ id: "A", text: "pedido antigo", me: true }] })
+    boot()
+    await hooks.refreshState()
+    await hooks.readTick()
+    expect(api("/wa/device/command")).toHaveLength(0)
+    const div = document.createElement("div")
+    div.setAttribute("data-id", "true_5511999999999@c.us_NOVA")
+    div.innerHTML = '<span class="selectable-text copyable-text">que horas são?</span>'
+    document.querySelector(".messages").appendChild(div)
+    await hooks.readTick()
+    await hooks.readTick()
+    const cmds = api("/wa/device/command")
+    expect(cmds).toHaveLength(1)
+    expect(cmds[0].body).toMatchObject({ chat: "Pedro (Você)", text: "que horas são?" })
+    expect(api("/wa/device/inbound").every(c => c.body.messages.length === 0)).toBe(true) // nunca "responde como a pessoa" a si mesma
+  })
+})

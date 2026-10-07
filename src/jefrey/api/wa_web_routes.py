@@ -252,6 +252,106 @@ def _notify_needs_answer(uid: str, chat: str) -> None:
         logger.debug("aviso do WhatsApp indisponivel (%s)", type(e).__name__)
 
 
+_tasks: set = set()  # referencias das respostas em andamento (sem isso o Python pode descartar a tarefa)
+AGENT_TIMEOUT_S = 120
+
+
+async def _run_agent(uid: str, text: str) -> str:
+    """Roda o Jefrey de verdade para o que a pessoa escreveu a si mesma no WhatsApp (as ferramentas de risco pedem aprovacao na janela)."""
+    import asyncio
+
+    from src.jefrey.core.agent import JefreyAgent
+    from src.jefrey.core.content_guard import sanitize_tool_output
+
+    clean = sanitize_tool_output(text, source="user_input")
+    if "[BLOQUEADO]" in clean:
+        return "Não posso fazer isso."
+    out, asked = "", False
+
+    async def go() -> None:
+        nonlocal out, asked
+        async for ev in JefreyAgent().run_events(clean, user_id=uid, thread_id="whatsapp"):
+            if ev.get("type") == "token":
+                out += ev.get("content", "")
+            elif ev.get("type") == "approval_required":
+                asked = True
+    await asyncio.wait_for(go(), AGENT_TIMEOUT_S)
+    return out if out.strip() else ("Pedi a sua aprovação na janela do Jefrey." if asked else "")
+
+
+class InboxBody(BaseModel):
+    items: list = Field(default_factory=list, max_length=80)
+
+
+class HistoryBody(BaseModel):
+    chat: str = Field(max_length=100)
+    is_group: bool = False
+    messages: list = Field(default_factory=list, max_length=80)
+
+
+class CommandBody(BaseModel):
+    chat: str = Field(max_length=100)
+    id: str = Field(max_length=100)
+    text: str = Field(min_length=1, max_length=2000)
+
+
+@router.post("/device/inbox")
+async def device_inbox(body: InboxBody, request: Request):
+    """A extensao manda o retrato da lista de conversas (quem escreveu, previa, nao lidas)."""
+    from src.jefrey.application import whatsapp_inbox as A
+
+    uid = _device_user(request, 60)
+    grew = A.ingest_inbox(W.WAStore(), uid, body.items)
+    for it in grew[:3]:
+        _notify_unread(uid, it)
+    return {"ok": True, "new": len(grew)}
+
+
+def _notify_unread(uid: str, item: dict) -> None:
+    """Balao do Windows com o NOME de quem escreveu (nunca o texto)."""
+    try:
+        from src.jefrey.core import notify
+
+        notify.notify(uid, "WhatsApp", f"{' '.join(item['title'].split())[:40]} te mandou mensagem.")
+    except Exception as e:
+        logger.debug("aviso de mensagem nova indisponivel (%s)", type(e).__name__)
+
+
+@router.post("/device/history")
+async def device_history(body: HistoryBody, request: Request):
+    from src.jefrey.application import whatsapp_inbox as A
+
+    uid = _device_user(request, 60)
+    return {"ok": True, "saved": A.ingest_history(W.WAStore(), uid, body.chat, body.is_group, body.messages)}
+
+
+@router.post("/device/command")
+async def device_command(body: CommandBody, request: Request):
+    """A pessoa escreveu para si mesma no WhatsApp: responde ali (em segundo plano; a extensao busca a resposta no poll)."""
+    import asyncio
+
+    from src.jefrey.application import whatsapp_inbox as A
+    from src.jefrey.domain.whatsapp import is_bot_text, is_self_chat
+
+    uid = _device_user(request, 60)
+    if not is_self_chat(body.chat) or is_bot_text(body.text):
+        return {"action": "none"}
+    task = asyncio.create_task(A.process_command(W.WAStore(), uid, body.chat, body.id, body.text, _run_agent))
+    _tasks.add(task)
+    task.add_done_callback(_tasks.discard)
+    return {"action": "working"}
+
+
+@router.get("/inbox")
+async def inbox(request: Request):
+    """Para a tela do Jefrey: conversas com mensagens novas."""
+    from src.jefrey.application import whatsapp_inbox as A
+
+    uid = _user(request)
+    s = W.WAStore()
+    return {"text": A.unread_text(s, uid), "items": s.inbox_items(uid), "age_s": s.inbox_age_s(uid)}
+
+
 @router.get("/device/poll")
 async def device_poll(request: Request):
     uid = _device_user(request)

@@ -190,7 +190,72 @@
     return 5000 + Math.floor(r * 9000);
   }
 
+  /* ---- lista de conversas: quem escreveu, previa e nao lidas (sem abrir nenhuma conversa) ---- */
+  var TIME_RX = /^(\d{1,2}[:h]\d{2}|ontem|hoje|yesterday|today|\d{1,2}\/\d{1,2}(\/\d{2,4})?|seg|ter|qua|qui|sex|s[aá]b|dom)\.?$/i;
+
+  function cellUnread(el) {
+    var found = 0;
+    Array.prototype.forEach.call(el.querySelectorAll("[aria-label]"), function (n) {
+      var label = n.getAttribute("aria-label") || "";
+      var m = label.match(/(\d+)\s*(mensagens?\s*)?(n[aã]o\s*lidas?|unread)/i);
+      if (m) found = Math.max(found, parseInt(m[1], 10));
+      else if (/(n[aã]o\s*lida|unread)/i.test(label) && !found) found = 1;
+    });
+    return found;
+  }
+
+  function cellPreview(el, title, unread) {
+    var best = "";
+    Array.prototype.forEach.call(el.querySelectorAll("span[dir], span[title]"), function (n) {
+      var t = (n.getAttribute("title") || n.textContent || "").trim();
+      if (!t || sameChat(t, title) || TIME_RX.test(t) || (unread && t === String(unread))) return;
+      if (t.length > best.length) best = t;
+    });
+    return best.slice(0, 120);
+  }
+
+  function parseSidebar(doc) {
+    var seen = {};
+    var out = [];
+    for (var i = 0; i < CELL_SELECTORS.length && !out.length; i++) {
+      Array.prototype.forEach.call(doc.querySelectorAll(CELL_SELECTORS[i]), function (cell) {
+        var title = cellTitle(cell);
+        var key = norm(title);
+        if (!key || seen[key]) return;
+        seen[key] = true;
+        var unread = cellUnread(cell);
+        out.push({
+          title: title,
+          preview: cellPreview(cell, title, unread),
+          unread: unread,
+          group: !!cell.querySelector('[data-icon*="group"]'),
+        });
+      });
+    }
+    return out.slice(0, 40);
+  }
+
+  /* A conversa da pessoa com ela mesma ("Nome (Você)"): e por ali que ela escreve para o Jefrey. */
+  var SELF_RX = /\((voc[eê]|you|tu|eu)\)\s*$/i;
+  var BOT_MARK = "🤖";
+
+  function isSelfChat(title) {
+    return SELF_RX.test(String(title || "").trim());
+  }
+
+  function isBotText(text) {
+    return String(text || "").trim().indexOf(BOT_MARK) === 0;
+  }
+
+  /* Mensagens que a pessoa escreveu para si mesma e o Jefrey ainda nao viu (as respostas do proprio Jefrey comecam com o robozinho). */
+  function newCommands(rows, seen) {
+    return rows.filter(function (r) {
+      return r.from_me && r.kind === "text" && r.text && !isBotText(r.text) && !seen.has(r.id);
+    });
+  }
+
   var api = {
+    parseSidebar: parseSidebar, isSelfChat: isSelfChat, isBotText: isBotText, newCommands: newCommands,
     norm: norm, sameChat: sameChat, chatTitle: chatTitle, isGroup: isGroup, parseRows: parseRows, newIncoming: newIncoming,
     context: context, composer: composer, sendButton: sendButton, composerText: composerText, typeText: typeText,
     canSendNow: canSendNow, humanDelayMs: humanDelayMs,

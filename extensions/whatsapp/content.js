@@ -101,12 +101,52 @@
     if (res && res.data && res.data.action === "queued") paint(res.data.asked ? "Jefrey: aguardando sua aprovação" : "Jefrey: respondendo…");
   }
 
+  /* ---- conversa comigo mesmo: o que a pessoa escreve ali e um pedido ao Jefrey ---- */
+  async function selfTick(title, rows, key) {
+    if (!primed.has(key)) {
+      rows.forEach((r) => seen.add(r.id));
+      primed.add(key);
+      call("/wa/device/inbound", "POST", { chat: title, is_group: false, messages: [], context: [] }); // a conversa aparece na lista do Jefrey
+      return;
+    }
+    for (const r of C.newCommands(rows, seen)) {
+      seen.add(r.id);
+      const res = await call("/wa/device/command", "POST", { chat: title, id: r.id, text: r.text });
+      if (res && res.data && res.data.action === "working") paint("Jefrey: pensando…");
+    }
+  }
+
+  /* ---- historico: as ultimas mensagens da conversa aberta, para o Jefrey poder responder "o que a Maria me disse?" ---- */
+  const lastHistory = {};
+  async function sendHistory(title, rows) {
+    const sig = rows.length + "|" + (rows.length ? rows[rows.length - 1].id : "");
+    const key = C.norm(title);
+    if (lastHistory[key] === sig) return;
+    lastHistory[key] = sig;
+    const msgs = rows.filter((r) => r.kind === "text" && r.text).slice(-30).map((r) => ({ id: r.id, text: r.text, from_me: r.from_me }));
+    if (msgs.length) await call("/wa/device/history", "POST", { chat: title, is_group: C.isGroup(document), messages: msgs });
+  }
+
+  /* ---- lista de conversas: quem escreveu e quantas mensagens nao lidas, sem abrir nada ---- */
+  let lastInbox = "";
+  async function inboxTick() {
+    if (!state.paired || state.paused) return;
+    const items = C.parseSidebar(document);
+    if (!items.length) return;
+    const sig = JSON.stringify(items.map((i) => [i.title, i.unread, i.preview]));
+    if (sig === lastInbox) return;
+    lastInbox = sig;
+    await call("/wa/device/inbox", "POST", { items });
+  }
+
   async function readTick() {
     if (!state.paired || state.paused) return;
     const title = C.chatTitle(document);
     if (!title) return;
     const rows = C.parseRows(document);
     const key = C.norm(title);
+    if (C.isSelfChat(title)) return selfTick(title, rows, key);
+    if (!C.isGroup(document)) sendHistory(title, rows).catch(() => {});
     if (!primed.has(key)) {
       rows.forEach((r) => seen.add(r.id)); // o que ja estava na tela nao e respondido
       primed.add(key);
@@ -206,7 +246,7 @@
   const testing = window.__JEFREY_WA_TEST__;
   if (testing) {
     // gancho para os testes (pagina simulada): sem relogios reais
-    testing.hooks = { readTick, pollTick, flush, refreshState, state: () => state, seen, badge };
+    testing.hooks = { readTick, pollTick, flush, refreshState, inboxTick, state: () => state, seen, badge };
     return;
   }
   refreshState();
@@ -214,4 +254,5 @@
   every(() => refreshState().catch(() => {}), 15000);
   every(() => readTick().catch(() => {}), READ_MS);
   every(() => pollTick().catch(() => {}), POLL_MS);
+  every(() => inboxTick().catch(() => {}), 8000);
 })();

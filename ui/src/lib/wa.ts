@@ -29,6 +29,8 @@ export const waDecide = (id: string, decision: "approve" | "reject", text?: stri
   json<WaDraft>(`/wa/drafts/${encodeURIComponent(id)}/decide`, { method: "POST", body: JSON.stringify({ decision, text }) })
 export const waRevoke = (id: string) => json<{ ok: boolean }>(`/wa/devices/${encodeURIComponent(id)}`, { method: "DELETE" })
 export const waForgetAll = () => json<{ ok: boolean }>("/wa/data", { method: "DELETE" })
+export type WaInboxItem = { title: string; preview: string; unread: number }
+export const waInbox = () => json<{ text: string; items: WaInboxItem[]; age_s: number | null }>("/wa/inbox")
 export const waOpenFolder = () => json<{ ok: boolean; path?: string }>("/wa/open-extension-folder", { method: "POST" })
 
 export const MODE_LABEL: Record<WaMode, string> = {

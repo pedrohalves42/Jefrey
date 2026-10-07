@@ -19,7 +19,7 @@ class WhatsAppSkill(SkillBase):
         return True
 
     def get_tools(self) -> list:
-        return [self.wa_send_message]
+        return [self.wa_send_message, self.wa_inbox, self.wa_conversation]
 
     @tool(description="Manda uma mensagem de WhatsApp. contact = nome da pessoa como aparece no WhatsApp; message = o texto EXATO a enviar (so o que a pessoa pediu; nunca invente)")
     async def wa_send_message(self, contact: str, message: str, user_id: str | None = None) -> str:
@@ -31,6 +31,30 @@ class WhatsAppSkill(SkillBase):
 
             store = WAStore()
         return queue_for_contact(store, user_id, contact, message)
+
+
+    def _the_store(self):
+        if self._store is not None:
+            return self._store
+        from src.jefrey.adapters.outbound.sql_whatsapp import WAStore
+
+        return WAStore()
+
+    @tool(description="Mostra quem mandou mensagem nova no WhatsApp (conversas com mensagens nao lidas e uma previa)")
+    async def wa_inbox(self, user_id: str | None = None) -> str:
+        if not user_id or user_id in ("system", "anonymous"):
+            return "Preciso saber quem você é."
+        from src.jefrey.application.whatsapp_inbox import unread_text
+
+        return unread_text(self._the_store(), user_id)
+
+    @tool(description="Le as ultimas mensagens de uma conversa do WhatsApp que o Jefrey ja viu. contact = nome como aparece no WhatsApp")
+    async def wa_conversation(self, contact: str, user_id: str | None = None) -> str:
+        if not user_id or user_id in ("system", "anonymous"):
+            return "Preciso saber quem você é."
+        from src.jefrey.application.whatsapp_inbox import history_text
+
+        return history_text(self._the_store(), user_id, contact)
 
 
 @skill("whatsapp", "Mandar mensagem de WhatsApp", tags=["whatsapp", "mensagens"])
