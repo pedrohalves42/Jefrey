@@ -183,7 +183,9 @@ class ToolRuntime:
             risk_level=policy.risk, reason=reason, created_by="agent", user_id=self.user_id)
         if self.on_approval:
             try:
-                await self.on_approval(approval_id, name, {"label": policy.label, "risk": policy.risk})
+                from src.jefrey.domain.approval import approval_detail
+
+                await self.on_approval(approval_id, name, {"label": policy.label, "risk": policy.risk, "detail": approval_detail(name, args)})
             except Exception as e:  # falha de notificacao nao pode liberar a acao
                 logger.warning("on_approval falhou: %s", e)
         decision = await mgr.wait_for_decision(approval_id, timeout=self.approval_timeout)

@@ -9,6 +9,7 @@ import VersionLabel from "@/components/VersionLabel"
 import { ReminderBanner } from "@/components/ReminderBanner"
 import WaApprovals from "@/components/WaApprovals"
 import WindowControls from "@/components/WindowControls"
+import WaLinkBanner from "@/components/WaLinkBanner"
 import { UpdateBanner } from "@/components/UpdateBanner"
 
 // easy: aparece no modo Fácil (padrao): so o essencial para quem nao e tecnico
@@ -62,6 +63,7 @@ export function AppShell() {
       <WindowControls />
       <ReminderBanner />
       <WaApprovals />
+      <WaLinkBanner />
       <UpdateBanner />
       <ConnectedNotice />
       {/* barra lateral (desktop) */}

@@ -18,7 +18,7 @@ async function json<T>(path: string, init?: RequestInit): Promise<Res<T>> {
 }
 
 export const waStatus = () => json<WaStatus>("/wa/status")
-export const waPending = () => json<{ pending: WaDraft[]; paired: boolean; new_chats?: WaChat[] }>("/wa/pending")
+export const waPending = () => json<{ pending: WaDraft[]; paired: boolean; new_chats?: WaChat[]; seen_s?: number | null }>("/wa/pending")
 export const waPairing = () => json<{ code: string; expires_in: number }>("/wa/pairing", { method: "POST" })
 export const waSetMode = (id: string, mode: WaMode) => json<WaChat>(`/wa/chats/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify({ mode }) })
 export const waCompose = (id: string, instruction: string) => json<{ text: string }>(`/wa/chats/${encodeURIComponent(id)}/compose`, { method: "POST", body: JSON.stringify({ instruction }) })

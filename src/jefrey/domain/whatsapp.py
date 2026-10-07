@@ -25,6 +25,7 @@ CHAT_LIMIT = (6, 600)  # 6 rascunhos por conversa a cada 10 minutos
 HOUR_LIMIT = 40
 MODES = ("pending", "auto", "ask", "off")
 DRAFT_TTL_H = 12
+APPROVED_TTL_H = 3  # mensagem aprovada que a extensao nao conseguiu enviar: depois disso vence (nunca sai de surpresa horas depois)
 
 
 
@@ -41,6 +42,19 @@ _RULES: list[tuple[str, re.Pattern]] = [
     ("emergência", re.compile(r"\b(urgente|socorro|acidente|hospital|emerg[eê]ncia|faleceu|morreu|falecimento|internad[oa]|grave|pol[ií]cia|preso|sequestr)\w*", re.I)),
     ("compromisso", re.compile(r"\b(marcar|marcamos|agendar|confirmar|confirma|encontro|reuni[aã]o|consulta|visita|nos vemos|que horas voc[eê] (vem|chega))\b", re.I)),
 ]
+
+
+def find_chat(chats: list[dict], query: str) -> tuple[Optional[dict], list[dict]]:
+    """Qual conversa a pessoa quis dizer ("o Arnaldo", "maria clara"). (conversa unica, candidatas): se ha mais de uma, a primeira vem None."""
+    key = chat_key(query)
+    if not key:
+        return None, []
+    exact = [c for c in chats if chat_key(c["display"]) == key]
+    if len(exact) == 1:
+        return exact[0], exact
+    words = key.split()
+    hits = exact or [c for c in chats if all(w in chat_key(c["display"]).split() or w in chat_key(c["display"]) for w in words)]
+    return (hits[0] if len(hits) == 1 else None), hits
 
 
 def risk_reasons(text: str, kind: str = "text") -> list[str]:

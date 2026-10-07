@@ -47,6 +47,7 @@ GROUPS: list[tuple[tuple[str, ...], list[str]]] = [
      ["list_events", "create_event", "find_free_slots", "update_event", "delete_event"]),
     (("email", "e-mail", "caixa de entrada", "gmail", "mensagem de"),
      ["list_messages", "get_message", "search_messages", "send_message", "reply_message"]),
+    (("whatsapp", "zap", "manda pro", "manda pra", "manda para", "mande pro", "mande pra", "mande para", "envia pro", "envia pra", "envie pro", "envie pra", "manda uma mensagem", "mande uma mensagem"), ["wa_send_message"]),
     (("tarefa", "a fazer", "afazer", "to-do", "todo"), ["tasks_list", "tasks_add", "tasks_done"]),
     (("contato", "telefone do", "telefone da", "numero do", "numero da", "celular do", "celular da", "e-mail do", "e-mail da"), ["contacts_find"]),
     (("drive", "nuvem"), ["list_files", "search_files", "get_file_metadata", "download_file"]),
@@ -245,7 +246,7 @@ async def _run_tool_with_events(runtime: ToolRuntime, call: ToolCall) -> AsyncIt
 
     async def hook(approval_id: str, tool: str, info: dict) -> None:
         await q.put({"type": "approval_required", "approval_id": approval_id, "tool": tool,
-                     "label": info.get("label", tool), "risk": info.get("risk")})
+                     "label": info.get("label", tool), "risk": info.get("risk"), "detail": info.get("detail", "")})
 
     runtime.on_approval = hook
     task = asyncio.create_task(runtime.run(call.name, call.arguments))

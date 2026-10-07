@@ -96,6 +96,7 @@ CATALOG: dict[str, ToolPolicy] = {
     # lembretes (dados do proprio usuario)
     "set_reminder": _p("medium", "Criar lembrete"),
     "list_reminders": _p("low", "Listar lembretes"),
+    "wa_send_message": _p("high", "Enviar mensagem no WhatsApp"),
     "tasks_list": _p("low", "Ver tarefas"),
     "tasks_add": _p("medium", "Criar tarefa"),
     "tasks_done": _p("medium", "Marcar tarefa como feita"),

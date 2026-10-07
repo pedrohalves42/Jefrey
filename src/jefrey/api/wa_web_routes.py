@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import logging
 import time
 from collections import defaultdict, deque
 from typing import Optional
@@ -14,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from src.jefrey.core import wa_web as W
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/wa", tags=["whatsapp-web"])
 MAX_BODY = 200_000
 _hits: dict[str, deque] = defaultdict(deque)
@@ -77,7 +79,7 @@ async def pending(request: Request):
     s = W.WAStore()
     # conversas novas (ainda sem escolha): enquanto a pessoa nao disser o que fazer, o Jefrey NAO responde. A tela pergunta.
     new_chats = [c for c in s.list_chats(uid) if c["mode"] == "pending"][:20]
-    return {"pending": s.list_drafts(uid, "pending", 5), "paired": bool(s.devices(uid)), "new_chats": new_chats}
+    return {"pending": s.list_drafts(uid, "pending", 5), "paired": bool(s.devices(uid)), "new_chats": new_chats, "seen_s": s.seconds_since_seen(uid)}
 
 
 @router.post("/open-extension-folder")
@@ -234,7 +236,20 @@ async def device_inbound(request: Request):
         client = get_llm_client()
     except Exception:
         client = None
-    return await W.handle_inbound(uid, payload, client)
+    res = await W.handle_inbound(uid, payload, client)
+    if res.get("action") == "queued" and res.get("asked"):
+        _notify_needs_answer(uid, str(payload.get("chat") or "Alguém"))
+    return res
+
+
+def _notify_needs_answer(uid: str, chat: str) -> None:
+    """Balao do Windows (so o NOME de quem escreveu, nunca o texto): a janela pode estar escondida na bandeja."""
+    try:
+        from src.jefrey.core import notify
+
+        notify.notify(uid, "WhatsApp", f"{' '.join(chat.split())[:40]} te escreveu. Quer responder?", urgent=True)
+    except Exception as e:
+        logger.debug("aviso do WhatsApp indisponivel (%s)", type(e).__name__)
 
 
 @router.get("/device/poll")

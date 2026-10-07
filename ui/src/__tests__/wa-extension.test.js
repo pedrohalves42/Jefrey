@@ -277,6 +277,19 @@ describe("extensao inteira na pagina simulada", () => {
     expect(window.chrome.runtime.sendMessage).not.toHaveBeenCalled() // depois de morto nem tenta falar com a extensao
   })
 
+  it("o Jefrey nao conhece mais este aparelho (401): para de insistir e mostra nao pareado", async () => {
+    page({ title: "Maria", rows: [{ id: "A", text: "oi" }] })
+    boot()
+    await hooks.refreshState()
+    respostas["/wa/device/poll"] = { ok: false, status: 401, data: null }
+    await hooks.pollTick()
+    expect(hooks.state().paired).toBe(false)
+    expect([...document.querySelectorAll("div[title^='Clique para pausar']")].some(b => b.textContent.includes("não pareado"))).toBe(true)
+    const antes = api("/wa/device/poll").length
+    await hooks.pollTick() // pareamento desfeito: nem tenta de novo
+    expect(api("/wa/device/poll").length).toBe(antes)
+  })
+
   it("pausado ou nao pareado: nao le e nao envia nada", async () => {
     page({ rows: [{ id: "A", text: "oi" }] })
     boot({ paired: true, paused: true })

@@ -185,6 +185,10 @@
   async function pollTick() {
     if (!state.paired || busySending) return;
     const res = await call("/wa/device/poll");
+    if (res && res.status === 401) {
+      state.paired = false; // pareamento desfeito: mostra "nao pareado" e para de ler/enviar ate parear de novo
+      return paint();
+    }
     if (!res || !res.ok || !res.data) return;
     state.server = res.data.paused ? "pausado" : "";
     if (res.data.paused || state.paused) return paint();

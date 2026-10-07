@@ -53,7 +53,7 @@ export default function Conversa() {
   const [input, setInput] = useState("")
   const [streaming, setStreaming] = useState(false)
   const [gotToken, setGotToken] = useState(false)
-  const [pendingApproval, setPendingApproval] = useState<{ id: string | null; label?: string } | undefined>(undefined)
+  const [pendingApproval, setPendingApproval] = useState<{ id: string | null; label?: string; detail?: string } | undefined>(undefined)
   const [showList, setShowList] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   // ---- voz ----
@@ -201,8 +201,8 @@ export default function Conversa() {
               m.id === aiMsg.id ? { ...m, tools: [...(m.tools ?? []), { tool, label, risk, state: "running" } as ToolStep] } : m,
             ),
           })),
-        onApprovalRequired: (id, tool, label) => {
-          setPendingApproval({ id, label })
+        onApprovalRequired: (id, tool, label, detail) => {
+          setPendingApproval({ id, label, detail })
           updateThread(tid, t => ({
             ...t,
             messages: t.messages.map(m =>
@@ -471,7 +471,7 @@ export default function Conversa() {
         {todayOpen && <TodayPopup name={myName ?? undefined} onClose={() => setTodayOpen(false)} />}
 
         {/* aprovacao de acao de risco */}
-        {pendingApproval !== undefined && <ApprovalDialog label={pendingApproval.label} onDecide={d => void decide(d)} />}
+        {pendingApproval !== undefined && <ApprovalDialog label={pendingApproval.label} detail={pendingApproval.detail} onDecide={d => void decide(d)} />}
 
         </div>
 

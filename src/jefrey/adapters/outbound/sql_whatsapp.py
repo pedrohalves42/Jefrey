@@ -12,7 +12,7 @@ from typing import Any, Optional
 from sqlalchemy import and_, func, select
 
 from src.jefrey.domain.whatsapp import *  # noqa: F401,F403
-from src.jefrey.domain.whatsapp import CHAT_LIMIT, DRAFT_TTL_H, HOUR_LIMIT, KEEP_DAYS, MAX_MSGS, MAX_REPLY, MAX_TEXT, MODES, PAIR_TTL_S, chat_key, has_secret  # noqa: F401
+from src.jefrey.domain.whatsapp import APPROVED_TTL_H, CHAT_LIMIT, DRAFT_TTL_H, HOUR_LIMIT, KEEP_DAYS, MAX_MSGS, MAX_REPLY, MAX_TEXT, MODES, PAIR_TTL_S, chat_key, has_secret  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +110,13 @@ class WAStore:
         with self.engine.connect() as c:
             rows = c.execute(self.dev.select().where(self.dev.c.user_id == user_id).order_by(self.dev.c.created_at)).fetchall()
         return [{"id": r.id, "label": r.label, "created_at": r.created_at.isoformat(), "last_seen": r.last_seen.isoformat() if r.last_seen else None} for r in rows]
+
+    def seconds_since_seen(self, user_id: str) -> Optional[int]:
+        """Ha quantos segundos a extensao falou com o Jefrey (None = nunca falou ou nao ha aparelho)."""
+        seen = [d["last_seen"] for d in self.devices(user_id) if d["last_seen"]]
+        if not seen:
+            return None
+        return max(0, int((_now() - datetime.fromisoformat(max(seen))).total_seconds()))
 
     def revoke_device(self, user_id: str, device_id: str) -> bool:
         with self.engine.begin() as c:
@@ -222,6 +229,8 @@ class WAStore:
         cut = _now() - timedelta(hours=DRAFT_TTL_H)
         with self.engine.begin() as c:
             c.execute(self.drafts.update().where((self.drafts.c.user_id == user_id) & (self.drafts.c.status == "pending") & (self.drafts.c.created_at < cut)).values(status="expired"))
+            old = _now() - timedelta(hours=APPROVED_TTL_H)
+            c.execute(self.drafts.update().where((self.drafts.c.user_id == user_id) & (self.drafts.c.status == "approved") & (self.drafts.c.created_at < old)).values(status="expired"))
             rows = c.execute(self.drafts.select().where((self.drafts.c.user_id == user_id) & (self.drafts.c.status == "approved")).order_by(self.drafts.c.created_at).limit(5)).fetchall()
         return [{"id": r.id, "chat": r.display, "text": r.reply} for r in rows]
 
