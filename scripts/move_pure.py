@@ -8,7 +8,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1] / "src" / "jefrey"
 layer, names = sys.argv[1], sys.argv[2:]
-assert layer in ("domain", "application")
+assert layer in ("domain", "application", "adapters/outbound")
+dotted = layer.replace("/", ".")
 for n in names:
     src = ROOT / "core" / f"{n}.py"
     dst = ROOT / layer / f"{n}.py"
@@ -19,7 +20,7 @@ for n in names:
     src.write_text(
         f'"""Atalho de compatibilidade: este modulo agora mora em {layer}/{n}.py."""\n'
         f"import sys\n\n"
-        f"from src.jefrey.{layer} import {n} as _moved\n\n"
+        f"from src.jefrey.{dotted} import {n} as _moved\n\n"
         f"sys.modules[__name__] = _moved\n",
         encoding="utf-8",
     )
