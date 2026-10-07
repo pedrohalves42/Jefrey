@@ -20,21 +20,25 @@ class Req:
 @pytest.fixture(autouse=True)
 def limpo(monkeypatch):
     VR._download.update(state="idle", pct=0, error="")
+    monkeypatch.setattr(VR.EV, "available", lambda *a, **k: False)  # nunca chama a internet de verdade nos testes
 
 
-def _engines(monkeypatch, cloud=False, local=False):
+def _engines(monkeypatch, cloud=False, local=False, edge=False):
     monkeypatch.setattr(CV, "available", lambda: cloud)
     monkeypatch.setattr(LV, "available", lambda: local)
+    monkeypatch.setattr(VR.EV, "available", lambda *a, **k: edge)
 
 
-def test_padrao_prefere_nuvem_depois_local_depois_navegador(monkeypatch):
+def test_padrao_prefere_gratuita_depois_local_depois_conta_depois_navegador(monkeypatch):
+    _engines(monkeypatch, cloud=True, local=True, edge=True)
+    assert run(VR.engines(Req()))["default"] == "edge"
     _engines(monkeypatch, cloud=True, local=True)
+    assert run(VR.engines(Req()))["default"] == "local"  # a conta paga so entra se a pessoa escolher
+    _engines(monkeypatch, cloud=True)
     assert run(VR.engines(Req()))["default"] == "cloud"
-    _engines(monkeypatch, cloud=False, local=True)
-    assert run(VR.engines(Req()))["default"] == "local"
     _engines(monkeypatch)
     out = run(VR.engines(Req()))
-    assert out["default"] == "browser" and {e["id"] for e in out["engines"]} == {"cloud", "local", "browser"}
+    assert out["default"] == "browser" and {e["id"] for e in out["engines"]} == {"edge", "edge-francisca", "edge-antonio", "cloud", "local", "browser"}
     assert [e for e in out["engines"] if e["id"] == "browser"][0]["available"] is True
 
 
@@ -47,25 +51,47 @@ def test_sem_login_401():
     assert e.value.status_code == 401
 
 
-def test_falha_da_nuvem_cai_para_o_local(monkeypatch):
-    _engines(monkeypatch, cloud=True, local=True)
+def test_falha_da_voz_gratuita_cai_para_o_local(monkeypatch):
+    _engines(monkeypatch, cloud=True, local=True, edge=True)
 
-    async def nuvem_fora(text, **k):
-        raise CV.CloudVoiceError("sem saldo")
-    monkeypatch.setattr(CV, "synth", nuvem_fora)
+    async def gratis_fora(text, engine="edge", **k):
+        raise VR.EV.EdgeVoiceError("sem internet")
+    monkeypatch.setattr(VR.EV, "synth", gratis_fora)
     monkeypatch.setattr(LV, "synth", lambda t: b"RIFFwav")
     r = run(VR.speak(Req(), VR.SpeakBody(text="oi")))
     assert r.body == b"RIFFwav" and r.media_type == "audio/wav" and r.headers["x-voice-engine"] == "local"
 
 
-def test_nuvem_responde_mp3(monkeypatch):
+def test_voz_gratuita_responde_mp3_e_a_escolhida_vale(monkeypatch):
+    _engines(monkeypatch, cloud=True, local=True, edge=True)
+    pedidas = []
+
+    async def gratis(text, engine="edge", **k):
+        pedidas.append(engine)
+        return b"ID3mp3"
+    monkeypatch.setattr(VR.EV, "synth", gratis)
+    r = run(VR.speak(Req(), VR.SpeakBody(text="oi")))
+    assert r.media_type == "audio/mpeg" and r.headers["x-voice-engine"] == "edge"
+    r = run(VR.speak(Req(), VR.SpeakBody(text="oi", engine="edge-antonio")))
+    assert r.headers["x-voice-engine"] == "edge-antonio" and pedidas == ["edge", "edge-antonio"]
+
+
+def test_conta_paga_so_quando_escolhida(monkeypatch):
     _engines(monkeypatch, cloud=True, local=True)
 
     async def nuvem(text, **k):
         return b"ID3mp3"
     monkeypatch.setattr(CV, "synth", nuvem)
-    r = run(VR.speak(Req(), VR.SpeakBody(text="oi")))
+    monkeypatch.setattr(LV, "synth", lambda t: b"RIFFwav")
+    assert run(VR.speak(Req(), VR.SpeakBody(text="oi"))).headers["x-voice-engine"] == "local"  # padrao nao gasta a conta
+    r = run(VR.speak(Req(), VR.SpeakBody(text="oi", engine="cloud")))
     assert r.media_type == "audio/mpeg" and r.headers["x-voice-engine"] == "cloud"
+
+    async def nuvem_fora(text, **k):
+        raise CV.CloudVoiceError("sem saldo")
+    monkeypatch.setattr(CV, "synth", nuvem_fora)
+    with pytest.raises(HTTPException):
+        run(VR.speak(Req(), VR.SpeakBody(text="oi", engine="cloud")))
 
 
 def test_nenhum_motor_devolve_409_simples(monkeypatch):

@@ -36,6 +36,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0write_build_info.ps1" 
   --copy-metadata chromadb --copy-metadata langchain-core ^
   --hidden-import pystray._win32 ^
   --collect-all webview ^
+  --collect-all edge_tts ^
+  --collect-data certifi ^
   --collect-all pythonnet ^
   --collect-all clr_loader ^
   --hidden-import webview.platforms.edgechromium ^

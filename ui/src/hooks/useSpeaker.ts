@@ -24,7 +24,6 @@ export function chunkForSpeech(text: string, max = MAX_CHUNK): string[] {
 export type SpeakerVoice = { uri: string; name: string; lang: string }
 
 const VOICE_KEY = "jefrey_voice_uri"
-export const CLOUD_VOICE = "cloud" // escolha especial: voz natural na nuvem (conta do ChatGPT)
 const CLOUD_CHUNK = 220 // frases curtas: a 1a sai logo e o resto vem pre-pronto
 
 /** Nota de naturalidade: vozes neurais ("Natural", "Online", "Neural", Google) soam bem menos roboticas que as antigas do Windows. */
@@ -116,15 +115,15 @@ export function useSpeaker() {
   }
 
   /** Automatica = o melhor motor do servidor (nuvem, depois voz natural local); a pessoa pode escolher uma voz do computador. */
-  const serverEngine = (): "cloud" | "local" | null => {
+  const serverEngine = (): string | null => {
     const e = pickEngine(voiceUri.current, enginesRef.current)
     return e === "browser" ? null : e
   }
 
   /** Pede o audio de um pedaco ao servidor (nao toca). Devolve null se falhar. */
-  const fetchAudio = async (piece: string, engine: "cloud" | "local"): Promise<Blob | null> => {
+  const fetchAudio = async (piece: string, engine: string): Promise<Blob | null> => {
     try {
-      const explicit = voiceUri.current === CLOUD_VOICE || voiceUri.current === "local"
+      const explicit = !!voiceUri.current && voiceUri.current !== "browser" && !!enginesRef.current?.engines.some(x => x.id === voiceUri.current)
       const r = await authedFetch("/voice/speak", { method: "POST", body: JSON.stringify({ text: piece, engine: explicit ? engine : undefined }) })
       if (!r.ok) {
         if (r.status === 409 && enginesRef.current) enginesRef.current = { ...enginesRef.current, default: "browser" } // sem conta/voz: o computador fala nas proximas

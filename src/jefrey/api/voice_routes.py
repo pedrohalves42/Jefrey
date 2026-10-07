@@ -1,4 +1,4 @@
-"""Voz do Jefrey: escolhe o melhor motor (nuvem -> local -> navegador) e cuida do download da voz natural local."""
+"""Voz do Jefrey: escolhe o melhor motor (nuvem gratuita -> local -> navegador; a nuvem paga so se a pessoa escolher) e cuida do download da voz natural local."""
 from __future__ import annotations
 
 import asyncio
@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
+from src.jefrey.adapters.outbound import edge_voice as EV
 from src.jefrey.core import cloudvoice as CV
 from src.jefrey.core import localvoice as LV
 
@@ -34,7 +35,7 @@ def _login(request: Request) -> None:
 
 class SpeakBody(BaseModel):
     text: str = Field(..., min_length=1, max_length=2000)
-    engine: Optional[str] = Field(default=None, pattern="^(cloud|local)$")
+    engine: Optional[str] = Field(default=None, pattern="^(cloud|local|edge|edge-francisca|edge-antonio)$")
 
 
 @router.get("/engines")
@@ -43,21 +44,31 @@ async def engines(request: Request):
     cloud, local = CV.available(), LV.available()
     if local and "voice" not in LV._cache:
         asyncio.create_task(asyncio.to_thread(_warm))  # carrega o modelo agora: a primeira fala sai em ~1 s em vez de ~4 s
+    edge = EV.available()
     items = [
+        *[{"id": eid, "available": edge, "label": f"Natural gratuita (nuvem): {name}"} for eid, (_v, name) in EV.VOICES.items()],
         {"id": "cloud", "available": cloud, "label": "Natural (nuvem, conta do ChatGPT)"},
         {"id": "local", "available": local, "label": "Natural (neste computador)"},
         {"id": "browser", "available": True, "label": "Voz do computador"},
     ]
-    return {"engines": items, "default": "cloud" if cloud else "local" if local else "browser", "local": LV.model_status()}
+    # padrao: voz gratuita da nuvem; sem internet, a voz natural do computador; a conta do ChatGPT so quando a pessoa escolhe
+    return {"engines": items, "default": "edge" if edge else "local" if local else "cloud" if cloud else "browser", "local": LV.model_status()}
 
 
 @router.post("/speak")
 async def speak(request: Request, body: SpeakBody):
     _login(request)
-    order = [body.engine] if body.engine else ["cloud", "local"]
+    order = [body.engine] if body.engine else ["edge", "local"]
     last = ""
     for eng in order:
-        if eng == "cloud" and CV.available():
+        if eng in EV.VOICES and EV.available():
+            try:
+                return Response(content=await EV.synth(body.text, eng), media_type="audio/mpeg", headers={"X-Voice-Engine": eng, "Cache-Control": "no-store"})
+            except EV.EdgeVoiceError as e:
+                last = str(e)
+                if body.engine:  # escolha explicita falhou: tenta a voz do computador antes de desistir
+                    order.append("local")
+        elif eng == "cloud" and CV.available():
             try:
                 return Response(content=await CV.synth(body.text), media_type="audio/mpeg", headers={"X-Voice-Engine": "cloud", "Cache-Control": "no-store"})
             except CV.CloudVoiceError as e:

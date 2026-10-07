@@ -33,3 +33,4 @@ Legenda: ✅ pronto e testado · 🟡 pronto no código, falta prova com conta/p
 6. Publicar a extensão na Chrome Web Store.
 7. Piloto com 3 a 5 pessoas reais (uma de 70 anos) e bateria de 17 perguntas com uma chave de nuvem real.
 8. Licença, cobrança e domínio.
+9. **Texto de privacidade:** acrescentar que, com a voz natural gratuita, o texto que o Jefrey vai **falar** é enviado ao serviço de voz da Microsoft (vozes neurais do Edge, uso não oficial, sem chave). Alterar `src/jefrey/legal/privacidade.md` pede nova aceitação dos termos pela pessoa, então faça junto com a revisão jurídica. Para um serviço com contrato, trocar por Azure/Google Text-to-Speech (camada gratuita com chave) é uma troca de adaptador em `adapters/outbound/edge_voice.py`.

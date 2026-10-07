@@ -227,3 +227,22 @@ describe("faixa do dia na tela principal", () => {
     expect(dayStrip(mk({ agenda: { status: "erro", items: [] }, reminders: { status: "erro", items: [] }, weather: { status: "erro" } }))).toEqual([])
   })
 })
+
+describe("voz gratuita da nuvem", () => {
+  const eng = (edge: boolean, local: boolean): Engines => ({
+    engines: [
+      { id: "edge", available: edge, label: "Thalita" },
+      { id: "edge-antonio", available: edge, label: "Antônio" },
+      { id: "local", available: local, label: "Local" },
+      { id: "browser", available: true, label: "Computador" },
+    ],
+    default: edge ? "edge" : local ? "local" : "browser",
+    local: { installed: local, size_mb: 60, voice: "x" },
+  } as Engines)
+  it("usa a escolhida quando ela esta disponivel e cai no padrao quando nao", () => {
+    expect(pickEngine(null, eng(true, true))).toBe("edge")
+    expect(pickEngine("edge-antonio", eng(true, true))).toBe("edge-antonio")
+    expect(pickEngine("edge-antonio", eng(false, true))).toBe("local")
+    expect(pickEngine("urn:voz-do-windows", eng(true, true))).toBe("browser")
+  })
+})

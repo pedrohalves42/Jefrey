@@ -1,6 +1,6 @@
 import { authedFetch } from "@/lib/session"
 
-export type EngineId = "cloud" | "local" | "browser"
+export type EngineId = string // "edge", "edge-francisca", "edge-antonio", "cloud", "local" ou "browser" (o servidor diz quais existem)
 export type Engines = {
   engines: { id: EngineId; available: boolean; label: string }[]
   default: EngineId
@@ -27,7 +27,7 @@ export const startModelDownload = () => json<LocalStatus>("/voice/local/download
 export function pickEngine(choice: string | null, e: Engines | null): EngineId {
   if (!e) return "browser"
   const ok = (id: EngineId) => e.engines.some(x => x.id === id && x.available)
-  if (choice === "cloud" || choice === "local") return ok(choice) ? choice : e.default
+  if (choice && choice !== "browser" && e.engines.some(x => x.id === choice && x.id !== "browser")) return ok(choice) ? choice : e.default
   if (choice) return "browser" // escolheu uma voz especifica do computador
   return e.default
 }

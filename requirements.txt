@@ -75,5 +75,6 @@ onnxruntime>=1.17.0
 av>=14,<17  # faster-whisper 1.2 quebra com av 17+ (open() sem metadata_errors): nao subir sem testar a voz
 pystray>=0.19; sys_platform == "win32"  # icone na bandeja (LGPL-3.0, ligacao dinamica)
 pywebview>=5.3; sys_platform == "win32"  # janela propria do app (WebView2, motor do Edge que ja vem no Windows 11); sem ele o programa abre no navegador
+edge-tts>=7.0  # voz natural gratuita na nuvem (vozes neurais da Microsoft; sem chave nem conta)
 pillow>=10
 piper-tts>=1.8,<2  # voz natural local (modelo baixado sob demanda)
