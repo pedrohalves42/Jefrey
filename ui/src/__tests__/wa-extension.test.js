@@ -124,6 +124,7 @@ describe("extensao inteira na pagina simulada", () => {
     window.__JEFREY_WA_TEST__ = { sleep: () => Promise.resolve(), idleMs }
     window.chrome = {
       runtime: {
+        id: "jefrey-test",
         sendMessage: vi.fn(async msg => {
           calls.push(msg)
           if (msg.type === "status") return { paired, paused }
@@ -260,6 +261,20 @@ describe("extensao inteira na pagina simulada", () => {
     for (let i = 0; i < 4; i++) await hooks.pollTick()
     expect(document.querySelector("#main header span").textContent).toBe("João")
     expect(api("/wa/device/sent").map(c => c.body)).toEqual([{ id: "D2", ok: false }])
+  })
+
+  it("extensao recarregada com a aba aberta: para sozinho, avisa para recarregar e nao enche o console de erros", async () => {
+    page({ title: "Maria", rows: [{ id: "A", text: "oi" }] })
+    boot()
+    await hooks.refreshState()
+    window.chrome.runtime.id = undefined // o contexto antigo morreu
+    window.chrome.runtime.sendMessage = vi.fn(async () => {
+      throw new Error("Extension context invalidated.")
+    })
+    await expect(hooks.refreshState()).resolves.toBeUndefined()
+    await expect(hooks.pollTick()).resolves.toBeUndefined()
+    expect([...document.querySelectorAll("div[title^='Clique para pausar']")].some(b => b.textContent.includes("Recarregue a página"))).toBe(true)
+    expect(window.chrome.runtime.sendMessage).not.toHaveBeenCalled() // depois de morto nem tenta falar com a extensao
   })
 
   it("pausado ou nao pareado: nao le e nao envia nada", async () => {

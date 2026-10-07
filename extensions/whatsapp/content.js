@@ -26,7 +26,40 @@
   const isIdle = () => Date.now() - lastInput >= IDLE_MS;
   let state = { paired: false, paused: false, server: "" };
 
-  const call = (path, method, body) => chrome.runtime.sendMessage({ type: "api", path, method, body });
+  /* Se a extensao foi recarregada/atualizada com esta aba aberta, o contexto antigo morre ("Extension context invalidated"):
+   * em vez de encher o console de erros, este script para e avisa para recarregar a pagina. */
+  const timers = [];
+  let dead = false;
+  const alive = () => {
+    try {
+      return !!(chrome.runtime && chrome.runtime.id);
+    } catch (e) {
+      return false;
+    }
+  };
+  function shutdown() {
+    if (dead) return;
+    dead = true;
+    timers.forEach(clearInterval);
+    clearTimeout(debounce);
+    if (badge) {
+      badge.textContent = "Jefrey: extensão atualizada. Recarregue a página (F5)";
+      badge.style.opacity = "1";
+    }
+  }
+  async function send(msg) {
+    if (dead || !alive()) {
+      shutdown();
+      return undefined;
+    }
+    try {
+      return await chrome.runtime.sendMessage(msg);
+    } catch (e) {
+      if (!alive() || /context invalidated/i.test(String((e && e.message) || e))) shutdown();
+      return undefined;
+    }
+  }
+  const call = (path, method, body) => send({ type: "api", path, method, body });
 
   /* ---- plaquinha discreta no canto: mostra que o Jefrey esta atento e deixa pausar ---- */
   const badge = document.createElement("div");
@@ -35,17 +68,18 @@
   badge.title = "Clique para pausar ou continuar o Jefrey neste WhatsApp";
   document.documentElement.appendChild(badge);
   function paint(extra) {
+    if (dead) return; // extensao recarregada: o aviso de "recarregue a pagina" nao pode ser apagado
     badge.textContent = !state.paired ? "Jefrey: não pareado" : state.paused ? "Jefrey: pausado" : extra || "Jefrey: atento";
     badge.style.opacity = state.paused || !state.paired ? "0.6" : "0.92";
   }
   badge.addEventListener("click", async () => {
     const next = !state.paused;
-    await chrome.runtime.sendMessage({ type: "setPaused", paused: next });
+    await send({ type: "setPaused", paused: next });
     state.paused = next;
     paint();
   });
   async function refreshState() {
-    const s = await chrome.runtime.sendMessage({ type: "status" });
+    const s = await send({ type: "status" });
     state.paired = !!(s && s.paired);
     state.paused = !!(s && s.paused) || state.paused;
     paint();
@@ -172,7 +206,8 @@
     return;
   }
   refreshState();
-  setInterval(refreshState, 15000);
-  setInterval(() => readTick().catch(() => {}), READ_MS);
-  setInterval(() => pollTick().catch(() => {}), POLL_MS);
+  const every = (fn, ms) => timers.push(setInterval(() => (alive() ? fn() : shutdown()), ms));
+  every(() => refreshState().catch(() => {}), 15000);
+  every(() => readTick().catch(() => {}), READ_MS);
+  every(() => pollTick().catch(() => {}), POLL_MS);
 })();
