@@ -83,7 +83,7 @@ class DriveSkill(SkillBase):
         if not creds:
             return {"files": [], "error": f"OAuth token não encontrado para user_id={_uid}"}
         
-        from googleapiclient.discovery import build
+        from src.jefrey.adapters.outbound.google_credentials import build_service as build
         try:
             results: list[DriveFile] = []
             page_count = 0
@@ -131,7 +131,7 @@ class DriveSkill(SkillBase):
         if not creds:
             return {"error": f"OAuth token não encontrado para user_id={_uid}"}
         
-        from googleapiclient.discovery import build
+        from src.jefrey.adapters.outbound.google_credentials import build_service as build
         try:
             service = build("drive", "v3", credentials=creds)
             file_metadata = {"name": filename}
@@ -166,7 +166,7 @@ class DriveSkill(SkillBase):
         if not creds:
             return {"error": f"OAuth token não encontrado para user_id={_uid}"}
         
-        from googleapiclient.discovery import build
+        from src.jefrey.adapters.outbound.google_credentials import build_service as build
         try:
             service = build("drive", "v3", credentials=creds)
             request = service.files().get_media(fileId=file_id)
@@ -192,7 +192,7 @@ class DriveSkill(SkillBase):
         if not creds:
             return {"error": f"OAuth token não encontrado para user_id={_uid}"}
         
-        from googleapiclient.discovery import build
+        from src.jefrey.adapters.outbound.google_credentials import build_service as build
         try:
             service = build("drive", "v3", credentials=creds)
             service.files().delete(fileId=file_id).execute()
@@ -214,7 +214,7 @@ class DriveSkill(SkillBase):
         if not creds:
             return {"files": [], "error": f"OAuth token não encontrado para user_id={_uid}"}
         
-        from googleapiclient.discovery import build
+        from src.jefrey.adapters.outbound.google_credentials import build_service as build
         try:
             service = build("drive", "v3", credentials=creds)
             results: list[DriveFile] = []
@@ -258,7 +258,7 @@ class DriveSkill(SkillBase):
         if not creds:
             return {"error": f"OAuth token não encontrado para user_id={_uid}"}
         
-        from googleapiclient.discovery import build
+        from src.jefrey.adapters.outbound.google_credentials import build_service as build
         try:
             service = build("drive", "v3", credentials=creds)
             file = service.files().get(fileId=file_id).execute()

@@ -79,7 +79,7 @@ class CalendarSkill(SkillBase):
             return [{"error": f"OAuth token não encontrado para user_id={_uid}. Faça login com Google primeiro via /auth/google"}]
         
         from datetime import datetime, timezone
-        from googleapiclient.discovery import build
+        from src.jefrey.adapters.outbound.google_credentials import build_service as build
 
         if not time_min:
             time_min = datetime.now(timezone.utc).isoformat()
@@ -132,7 +132,7 @@ class CalendarSkill(SkillBase):
             return {"error": f"OAuth token não encontrado para user_id={_uid}"}
         
         from datetime import datetime, timedelta
-        from googleapiclient.discovery import build
+        from src.jefrey.adapters.outbound.google_credentials import build_service as build
 
         if not end_datetime:
             start = datetime.fromisoformat(start_datetime.replace("Z", "+00:00"))
@@ -180,7 +180,7 @@ class CalendarSkill(SkillBase):
         if not creds:
             return {"error": f"OAuth token não encontrado para user_id={_uid}"}
         
-        from googleapiclient.discovery import build
+        from src.jefrey.adapters.outbound.google_credentials import build_service as build
         try:
             service = build("calendar", "v3", credentials=creds)
             event = service.events().get(calendarId=calendar_id, eventId=event_id).execute()
@@ -213,7 +213,7 @@ class CalendarSkill(SkillBase):
         if not creds:
             return {"error": f"OAuth token não encontrado para user_id={_uid}"}
         
-        from googleapiclient.discovery import build
+        from src.jefrey.adapters.outbound.google_credentials import build_service as build
         try:
             service = build("calendar", "v3", credentials=creds)
             service.events().delete(calendarId=calendar_id, eventId=event_id).execute()
@@ -237,7 +237,7 @@ class CalendarSkill(SkillBase):
         if not creds:
             return [{"error": f"OAuth token não encontrado para user_id={_uid}"}]
         
-        from googleapiclient.discovery import build
+        from src.jefrey.adapters.outbound.google_credentials import build_service as build
         try:
             service = build("calendar", "v3", credentials=creds)
             events_result = service.events().list(
@@ -270,7 +270,7 @@ class CalendarSkill(SkillBase):
         if not creds:
             return [{"error": f"OAuth token não encontrado para user_id={_uid}"}]
         
-        from googleapiclient.discovery import build
+        from src.jefrey.adapters.outbound.google_credentials import build_service as build
         try:
             service = build("calendar", "v3", credentials=creds)
             result = service.calendarList().list().execute()

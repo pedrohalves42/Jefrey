@@ -54,8 +54,9 @@ Os caminhos antigos (`core/reminders.py`, `core/learning.py`, `core/wa_web.py`, 
 - Agente, laco do agente e execucao de ferramentas moram em `application/`; o banco, a web e o modelo, em `adapters/outbound/`.
 
 ## Ainda por fazer
-- `api/` e `skills/` sao adaptadores de **entrada**: podem chamar casos de uso, mas ainda falam direto com `httpx` (rotas do Google, conexoes, login antigo, clima), banco/redis (`api/main.py`) e a API do Google (agenda, e-mail, drive). A catraca em `test_architecture.py` impede que isso aumente; ao migrar, abaixe os numeros.
+- Nada obrigatorio. `api/` e `skills/` sao adaptadores de **entrada**: nao importam biblioteca de infraestrutura (httpx, banco, Redis, Google); usam `adapters/outbound` (`http_client`, `health_probes`, `google_credentials`, `weather_source`...) e os casos de uso. Guardado por `tests/test_architecture.py`.
 - Os atalhos de `core/` podem ser apagados quando ninguem mais os importar.
+- Polimento possivel: as ferramentas de Agenda, Gmail e Drive ainda montam as chamadas da API do Google dentro da propria ferramenta (so a biblioteca saiu); o proximo passo seria um caso de uso com porta para cada servico.
 
 ## Regras de dia a dia
 - Código novo nasce na estrutura nova (domínio → porta → caso de uso → adaptador → raiz de composição).

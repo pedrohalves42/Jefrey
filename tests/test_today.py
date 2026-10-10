@@ -185,7 +185,7 @@ def _status(monkeypatch, provider, ollama_ok):
                     return httpx.Response(200, json={"models": []}, request=httpx.Request("GET", url))
                 raise httpx.ConnectError("sem ollama")
             raise httpx.ConnectError("sem rede")
-    monkeypatch.setattr(M._f3_httpx, "AsyncClient", FakeClient)
+    monkeypatch.setattr(__import__("httpx"), "AsyncClient", FakeClient)
     with TestClient(M.app, base_url="http://127.0.0.1:8000") as c:
         return c.get("/api/status").json()
 

@@ -38,7 +38,8 @@ from src.jefrey.api.signing_routes import router as signing_router
 logger = logging.getLogger(__name__)
 
 # F3 LLM probe fail-closed visible (Axiom #1, DDIA cap12) - never crash, lazy (HPP)
-import httpx as _f3_httpx
+from src.jefrey.adapters.outbound import health_probes as _probes
+from src.jefrey.adapters.outbound import http_client as _http
 _f3_log2 = __import__("logging").getLogger(__name__)
 async def _f3_llm_probe():
     try:
@@ -54,7 +55,7 @@ async def _f3_llm_probe():
         cfg = get_settings()
         base = (getattr(cfg.llm, 'base_url', None) or 'http://host.docker.internal:11434').rstrip('/')
         url = base + '/api/tags'
-        async with _f3_httpx.AsyncClient(timeout=2) as c:
+        async with _http.client(timeout=2) as c:
             r = await c.get(url)
             ok = r.status_code == 200
             has_qwen = 'qwen2' in r.text if ok else False
@@ -122,12 +123,12 @@ def create_app() -> FastAPI:
                 cfg2 = get_settings()
                 base = (os.getenv("JEFREY_EMBEDDINGS__BASE_URL") or getattr(cfg2.llm, "base_url", None) or "http://ollama:11434").rstrip("/")
                 model = getattr(getattr(cfg2, "embeddings", None), "model", None) or "nomic-embed-text"
-                async with _f3_httpx.AsyncClient(timeout=10) as c:
+                async with _http.client(timeout=10) as c:
                     tags = (await c.get(base + "/api/tags")).json().get("models", [])
                 if any(str(m.get("name", "")).split(":")[0] == model.split(":")[0] for m in tags):
                     return
                 logger.warning("modelo de embeddings %s ausente no Ollama - baixando em background", model)
-                async with _f3_httpx.AsyncClient(timeout=_f3_httpx.Timeout(3600.0, connect=10.0)) as c:
+                async with _http.client(timeout=_http.Timeout(3600.0, connect=10.0)) as c:
                     r = await c.post(base + "/api/pull", json={"model": model, "stream": False})
                     logger.info("pull %s -> HTTP %s", model, r.status_code)
             except Exception as e:
@@ -263,7 +264,7 @@ def create_app() -> FastAPI:
             probe_ollama = True
         try:
             if probe_ollama:
-                async with _f3_httpx.AsyncClient(timeout=2) as c:
+                async with _http.client(timeout=2) as c:
                     r = await c.get(base + '/api/tags')
                     ollama_ok = r.status_code == 200
         except Exception as _e:
@@ -283,9 +284,7 @@ def create_app() -> FastAPI:
         try:
             if native:
                 raise RuntimeError("modo nativo: sem Redis")
-            import redis as _redis
-            r = _redis.Redis.from_url(cfg.redis.dsn or 'redis://localhost:6379')
-            r.ping()
+            _probes.redis_ping(cfg.redis.dsn)
             redis_ok = True
         except Exception as _e:
             logger.debug("ignorado (%s): %s", 'main.py', type(_e).__name__)
@@ -293,30 +292,7 @@ def create_app() -> FastAPI:
         # Check Postgres (simple connectivity - Axiom #1 fail-closed)
         postgres_ok = False
         try:
-            if str(cfg.database.dsn or "").startswith("sqlite"):
-                from sqlalchemy import text as _sqltext
-                from src.jefrey.core.db import get_engine
-                with get_engine().connect() as _c:
-                    _c.execute(_sqltext("SELECT 1"))
-                postgres_ok = True
-                raise StopIteration  # banco local verificado
-            # Try asyncpg first (faster async), fallback to psycopg
-            try:
-                import asyncpg
-                # Convert postgresql+psycopg:// to postgresql:// for asyncpg
-                dsn = cfg.database.dsn.replace("postgresql+psycopg://", "postgresql://") if cfg.database.dsn else 'postgresql://localhost/jefrey'
-                conn = await asyncpg.connect(dsn)
-                await conn.close()
-                postgres_ok = True
-            except ImportError:
-                # Fallback to psycopg sync
-                import psycopg
-                dsn = cfg.database.dsn.replace("postgresql+psycopg://", "postgresql://") if cfg.database.dsn else 'postgresql://localhost/jefrey'
-                conn = psycopg.connect(dsn)
-                conn.close()
-                postgres_ok = True
-        except StopIteration:
-            pass
+            postgres_ok = await _probes.database_ping(cfg.database.dsn)
         except Exception as e:
             logger.warning("Postgres health check failed: %s", e)
 
@@ -326,7 +302,7 @@ def create_app() -> FastAPI:
             if native:
                 raise RuntimeError("modo nativo: sem servidor MCP")
             _mcp_url = os.getenv("JEFREY_MCP_HEALTH_URL") or f"http://mcp-server:{cfg.mcp.port}/health"
-            async with _f3_httpx.AsyncClient(timeout=2) as c:
+            async with _http.client(timeout=2) as c:
                 r = await c.get(_mcp_url)
                 mcp_status = "ok" if r.status_code == 200 else "degraded"
         except Exception as e:

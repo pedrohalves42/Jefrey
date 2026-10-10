@@ -99,7 +99,7 @@ class EmailSkill(SkillBase):
         if not creds:
             return [{"error": f"OAuth token não encontrado para user_id={_uid}"}]
         
-        from googleapiclient.discovery import build
+        from src.jefrey.adapters.outbound.google_credentials import build_service as build
         try:
             params = {
                 "userId": "me",
@@ -142,7 +142,7 @@ class EmailSkill(SkillBase):
         if not creds:
             return {"error": f"OAuth token não encontrado para user_id={_uid}"}
         
-        from googleapiclient.discovery import build
+        from src.jefrey.adapters.outbound.google_credentials import build_service as build
         try:
             service = build("gmail", "v1", credentials=creds)
             msg = service.users().messages().get(userId="me", id=message_id, format="full").execute()
@@ -212,7 +212,7 @@ class EmailSkill(SkillBase):
         import base64
         from email.mime.text import MIMEText
         from email.mime.multipart import MIMEMultipart
-        from googleapiclient.discovery import build
+        from src.jefrey.adapters.outbound.google_credentials import build_service as build
 
         message = MIMEMultipart("alternative")
         message["to"] = ", ".join(to) if isinstance(to, list) else to
@@ -252,7 +252,7 @@ class EmailSkill(SkillBase):
         
         import base64
         from email.mime.text import MIMEText
-        from googleapiclient.discovery import build
+        from src.jefrey.adapters.outbound.google_credentials import build_service as build
         try:
             service = build("gmail", "v1", credentials=creds)
             original = service.users().messages().get(userId="me", id=message_id, format="metadata").execute()
@@ -301,7 +301,7 @@ class EmailSkill(SkillBase):
         if not creds:
             return {"error": f"OAuth token não encontrado para user_id={_uid}"}
         
-        from googleapiclient.discovery import build
+        from src.jefrey.adapters.outbound.google_credentials import build_service as build
         try:
             service = build("gmail", "v1", credentials=creds)
             body = {}
@@ -335,7 +335,7 @@ class EmailSkill(SkillBase):
         if not creds:
             return [{"error": f"OAuth token não encontrado para user_id={_uid}"}]
         
-        from googleapiclient.discovery import build
+        from src.jefrey.adapters.outbound.google_credentials import build_service as build
         try:
             service = build("gmail", "v1", credentials=creds)
             result = service.users().labels().list(userId="me").execute()

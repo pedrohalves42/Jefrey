@@ -103,9 +103,9 @@ def test_core_nao_tem_infraestrutura_propria():
     assert _infra_usada("core") == {}, "core/ so pode ter atalhos: mova bancos, rede e bibliotecas para adapters/outbound"
 
 
-# catraca: as rotas e as ferramentas ainda falam direto com poucas bibliotecas; o numero so desce
-LEGACY_API_INFRA_FILES = 10  # (arquivo, biblioteca): httpx em rotas de Google/conexoes, banco e redis no main
-LEGACY_SKILLS_INFRA_FILES = 4  # Google API em agenda/e-mail/drive e httpx no clima
+# as rotas e as ferramentas (adaptadores de ENTRADA) nao importam bibliotecas de infraestrutura: so chamam adapters/outbound e casos de uso
+LEGACY_API_INFRA_FILES = 0  # rotas: nenhuma biblioteca de rede, banco ou Redis direta (usam adapters/outbound)
+LEGACY_SKILLS_INFRA_FILES = 0  # ferramentas: nenhuma biblioteca de rede, banco ou Google direta
 
 
 def test_rotas_e_ferramentas_nao_pioram():

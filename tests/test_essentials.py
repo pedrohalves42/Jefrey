@@ -109,7 +109,7 @@ def test_clima_com_resposta_simulada(skill, monkeypatch):
         return httpx.Response(200, json={"current": {"temperature_2m": 28.5, "apparent_temperature": 31,
                                                      "relative_humidity_2m": 70, "wind_speed_10m": 12, "precipitation": 0}})
     real = httpx.AsyncClient
-    monkeypatch.setattr(ess.httpx, "AsyncClient", lambda **kw: real(transport=httpx.MockTransport(handler), **kw))
+    monkeypatch.setattr(__import__("httpx"), "AsyncClient", lambda **kw: real(transport=httpx.MockTransport(handler), **kw))
     out = call(skill, "weather", city="Recife")
     assert "Recife" in out and "28,5" in out
 
@@ -118,7 +118,7 @@ def test_clima_sem_internet_nao_levanta(skill, monkeypatch):
     def boom(req):
         raise httpx.ConnectError("sem rede")
     real = httpx.AsyncClient
-    monkeypatch.setattr(ess.httpx, "AsyncClient", lambda **kw: real(transport=httpx.MockTransport(boom), **kw))
+    monkeypatch.setattr(__import__("httpx"), "AsyncClient", lambda **kw: real(transport=httpx.MockTransport(boom), **kw))
     assert "Nao consegui consultar" in call(skill, "weather", city="Recife")
 
 

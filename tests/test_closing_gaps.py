@@ -320,7 +320,7 @@ def test_recusa_do_google_na_troca_do_codigo_diz_o_motivo(monkeypatch, tmp_path,
 
         async def post(self, url, **k):
             return httpx.Response(401, json={"error": erro, "error_description": "Unauthorized"}, request=httpx.Request("POST", url))
-    monkeypatch.setattr(GC.httpx, "AsyncClient", FakeClient)
+    monkeypatch.setattr(__import__("httpx"), "AsyncClient", FakeClient)
     r = asyncio.run(GC.finish("codigo-secreto", "estado", ""))
     assert r.headers["location"].endswith(f"/conexoes?google={codigo}")
     assert "segredo-antigo" not in r.headers["location"] and "codigo-secreto" not in r.headers["location"]

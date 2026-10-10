@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from urllib.parse import urlencode
 from typing import Optional
 
-import httpx
+from src.jefrey.adapters.outbound import http_client as http
 from fastapi import APIRouter, Request, HTTPException, status
 
 from src.jefrey.core.config import get_settings
@@ -174,7 +174,7 @@ async def google_callback(request: Request):
         )
 
     # D1.2 FIX: manter AsyncClient aberto para token exchange + userinfo (antes fechava early)
-    async with httpx.AsyncClient() as client:
+    async with http.client() as client:
         # 1) Trocar code por tokens no Google
         token_resp = await client.post(
             "https://oauth2.googleapis.com/token",
@@ -371,7 +371,7 @@ async def get_oauth_token(request: Request, provider: str):
             if token_record.refresh_token:
                 # Implementar refresh token
                 try:
-                    async with httpx.AsyncClient() as client:
+                    async with http.client() as client:
                         refresh_resp = await client.post(
                             "https://oauth2.googleapis.com/token",
                             data={

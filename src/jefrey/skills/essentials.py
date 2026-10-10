@@ -10,7 +10,6 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-import httpx
 
 from src.jefrey.skills import SkillBase, SkillMetadata, skill, tool
 
@@ -149,20 +148,12 @@ class EssentialsSkill(SkillBase):
         if not city or len(city) > 80:
             return "Informe o nome de uma cidade."
         try:
-            async with httpx.AsyncClient(timeout=10) as c:
-                g = await c.get("https://geocoding-api.open-meteo.com/v1/search",
-                                params={"name": city, "count": 1, "language": "pt"})
-                g.raise_for_status()
-                results = g.json().get("results") or []
-                if not results:
-                    return f"Nao encontrei a cidade '{city}'."
-                r = results[0]
-                w = await c.get("https://api.open-meteo.com/v1/forecast", params={
-                    "latitude": r["latitude"], "longitude": r["longitude"],
-                    "current": "temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,precipitation",
-                    "timezone": "auto"})
-                w.raise_for_status()
-                cur = w.json().get("current") or {}
+            from src.jefrey.adapters.outbound.weather_source import current_weather
+
+            found = await current_weather(city)
+            if found is None:
+                return f"Nao encontrei a cidade '{city}'."
+            r, cur = found
         except Exception as e:
             logger.warning("weather falhou: %s", type(e).__name__)
             return "Nao consegui consultar o clima agora (sem internet ou servico fora do ar)."

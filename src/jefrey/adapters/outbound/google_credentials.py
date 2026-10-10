@@ -152,3 +152,10 @@ class GoogleCredentials:
         except Exception as e:
             logger.warning("Google initialize falhou: %s", type(e).__name__)
             return None
+
+
+def build_service(name: str, version: str, credentials=None):
+    """Cliente da API do Google (Agenda, Gmail, Drive). Importa a biblioteca so aqui: as ferramentas nao a conhecem."""
+    from googleapiclient.discovery import build
+
+    return build(name, version, credentials=credentials)

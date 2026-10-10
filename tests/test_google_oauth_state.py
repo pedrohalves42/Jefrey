@@ -62,7 +62,7 @@ def test_state_valido_passa_e_envia_o_code_verifier_ao_google(c, monkeypatch):
     class Fake(real):
         def __init__(self, *a, **kw):
             super().__init__(*a, transport=httpx.MockTransport(handler), **kw)
-    monkeypatch.setattr(auth.httpx, "AsyncClient", Fake)
+    monkeypatch.setattr(__import__("httpx"), "AsyncClient", Fake)
     r = c.get("/auth/google/callback", params={"code": "abc", "state": q["state"]})
     assert r.status_code == 400 and "invalid_grant" in r.json()["detail"]  # passou pelo state e chegou ao Google
     assert seen.get("code_verifier") == verifier and seen.get("code") == "abc"
@@ -70,7 +70,7 @@ def test_state_valido_passa_e_envia_o_code_verifier_ao_google(c, monkeypatch):
 
 def test_state_e_de_uso_unico(c, monkeypatch):
     q = login(c)
-    monkeypatch.setattr(auth.httpx, "AsyncClient", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("nao deveria chegar")))
+    monkeypatch.setattr(__import__("httpx"), "AsyncClient", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("nao deveria chegar")))
     try:
         c.get("/auth/google/callback", params={"code": "a", "state": q["state"]})
     except Exception:

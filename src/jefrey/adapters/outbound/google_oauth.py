@@ -11,6 +11,8 @@ import base64
 import hashlib
 import json
 import re
+
+import httpx
 import logging
 import os
 import secrets
@@ -45,6 +47,47 @@ _pending: dict[str, dict] = {}
 
 def _config_file() -> Path:
     return Path(os.getenv("JEFREY_CONFIG_DIR", "config")) / "google_oauth.json"
+
+
+def _google_error(r: "httpx.Response") -> str:
+    try:
+        v = r.json().get("error", "")
+        return v if isinstance(v, str) and re.fullmatch(r"[a-z_]{3,40}", v) else "desconhecido"
+    except Exception:
+        return "desconhecido"
+
+
+async def exchange_code(code: str, redirect: str, verifier: str, creds: dict) -> dict:
+    """Troca o codigo do Google por tokens (e pega o e-mail). {"ok": True, "token": {...}, "email": ...} ou {"ok": False, "reason": ...}.
+    So o MOTIVO vai para o registro, nunca codigo, token nem e-mail."""
+    async with httpx.AsyncClient(timeout=20) as c:
+        r = await c.post(TOKEN_URL, data={"code": code, "client_id": creds["client_id"], "client_secret": creds["client_secret"],
+                                          "redirect_uri": redirect, "grant_type": "authorization_code", "code_verifier": verifier})
+        if r.status_code >= 400:
+            reason = _google_error(r)
+            logger.warning("google recusou a troca do codigo: %s (HTTP %s)", reason, r.status_code)
+            return {"ok": False, "reason": {"invalid_client": "chave", "redirect_uri_mismatch": "retorno", "invalid_grant": "codigo"}.get(reason, "erro")}
+        tok = r.json()
+        if not tok.get("access_token"):
+            raise ValueError("sem token")
+        email: Optional[str] = None
+        try:
+            u = await c.get(USERINFO_URL, headers={"Authorization": f"Bearer {tok['access_token']}"}, timeout=10)
+            if u.status_code == 200:
+                email = u.json().get("email")
+        except httpx.HTTPError as _e:
+            logger.debug("google: e-mail nao obtido (%s)", type(_e).__name__)
+    return {"ok": True, "token": tok, "email": email}
+
+
+async def revoke_tokens(tokens: list) -> None:
+    """Avisa o Google para revogar (melhor esforco: nunca levanta)."""
+    async with httpx.AsyncClient(timeout=10) as c:
+        for t in tokens or []:
+            try:
+                await c.post(REVOKE_URL, data={"token": t})
+            except httpx.HTTPError as _e:
+                logger.debug("google: revogacao nao concluida (%s)", type(_e).__name__)
 
 
 def credentials() -> Optional[dict]:

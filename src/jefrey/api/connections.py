@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import re
 import logging
-import httpx
+from src.jefrey.adapters.outbound import http_client as http
 from fastapi import APIRouter, Request, HTTPException
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ async def browse(request: Request):
     n8n_url = os.getenv("JEFREY_N8N_WEBHOOK_URL") or os.getenv("N8N_WEBHOOK_URL") or "http://jefrey-n8n:5678/webhook/jefrey-browser"
     # Optional proxy to n8n if reachable (dev-only attempt, never crash)
     try:
-        async with httpx.AsyncClient(timeout=4) as c:
+        async with http.client(timeout=4) as c:
             r = await c.post(n8n_url, json={"url": url, "user_id": user_id}, headers={"X-User-Id": user_id})
             if r.status_code < 400:
                 return {"ok": True, "url": url, "message": f"Navegacao via n8n OK ({r.status_code})", "via": "n8n"}
@@ -68,7 +68,7 @@ async def send_message(request: Request):
     n8n_url = os.getenv("JEFREY_N8N_WEBHOOK_URL") or os.getenv("N8N_WEBHOOK_URL") or "http://jefrey-n8n:5678/webhook/jefrey-send-message"
     # Try n8n webhook (CIPHER-032 policy check would be via agent, here direct)
     try:
-        async with httpx.AsyncClient(timeout=6) as c:
+        async with http.client(timeout=6) as c:
             r = await c.post(n8n_url, json={"to": to, "channel": channel, "text": text, "user_id": user_id}, headers={"X-User-Id": user_id})
             if r.status_code < 400:
                 return {"ok": True, "message": f"Enviado via {channel} para {to} (n8n {r.status_code})"}
@@ -135,7 +135,7 @@ async def test_connection(request: Request):
     # Strip webhook path if present
     base = n8n_base.split("/webhook")[0].rstrip("/")
     try:
-        async with httpx.AsyncClient(timeout=4) as c:
+        async with http.client(timeout=4) as c:
             r = await c.get(base + "/healthz", headers={"X-User-Id": user_id})
             if r.status_code == 200:
                 return {"ok": True, "n8n": "healthy", "base": base}
@@ -190,7 +190,7 @@ async def n8n_trigger(request: Request):
         has_metrics = False
         MCP_CALLS = MCP_LATENCY = None  # type: ignore
     try:
-        async with httpx.AsyncClient(timeout=12) as c:
+        async with http.client(timeout=12) as c:
             fwd = {"event_type": event_type, "thread_id": thread_id, "payload": payload, "user_id": user_id}
             if "user_role" in body:
                 logger.warning("n8n/trigger ignorando user_role do caller (CIPHER-001 server-side)")
@@ -238,7 +238,7 @@ async def n8n_trigger(request: Request):
         if "jefrey-n8n" in n8n_url:
             try:
                 fallback = n8n_url.replace("jefrey-n8n", "localhost")
-                async with httpx.AsyncClient(timeout=6) as c2:
+                async with http.client(timeout=6) as c2:
                     r2 = await c2.post(fallback, json={"event_type": event_type, "thread_id": thread_id, "payload": payload, "user_id": user_id}, headers={"X-User-Id": user_id})
                     elapsed2 = _t.time() - start
                     if has_metrics:
@@ -263,7 +263,7 @@ async def n8n_health(request: Request):
     base = n8n_base.split("/webhook")[0].rstrip("/")
     for url in [base + "/healthz", base + "/healthz/", "http://localhost:5678/healthz"]:
         try:
-            async with httpx.AsyncClient(timeout=3) as c:
+            async with http.client(timeout=3) as c:
                 r = await c.get(url, headers={"X-User-Id": user_id})
                 if r.status_code == 200:
                     return {"ok": True, "n8n": "healthy", "base": base, "probe": url}

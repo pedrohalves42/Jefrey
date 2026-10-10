@@ -173,7 +173,7 @@ def test_api_fluxo_completo_com_google_simulado(api, monkeypatch):
         async def get(self, url, **k):
             return Resp({"email": "pessoa@exemplo.com"})
 
-    monkeypatch.setattr(gc.httpx, "AsyncClient", Fake)
+    monkeypatch.setattr(__import__("httpx"), "AsyncClient", Fake)
     # o callback e uma navegacao do navegador: sem cabecalho de login
     r = c.get("/connections/google/callback", params={"code": "codigo", "state": state})
     assert r.status_code == 303 and r.headers["location"] == "/conexoes?google=ok"  # "testserver" nao e endereco local: volta relativo
@@ -244,7 +244,7 @@ def test_retorno_pelo_endereco_antigo_conclui_o_fluxo_novo_e_volta_a_tela_de_ori
         async def get(self, url, **k):
             return Resp({"email": "pessoa@exemplo.com"})
 
-    monkeypatch.setattr(gc.httpx, "AsyncClient", Fake)
+    monkeypatch.setattr(__import__("httpx"), "AsyncClient", Fake)
     r = c.get("/auth/google/callback", params={"code": "x", "state": state})
     assert r.status_code == 303 and r.headers["location"] == "http://127.0.0.1:8000/conexoes?google=ok"
     assert c.get("/connections/google", headers=h).json()["connected"] is True

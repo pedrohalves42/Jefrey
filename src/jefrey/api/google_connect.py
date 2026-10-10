@@ -7,7 +7,6 @@ import re
 from typing import Optional
 from urllib.parse import urlsplit
 
-import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
@@ -64,14 +63,6 @@ def _back(entry: Optional[dict], result: str) -> RedirectResponse:
     return RedirectResponse(f"{base}/conexoes?google={result}", status_code=303)
 
 
-def _google_error(r: httpx.Response) -> str:
-    try:
-        v = r.json().get("error", "")
-        return v if isinstance(v, str) and re.fullmatch(r"[a-z_]{3,40}", v) else "desconhecido"
-    except Exception:
-        return "desconhecido"
-
-
 async def finish(code: str, state: str, error: str) -> RedirectResponse:
     """Conclui a conexao (usado pelos dois enderecos de retorno)."""
     entry = G.consume_state(state)
@@ -79,25 +70,10 @@ async def finish(code: str, state: str, error: str) -> RedirectResponse:
     if error or not code or entry is None or creds is None:
         return _back(entry, "erro")
     try:
-        async with httpx.AsyncClient(timeout=20) as c:
-            r = await c.post(G.TOKEN_URL, data={"code": code, "client_id": creds["client_id"], "client_secret": creds["client_secret"],
-                                                "redirect_uri": entry["redirect"], "grant_type": "authorization_code",
-                                                "code_verifier": entry["verifier"]})
-            if r.status_code >= 400:
-                reason = _google_error(r)
-                logger.warning("google recusou a troca do codigo: %s (HTTP %s)", reason, r.status_code)  # so o MOTIVO, nunca codigo nem chave
-                return _back(entry, {"invalid_client": "chave", "redirect_uri_mismatch": "retorno", "invalid_grant": "codigo"}.get(reason, "erro"))
-            tok = r.json()
-            if not tok.get("access_token"):
-                raise ValueError("sem token")
-            email: Optional[str] = None
-            try:
-                u = await c.get(G.USERINFO_URL, headers={"Authorization": f"Bearer {tok['access_token']}"}, timeout=10)
-                if u.status_code == 200:
-                    email = u.json().get("email")
-            except httpx.HTTPError as _e:
-                logger.debug("google: e-mail nao obtido (%s)", type(_e).__name__)
-        G.save_tokens(entry["user"], entry["services"], tok, email)
+        res = await G.exchange_code(code, entry["redirect"], entry["verifier"], creds)
+        if not res["ok"]:
+            return _back(entry, res["reason"])
+        G.save_tokens(entry["user"], entry["services"], res["token"], res["email"])
     except Exception as e:  # nunca registra codigo, token nem e-mail
         logger.warning("google callback falhou: %s", type(e).__name__)
         return _back(entry, "erro")
@@ -128,10 +104,5 @@ async def set_credentials(request: Request, body: CredsBody):
 @router.delete("")
 async def google_disconnect(request: Request):
     tokens = G.delete_tokens(_user(request))
-    async with httpx.AsyncClient(timeout=10) as c:  # revoga no Google (melhor esforco)
-        for t in tokens:
-            try:
-                await c.post(G.REVOKE_URL, data={"token": t})
-            except httpx.HTTPError as _e:
-                logger.debug("google: revogacao nao concluida (%s)", type(_e).__name__)
+    await G.revoke_tokens(tokens)  # revoga no Google (melhor esforco)
     return {"ok": True}
