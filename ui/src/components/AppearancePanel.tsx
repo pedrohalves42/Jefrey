@@ -189,6 +189,7 @@ export function AppearancePanel() {
             </div>
           )}
 
+          <Toggle label="Cor que muda com o dia" hint="Alvorada cobre, manhã dourada, tarde azul, entardecer coral, noite violeta. Desligue para fixar uma cor." checked={a.auto} onChange={v => set({ auto: v })} />
           <Slider
             label="Cor"
             value={a.hue}
