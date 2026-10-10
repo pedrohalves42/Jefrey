@@ -498,10 +498,12 @@ export default function Conversa() {
         </div>
 
         {/* doca: legenda, atalhos, voz, texto e opcoes (fora do cerebro, nunca por cima dele) */}
-        <div className="relative z-30 flex min-h-[8.75rem] basis-[20%] grow shrink-0 flex-col overflow-y-auto border-t border-white/[0.07] bg-[hsl(24_14%_5%/0.7)] px-4 py-2"><div className="my-auto flex w-full flex-col items-center gap-1.5">
+        <div className="relative z-30 flex min-h-[8.75rem] basis-[20%] grow shrink-0 flex-col border-t border-white/[0.07] bg-[hsl(24_14%_5%/0.7)] px-4 py-2">
+          {/* parte que rola: atalhos, resposta e avisos. A caixa de digitar fica sempre embaixo, visivel. */}
+          <div className="mx-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col items-center justify-end gap-1.5 overflow-y-auto pb-1">
           <div className="w-full max-w-lg lg:hidden"><BriefingCard /></div>
           <LearnedToast streaming={streaming} />
-          <QuickActions onAsk={t => void send(t)} onSummary={() => void speakSummary()} busy={summaryBusy} />
+          {(empty || !caption) && <QuickActions onAsk={t => void send(t)} onSummary={() => void speakSummary()} busy={summaryBusy} />}
 
           {!empty && (caption || streaming) && (
             <div className="jf-glass relative max-w-2xl rounded-xl px-4 py-1.5 text-center" aria-live="polite">
@@ -509,9 +511,9 @@ export default function Conversa() {
               {streaming && !caption ? (
                 <span className="jf-typing" aria-label="Jefrey está pensando"><span /><span /><span /></span>
               ) : (
-                <p className={`text-[15px] leading-snug ${lastAi?.error ? "text-red-200" : "text-white/95"} line-clamp-3`}>{plainText(caption)}</p>
+                <p className={`text-[15px] leading-snug ${lastAi?.error ? "text-red-200" : "text-white/95"} line-clamp-2`}>{plainText(caption)}</p>
               )}
-              {lastAi?.recall && lastAi.recall.length > 0 && <p className="mt-1 text-xs text-white/55"><span className="jf-accent">Lembrei:</span> {lastAi.recall.map(r => r.text).join(" · ")}</p>}
+              {lastAi?.recall && lastAi.recall.length > 0 && <p className="mt-1 line-clamp-1 text-xs text-white/55"><span className="jf-accent">Lembrei:</span> {lastAi.recall.map(r => r.text).join(" · ")}</p>}
               {caption.length > 220 && <button type="button" onClick={() => setDrawer(true)} className="jf-focus mt-1 text-xs text-[hsl(var(--hue)_80%_75%)] underline">ver tudo</button>}
             </div>
           )}
@@ -520,6 +522,8 @@ export default function Conversa() {
             <button type="button" onClick={retry} className="jf-btn jf-focus px-3 py-1 text-sm">Tentar de novo</button>
           )}
 
+          </div>
+          <div className="mx-auto flex w-full shrink-0 flex-col items-center gap-1.5">
           <Wave level={micLevel} speaking={speaker.speaking} className={`max-w-md opacity-80 ${speaker.speaking || micLevel > 0.02 ? "" : "hidden"}`} />
 
           <div className="flex w-full max-w-4xl items-end gap-2">
