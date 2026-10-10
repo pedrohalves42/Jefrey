@@ -4,6 +4,7 @@ from typing import Final, TypedDict
 import logging
 from pathlib import Path
 
+from src.jefrey.adapters.outbound.google_credentials import GoogleCredentials
 from src.jefrey.skills import SkillBase, SkillMetadata, skill, tool
 from src.jefrey.core.config import get_settings
 
@@ -45,151 +46,12 @@ class DriveSkill(SkillBase):
         super().__init__()
         self._service = None
         self._creds = None
-        self._token_cache = {}  # Cache de credenciais por user_id (CIPHER-001 fix)
+        self._google = GoogleCredentials("google_drive", "google_drive", SCOPES)
+        self._token_cache = self._google.cache  # credenciais por pessoa (CIPHER-001)
 
     def _get_credentials_for_user(self, user_id: str | None = None):
-        """Obtém credenciais OAuth2 do PostgreSQL para um user_id específico (CIPHER-001 fix)."""
-        if not user_id:
-            logger.warning("CIPHER-001: user_id não fornecido - usando fallback single-tenant (não isolado)")
-            return self._get_fallback_credentials()
-        
-        if user_id in self._token_cache:
-            creds = self._token_cache[user_id]
-            if creds and creds.valid:
-                return creds
-            elif creds and creds.expired and creds.refresh_token:
-                try:
-                    creds.refresh(self._get_request())
-                    logger.info("CIPHER-001: Token OAuth2 refresh para user_id=%s", user_id)
-                    return creds
-                except Exception as e:
-                    logger.warning("CIPHER-001: Token refresh falhou user_id=%s: %s", user_id, e)
-        
-        try:
-            from src.jefrey.core.db import get_db
-            from src.jefrey.core.models import OAuthToken
-            from google.oauth2.credentials import Credentials
-            
-            with get_db() as session:
-                token_record = session.query(OAuthToken).filter(
-                    OAuthToken.user_id == user_id,
-                    OAuthToken.provider == "google_drive"
-                ).first()
-                
-                if not token_record:
-                    logger.warning("CIPHER-001: No OAuth token found for user_id=%s provider=google - usando fallback", user_id)
-                    return self._get_fallback_credentials()
-                
-                creds = Credentials(
-                    token=_unprotect(token_record.access_token),
-                    refresh_token=_unprotect(token_record.refresh_token) if token_record.refresh_token else None,
-                    token_uri="https://oauth2.googleapis.com/token",
-                    client_id=self._get_client_id(),
-                    client_secret=self._get_client_secret(),
-                    scopes=token_record.scopes or self.SCOPES,
-                )
-                
-                if token_record.expires_at:
-                    creds.expiry = token_record.expires_at
-                
-                if creds and creds.expired and creds.refresh_token:
-                    try:
-                        creds.refresh(self._get_request())
-                        token_record.access_token = _protect(creds.token)
-                        token_record.expires_at = creds.expiry
-                        session.commit()
-                        logger.info("CIPHER-001: Token OAuth2 refresh + atualizado no PostgreSQL user_id=%s", user_id)
-                    except Exception as e:
-                        logger.warning("CIPHER-001: Token refresh falhou user_id=%s: %s", user_id, e)
-                
-                self._token_cache[user_id] = creds
-                logger.info("CIPHER-001: OAuth token carregado do PostgreSQL user_id=%s email=%s", user_id, token_record.email)
-                return creds
-        except Exception as e:
-            logger.error("CIPHER-001: Falha ao carregar OAuth token do PostgreSQL: %s", e)
-            return self._get_fallback_credentials()
-    
-    def _get_client_id(self):
-        from src.jefrey.core.google_oauth import credentials as _gc
-        _c = _gc()
-        if _c:
-            return _c['client_id']
-        return self._get_client_id_settings()
-
-    def _get_client_id_settings(self):
-        try:
-            from src.jefrey.core.config import get_settings
-            return get_settings().integrations.google_drive.client_id
-        except Exception:
-            import os
-            return os.getenv("JEFREY_OAUTH__CLIENT_ID", "")
-    
-    def _get_client_secret(self):
-        from src.jefrey.core.google_oauth import credentials as _gc
-        _c = _gc()
-        if _c:
-            return _c['client_secret']
-        return self._get_client_secret_settings()
-
-    def _get_client_secret_settings(self):
-        try:
-            from src.jefrey.core.config import get_settings
-            return get_settings().integrations.google_drive.client_secret
-        except Exception:
-            import os
-            return os.getenv("JEFREY_OAUTH__CLIENT_SECRET", "")
-    
-    def _get_request(self):
-        try:
-            from google.auth.transport.requests import Request
-            return Request()
-        except Exception:
-            return None
-
-    def _get_fallback_credentials(self):
-        """Fallback para credenciais do filesystem (single-tenant, não isolado)."""
-        try:
-            from google.auth.transport.requests import Request
-            from google.oauth2.credentials import Credentials
-            from google_auth_oauthlib.flow import InstalledAppFlow
-            from googleapiclient.discovery import build
-        except ImportError:
-            logger.warning("google-api-python-client nao instalado")
-            return None
-        cfg = get_settings().integrations.google_drive
-        creds_file = Path(cfg.credentials_file)
-        token_file = Path(cfg.token_file)
-        if not creds_file.exists():
-            logger.warning(f"Credenciais Google Drive nao encontradas: {creds_file}")
-            return None
-        try:
-            if token_file.exists():
-                creds = Credentials.from_authorized_user_file(str(token_file), self.SCOPES)
-            if not creds or not creds.valid:
-                if creds and creds.expired and creds.refresh_token:
-                    try:
-                        creds.refresh(Request())
-                    except Exception as e:
-                        logger.warning(f"Drive token refresh falhou: {type(e).__name__}")
-                        return None
-                else:
-                    flow = InstalledAppFlow.from_client_secrets_file(str(creds_file), self.SCOPES)
-                    creds = flow.run_local_server(port=0)
-                token_file.parent.mkdir(parents=True, exist_ok=True)
-                try:
-                    token_file.parent.chmod(0o700)
-                except Exception as _e:
-                    logger.debug("ignorado (%s): %s", 'drive.py', type(_e).__name__)
-                with open(token_file, "w", encoding="utf-8") as f:
-                    f.write(creds.to_json())
-                try:
-                    token_file.chmod(0o600)
-                except Exception as _e:
-                    logger.debug("ignorado (%s): %s", 'drive.py', type(_e).__name__)
-            return creds
-        except Exception as e:
-            logger.warning(f"Drive initialize falhou: {type(e).__name__}")
-            return None
+        """Credenciais OAuth2 desta pessoa (codigo compartilhado em adapters/outbound/google_credentials.py)."""
+        return self._google.for_user(user_id)
 
     def initialize(self) -> bool:
         return True

@@ -171,5 +171,4 @@ def create_oauth2_tables() -> None:
     """
     engine = get_engine()
     Base.metadata.create_all(bind=engine)
-    logger_info = __import__("logging").getLogger(__name__)
-    logger_info.info("OAuth2 tables created/verified (oauth2_clients, oauth_tokens)")
+    logger.info("OAuth2 tables created/verified (oauth2_clients, oauth_tokens, approvals)")
