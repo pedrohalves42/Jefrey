@@ -47,8 +47,15 @@ Os caminhos antigos (`core/reminders.py`, `core/learning.py`, `core/wa_web.py`, 
 3. Misturado: separe (a) regra → `domain/`, (b) orquestração → `application/` usando uma porta nova em `ports/__init__.py`, (c) banco/rede → `adapters/outbound/`. Deixe `core/nome.py` como atalho que liga o adaptador padrão.
 4. Rode `pytest tests -q` e `tests/test_architecture.py`. Se o número de desvios do `core/` cair, abaixe a catraca no teste.
 
-## Ainda por migrar (ordem sugerida)
-`core/today` (feeds e painel), `core/briefing`, `core/studies`, `core/memory` (+ `pg_memory`, `redis_memory`), `core/agent` e `agent_loop` (orquestração do modelo), `core/brains`/`llm_provider`, `core/google_oauth`, `core/updater`, `api/*` (rotas são adaptadores de entrada: devem só traduzir HTTP em chamadas de caso de uso), `skills/*` (idem, para ferramentas).
+## Estado atual
+- `core/` virou **so atalhos** (nenhuma biblioteca de infraestrutura; guardado por `tests/test_architecture.py`).
+- Dividido em dominio / aplicacao / adaptadores: lembretes, aprendizado, WhatsApp (+ caixa de entrada e comandos), aviso de compromissos, Tarefas/Contatos do Google, resumo do dia, painel Hoje, "Seus dados" (LGPD), estudos, controle do computador.
+- Casos de uso novos pedem as pecas do mundo de fora por **portas nomeadas** (`ports/registry.py`: `use("agent_env")`, `use("tool_audit")`...). A raiz de composicao (`bootstrap.wire`) liga os adaptadores padrao na primeira necessidade; testes trocam com `provide(...)`.
+- Agente, laco do agente e execucao de ferramentas moram em `application/`; o banco, a web e o modelo, em `adapters/outbound/`.
+
+## Ainda por fazer
+- `api/` e `skills/` sao adaptadores de **entrada**: podem chamar casos de uso, mas ainda falam direto com `httpx` (rotas do Google, conexoes, login antigo, clima), banco/redis (`api/main.py`) e a API do Google (agenda, e-mail, drive). A catraca em `test_architecture.py` impede que isso aumente; ao migrar, abaixe os numeros.
+- Os atalhos de `core/` podem ser apagados quando ninguem mais os importar.
 
 ## Regras de dia a dia
 - Código novo nasce na estrutura nova (domínio → porta → caso de uso → adaptador → raiz de composição).

@@ -83,3 +83,33 @@ def test_core_nao_depende_da_camada_de_entrada():
     for p in files("core"):
         n += sum(1 for m in imports(p) if m.startswith(f"{PKG}.api"))
     assert n <= LEGACY_CORE_IMPORTS_API, f"core/ passou a importar api/ ({n} vezes): isso inverte a dependencia"
+
+
+# ---- core/ virou so atalhos: nenhuma infraestrutura propria ----
+INFRA_LIBS = {"sqlalchemy", "httpx", "redis", "psycopg", "asyncpg", "googleapiclient", "google", "chromadb", "requests", "fastapi", "starlette",
+              "prometheus_client", "opentelemetry", "langgraph", "cryptography", "pydantic", "pydantic_settings", "pythonjsonlogger", "orjson"}
+
+
+def _infra_usada(layer: str) -> dict[str, set[str]]:
+    out: dict[str, set[str]] = {}
+    for p in files(layer):
+        hit = {top(m) for m in imports(p)} & INFRA_LIBS
+        if hit:
+            out[str(p.relative_to(ROOT))] = hit
+    return out
+
+
+def test_core_nao_tem_infraestrutura_propria():
+    assert _infra_usada("core") == {}, "core/ so pode ter atalhos: mova bancos, rede e bibliotecas para adapters/outbound"
+
+
+# catraca: as rotas e as ferramentas ainda falam direto com poucas bibliotecas; o numero so desce
+LEGACY_API_INFRA_FILES = 10  # (arquivo, biblioteca): httpx em rotas de Google/conexoes, banco e redis no main
+LEGACY_SKILLS_INFRA_FILES = 4  # Google API em agenda/e-mail/drive e httpx no clima
+
+
+def test_rotas_e_ferramentas_nao_pioram():
+    skills = sum(len(v - {"pydantic"}) for v in _infra_usada("skills").values())
+    api_only_infra = sum(len(v - {"fastapi", "starlette", "pydantic", "prometheus_client", "cryptography"}) for v in _infra_usada("api").values())
+    assert api_only_infra <= LEGACY_API_INFRA_FILES, f"api/ passou a usar mais infraestrutura direta ({api_only_infra})"
+    assert skills <= LEGACY_SKILLS_INFRA_FILES, f"skills/ passou a usar mais infraestrutura direta ({skills})"

@@ -85,7 +85,7 @@ def test_agente_abre_o_programa_pedido_pelo_laco_real(tmp_path, monkeypatch):
     menu = tmp_path / "Programs"
     menu.mkdir()
     (menu / "Microsoft Word.lnk").write_text("x")
-    monkeypatch.setattr(C, "start_menu_dirs", lambda: [menu])
+    monkeypatch.setattr("src.jefrey.adapters.outbound.windows_desktop.start_menu_dirs", lambda: [menu])
     C._cache.update(at=0.0, apps={})
 
     tools = {t.name: t for t in C.ComputerSkill().get_tools()}

@@ -12,9 +12,7 @@ import os
 import re
 import sys
 import time
-import unicodedata
 import webbrowser
-from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Optional
 from urllib.parse import quote_plus, urlsplit
@@ -23,174 +21,16 @@ from src.jefrey.skills import SkillBase, SkillMetadata, skill, tool
 
 logger = logging.getLogger(__name__)
 
-ALIASES = {  # apelido falado -> programa do Windows
-    "bloco de notas": "notepad.exe", "notepad": "notepad.exe", "calculadora": "calc.exe", "paint": "mspaint.exe",
-    "explorador de arquivos": "explorer.exe", "explorador": "explorer.exe", "gerenciador de tarefas": "taskmgr.exe",
-    "prompt de comando": "cmd.exe", "configuracoes": "ms-settings:", "relogio": "ms-clock:", "calendario": "outlookcal:",
-}
-SITES = {  # apelido falado -> endereco
-    "youtube": "https://www.youtube.com", "gmail": "https://mail.google.com", "google": "https://www.google.com",
-    "whatsapp": "https://web.whatsapp.com", "whatsapp web": "https://web.whatsapp.com", "agenda": "https://calendar.google.com",
-    "google agenda": "https://calendar.google.com", "maps": "https://maps.google.com", "mapas": "https://maps.google.com",
-    "drive": "https://drive.google.com", "wikipedia": "https://pt.wikipedia.org", "noticias": "https://g1.globo.com", "g1": "https://g1.globo.com",
-}
-FOLDERS = {  # apelido falado -> pasta do usuario
-    "documentos": "Documents", "downloads": "Downloads", "baixados": "Downloads", "area de trabalho": "Desktop", "desktop": "Desktop",
-    "imagens": "Pictures", "fotos": "Pictures", "musicas": "Music", "videos": "Videos",
-}
-_SKIP_APPS = re.compile(r"desinstal|uninstall|leia-?me|readme|manual|ajuda|help|licen[cç]a|license|suporte|support|site da|website", re.I)
-MIN_MATCH = 0.72
-_cache: dict = {"at": 0.0, "apps": {}}
-
-
-def _norm(s: str) -> str:
-    t = "".join(c for c in unicodedata.normalize("NFD", (s or "").lower()) if unicodedata.category(c) != "Mn")
-    return " ".join(re.sub(r"[^a-z0-9 ]", " ", t).split())
-
-
-# ---------------- apps ----------------
-def start_menu_dirs() -> list[Path]:
-    dirs = []
-    for env in ("APPDATA", "PROGRAMDATA"):
-        base = os.getenv(env)
-        if base:
-            dirs.append(Path(base) / "Microsoft" / "Windows" / "Start Menu" / "Programs")
-    return dirs
-
-
-def scan_apps(force: bool = False) -> dict[str, Path]:
-    """{nome normalizado: atalho .lnk} do Menu Iniciar (cache de 5 min)."""
-    if not force and time.monotonic() - _cache["at"] < 300 and _cache["apps"]:
-        return _cache["apps"]
-    apps: dict[str, Path] = {}
-    for d in start_menu_dirs():
-        try:
-            for p in d.rglob("*.lnk"):
-                if _SKIP_APPS.search(p.stem):
-                    continue
-                apps.setdefault(_norm(p.stem), p)
-        except OSError:
-            continue
-    _cache.update(at=time.monotonic(), apps=apps)
-    return apps
-
-
-def match_app(query: str, apps: dict[str, Path]) -> tuple[Optional[str], list[str]]:
-    """(melhor nome, candidatos). Melhor = igual, ou contido, ou parecido; empate/duvida devolve so candidatos."""
-    q = _norm(query)
-    if not q:
-        return None, []
-    if q in apps:
-        return q, [q]
-    contained = [n for n in apps if q in n.split() or n.startswith(q) or (len(q) >= 4 and q in n)]
-    if len(contained) == 1:
-        return contained[0], contained
-    scored = sorted(((SequenceMatcher(None, q, n).ratio(), n) for n in apps), reverse=True)
-    good = [n for s, n in scored if s >= MIN_MATCH]
-    if contained:
-        return None, sorted(contained, key=len)[:4]
-    if len(good) == 1 or (good and scored[0][0] - (scored[1][0] if len(scored) > 1 else 0) > 0.08):
-        return good[0], good
-    return None, good[:4]
-
-
-def _start(target: str) -> None:
-    os.startfile(target)  # type: ignore[attr-defined]  # so Windows
-
-
-def _open_url(url: str) -> bool:
-    return bool(webbrowser.open(url))
-
-
-def _press(vk: int, times: int) -> None:
-    import ctypes
-
-    u = ctypes.windll.user32  # type: ignore[attr-defined]
-    for _ in range(times):
-        u.keybd_event(vk, 0, 0, 0)
-        u.keybd_event(vk, 0, 2, 0)
-        time.sleep(0.02)
-
-
-MEDIA_KEYS = {"play": 0xB3, "pause": 0xB3, "tocar": 0xB3, "pausar": 0xB3, "continuar": 0xB3, "parar": 0xB2, "stop": 0xB2,
-              "proxima": 0xB0, "proximo": 0xB0, "next": 0xB0, "pular": 0xB0, "anterior": 0xB1, "voltar": 0xB1, "previous": 0xB1}
-PROTECTED = ("explorer", "jefrey", "system", "taskmgr", "csrss", "winlogon", "searchhost", "startmenuexperiencehost", "shellexperiencehost")
-
-
-def list_windows() -> list[tuple[int, str, str]]:
-    """Janelas visiveis com titulo: (identificador, titulo, nome do programa). So Windows."""
-    import ctypes
-    from ctypes import wintypes
-
-    u, k = ctypes.windll.user32, ctypes.windll.kernel32  # type: ignore[attr-defined]
-    out: list[tuple[int, str, str]] = []
-    proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-
-    def each(hwnd, _):
-        if not u.IsWindowVisible(hwnd):
-            return True
-        n = u.GetWindowTextLengthW(hwnd)
-        if n <= 0:
-            return True
-        buf = ctypes.create_unicode_buffer(n + 1)
-        u.GetWindowTextW(hwnd, buf, n + 1)
-        pid = wintypes.DWORD()
-        u.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-        exe = ""
-        h = k.OpenProcess(0x1000, False, pid.value)  # PROCESS_QUERY_LIMITED_INFORMATION
-        if h:
-            size = wintypes.DWORD(520)
-            path = ctypes.create_unicode_buffer(520)
-            if k.QueryFullProcessImageNameW(h, 0, path, ctypes.byref(size)):
-                exe = Path(path.value).stem
-            k.CloseHandle(h)
-        out.append((int(hwnd), buf.value, exe))
-        return True
-
-    u.EnumWindows(proc(each), 0)
-    return out
-
-
-def _close_window(hwnd: int) -> None:
-    import ctypes
-
-    ctypes.windll.user32.PostMessageW(hwnd, 0x0010, 0, 0)  # type: ignore[attr-defined]  # WM_CLOSE: pede para fechar (o programa pergunta se quer salvar)
-
-
-def match_windows(query: str, wins: list[tuple[int, str, str]]) -> list[tuple[int, str, str]]:
-    """Janelas cujo programa ou titulo combina com o que a pessoa disse; nunca as protegidas."""
-    q = _norm(query)
-    if len(q) < 3:
-        return []
-    found = []
-    for hwnd, title, exe in wins:
-        if any(p in _norm(exe) for p in PROTECTED) or "jefrey" in _norm(title):
-            continue
-        if q in _norm(exe) or q in _norm(title):
-            found.append((hwnd, title, exe))
-    return found
+from src.jefrey.adapters.outbound.windows_desktop import (  # noqa: F401
+    _cache, _close_window, _open_url, _press, _start, list_windows, scan_apps, start_menu_dirs,
+)
+from src.jefrey.domain.computer import (  # noqa: F401
+    ALIASES, FOLDERS, MEDIA_KEYS, MIN_MATCH, PROTECTED, SITES, _SKIP_APPS, _norm, clean_url, match_app, match_windows,
+)
 
 
 def _windows_only() -> Optional[str]:
     return None if sys.platform == "win32" else "Isso só funciona no Windows."
-
-
-def clean_url(text: str) -> Optional[str]:
-    """Endereco seguro para abrir, ou None. So http(s), com ponto no nome e sem usuario/senha."""
-    t = (text or "").strip().strip("\"'")
-    if _norm(t) in SITES:
-        return SITES[_norm(t)]
-    if not re.match(r"^https?://", t, re.I):
-        if re.match(r"^[\w.-]+\.[a-z]{2,}(/\S*)?$", t, re.I):
-            t = "https://" + t
-        else:
-            return None
-    p = urlsplit(t)
-    if p.scheme not in ("http", "https") or not p.hostname or "." not in p.hostname or p.username or p.password or len(t) > 500:
-        return None
-    if p.hostname in ("localhost",) or re.match(r"^(127\.|10\.|192\.168\.|169\.254\.|0\.)", p.hostname) or p.hostname.endswith((".local", ".internal")):
-        return None
-    return t
 
 
 class ComputerSkill(SkillBase):

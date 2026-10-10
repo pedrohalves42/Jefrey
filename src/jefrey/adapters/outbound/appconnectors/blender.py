@@ -11,7 +11,7 @@ import math
 import re
 from pathlib import Path
 
-from src.jefrey.core.appconnectors import ConnectorError
+from src.jefrey.adapters.outbound.appconnectors import ConnectorError
 
 HOST = "127.0.0.1"
 PORT = 8765

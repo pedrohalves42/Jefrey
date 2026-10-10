@@ -28,7 +28,7 @@ def ambiente(tmp_path, monkeypatch):
     for nome in ("Microsoft Word", "Microsoft Excel", "Google Chrome", "Spotify", "Blender", "Blender Manual", "Desinstalar Spotify", "VLC media player"):
         (menu / "Sub").mkdir(parents=True, exist_ok=True)
         (menu / "Sub" / f"{nome}.lnk").write_text("x")
-    monkeypatch.setattr(C, "start_menu_dirs", lambda: [menu])
+    monkeypatch.setattr("src.jefrey.adapters.outbound.windows_desktop.start_menu_dirs", lambda: [menu])
     C._cache.update(at=0.0, apps={})
     home = tmp_path / "home"
     for d in ("Documents", "Downloads"):
