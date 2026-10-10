@@ -23,7 +23,7 @@ const ok = (msg) => { S.state = "done"; S.message = msg; };
 async function waitFor(fn, ms) { const t = Date.now(); while (Date.now() - t < (ms || 15000)) { try { const v = fn(); if (v) return v; } catch (e) {} await sleep(250); } return null; }
 const clickable = (sel, re) => [...document.querySelectorAll(sel)].find(e => re.test((e.innerText || e.getAttribute("aria-label") || "").trim()));
 function toFiles(list) {
-  return list.map(f => { const bin = atob(f.b64); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new File([u], f.name, { type: f.type }); });
+  return list.map(f => { const bin = atob(f.b64.replace(/-/g, "+").replace(/_/g, "/"));  // base64 seguro para URL -> padrao const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new File([u], f.name, { type: f.type }); });
 }
 function attach(input, files) { const dt = new DataTransfer(); files.forEach(f => dt.items.add(f)); input.files = dt.files; input.dispatchEvent(new Event("input", { bubbles: true })); input.dispatchEvent(new Event("change", { bubbles: true })); }
 async function typeText(el, text) { el.focus(); await sleep(150); document.execCommand("insertText", false, text); await sleep(400); }

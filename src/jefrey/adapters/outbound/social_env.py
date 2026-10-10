@@ -44,7 +44,7 @@ class SocialEnvironment:
         root, target = default_output_root().resolve(), Path(folder).resolve()
         if root not in target.parents or not target.is_dir():
             raise ValueError("pasta fora da pasta dos carrosseis")
-        return [{"name": f.name, "type": "image/png", "b64": base64.b64encode(f.read_bytes()).decode()} for f in sorted(target.glob("slide-*.png"))[:10]]
+        return [{"name": f.name, "type": "image/png", "b64": base64.urlsafe_b64encode(f.read_bytes()).decode()} for f in sorted(target.glob("slide-*.png"))[:10]]
 
     def _log_file(self) -> Path:
         import os
