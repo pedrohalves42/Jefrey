@@ -156,9 +156,8 @@ def test_extensao_do_whatsapp_ganha_pasta_facil_em_documentos(tmp_path, monkeypa
     assert paths.public_extension_dir() == pasta  # repetir nao quebra
 
 
-def test_pagina_de_skills_mostra_o_risco_real_de_cada_ferramenta(monkeypatch):
-    import sys
-    monkeypatch.setattr(sys, "platform", "win32")  # as ferramentas do computador so existem no Windows
+@pytest.mark.skipif(__import__("sys").platform != "win32", reason="as ferramentas do computador so existem no Windows")
+def test_pagina_de_skills_mostra_o_risco_real_de_cada_ferramenta():
     from src.jefrey.api.skills_routes import describe_skills
     riscos = {t["name"]: t["risk"] for s in describe_skills() for t in s["tools"]}
     assert riscos["close_app"] == "high" and riscos["alexa_routine"] == "high" and riscos["open_folder"] == "low"
