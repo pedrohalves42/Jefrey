@@ -447,7 +447,7 @@ export default function Conversa() {
 
       {/* palco: o avatar ocupa quase toda a tela e as opcoes ficam pequenas por cima */}
       <section className="jf-stage relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl" aria-label="Conversa com o Jefrey">
-        <div className="relative min-h-[46%] flex-1" onPointerMove={onTilt} onPointerLeave={offTilt}>
+        <div className="relative min-h-0 basis-[80%] grow-0 shrink" onPointerMove={onTilt} onPointerLeave={offTilt}>
         <div ref={stageRef} className="jf-stage-core absolute inset-0 will-change-transform">
         <div className="jf-rings" aria-hidden="true" />
           <div ref={tiltRef} className="jf-tilt h-full w-full cursor-pointer" role="button" tabIndex={0} aria-label="Toque no avatar para falar com o Jefrey" onClick={() => void toggleVoiceMode()} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); void toggleVoiceMode() } }}>
@@ -467,6 +467,18 @@ export default function Conversa() {
         {hud && <HudOverlay messages={active.messages} activity={activity} />}
         {hud && <LivePanel />}
 
+        {/* painel lateral: resumo do dia e saudacao ficam pequenos no canto, o cerebro continua inteiro */}
+        <aside className="pointer-events-none absolute bottom-2 left-3 z-20 hidden w-64 flex-col gap-2 lg:flex" aria-label="Resumo">
+          <div className="pointer-events-auto"><BriefingCard /></div>
+          {empty && (
+            <div className="pointer-events-auto jf-glass rounded-xl px-3 py-2">
+              <h2 className="text-sm font-semibold text-white">{greeting(clock.getHours(), myName)}</h2>
+              <p className="text-xs text-white/55">{myName ? "O que vamos resolver agora?" : "Eu sou o Jefrey. Como posso te chamar?"}</p>
+            </div>
+          )}
+          {empty && <div className="pointer-events-auto"><DayStrip onOpen={() => setTodayOpen(true)} /></div>}
+        </aside>
+
         <NewsPopup />
         {todayOpen && <TodayPopup name={myName ?? undefined} onClose={() => setTodayOpen(false)} />}
 
@@ -476,27 +488,18 @@ export default function Conversa() {
         </div>
 
         {/* doca: legenda, atalhos, voz, texto e opcoes (fora do cerebro, nunca por cima dele) */}
-        <div className="relative z-30 flex max-h-[54%] shrink-0 flex-col items-center gap-2 overflow-y-auto border-t border-white/10 bg-black/50 px-4 pb-3 pt-3">
-          <div className="w-full max-w-lg"><BriefingCard /></div>
-          {empty && (
-            <>
-              <div className="max-w-xl text-center">
-                <h2 className="text-base font-semibold text-white">{greeting(clock.getHours(), myName)}</h2>
-                <p className="text-xs text-white/55">{myName ? "O que vamos resolver agora?" : "Eu sou o Jefrey. Como posso te chamar?"}</p>
-              </div>
-              <DayStrip onOpen={() => setTodayOpen(true)} />
-            </>
-          )}
+        <div className="relative z-30 flex min-h-[8.75rem] basis-[20%] grow shrink-0 flex-col items-center justify-center gap-1.5 overflow-y-auto border-t border-white/10 bg-black/50 px-4 py-2">
+          <div className="w-full max-w-lg lg:hidden"><BriefingCard /></div>
           <LearnedToast streaming={streaming} />
           <QuickActions onAsk={t => void send(t)} onSummary={() => void speakSummary()} busy={summaryBusy} />
 
           {!empty && (caption || streaming) && (
-            <div className="jf-glass relative max-w-2xl rounded-xl px-4 py-2.5 text-center" aria-live="polite">
-              {lastUser && <p className="mb-1 truncate text-xs text-white/45">Você: {lastUser.content}</p>}
+            <div className="jf-glass relative max-w-2xl rounded-xl px-4 py-1.5 text-center" aria-live="polite">
+              {lastUser && <p className="truncate text-xs text-white/45">Você: {lastUser.content}</p>}
               {streaming && !caption ? (
                 <span className="jf-typing" aria-label="Jefrey está pensando"><span /><span /><span /></span>
               ) : (
-                <p className={`text-[15px] leading-snug ${lastAi?.error ? "text-red-200" : "text-white/95"} line-clamp-4`}>{caption}</p>
+                <p className={`text-[15px] leading-snug ${lastAi?.error ? "text-red-200" : "text-white/95"} line-clamp-2`}>{caption}</p>
               )}
               {lastAi?.recall && lastAi.recall.length > 0 && <p className="mt-1 text-xs text-white/55"><span className="jf-accent">Lembrei:</span> {lastAi.recall.map(r => r.text).join(" · ")}</p>}
               {caption.length > 220 && <button type="button" onClick={() => setDrawer(true)} className="jf-focus mt-1 text-xs text-[hsl(var(--hue)_80%_75%)] underline">ver tudo</button>}
@@ -507,27 +510,26 @@ export default function Conversa() {
             <button type="button" onClick={retry} className="jf-btn jf-focus px-3 py-1 text-sm">Tentar de novo</button>
           )}
 
+          <Wave level={micLevel} speaking={speaker.speaking} className={`max-w-md opacity-80 ${speaker.speaking || micLevel > 0.02 ? "" : "hidden"}`} />
+
+          <div className="flex w-full max-w-4xl items-end gap-2">
           {listener.supported && (
-            <div className="flex w-full flex-col items-center gap-1">
+            <div className="flex shrink-0 flex-col items-center gap-1 pb-1">
               <button
                 type="button"
                 onClick={() => void toggleVoiceMode()}
                 disabled={voiceReady.preparing}
                 aria-pressed={view.tone === "listening" || view.tone === "hearing"}
-                className={`jf-btn jf-focus flex min-h-[3rem] items-center justify-center gap-2.5 rounded-full px-7 py-2 text-base font-medium ${view.tone === "hearing" || view.tone === "speaking" ? "ring-2 ring-white/50" : ""}`}
+                className={`jf-btn jf-focus flex min-h-[2.5rem] items-center justify-center gap-2 rounded-full px-4 py-1 text-sm font-medium ${view.tone === "hearing" || view.tone === "speaking" ? "ring-2 ring-white/50" : ""}`}
               >
                 <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M12 3a3 3 0 00-3 3v6a3 3 0 006 0V6a3 3 0 00-3-3zM6 11a6 6 0 0012 0M12 17v4" />
                 </svg>
-                <span aria-live="polite">{view.label}</span>
+                <span aria-live="polite" className="hidden xl:inline">{view.label}</span>
               </button>
-              {view.hint && <p className="text-xs text-white/60">{view.hint}</p>}
-              {unclear && view.tone === "listening" && <p role="status" className="text-sm text-amber-200">Não entendi. Pode repetir, devagar?</p>}
-              {voiceReady.error && <p role="alert" className="text-center text-sm text-red-200">{voiceReady.error}</p>}
             </div>
           )}
-          <Wave level={micLevel} speaking={speaker.speaking} className={`max-w-md opacity-80 ${speaker.speaking || micLevel > 0.02 ? "" : "hidden"}`} />
-
+          <div className="min-w-0 flex-1">
           <Composer
             menuOpen={opts}
             onToggleMenu={() => setOpts(v => !v)}
@@ -557,6 +559,11 @@ export default function Conversa() {
             onStop={stop}
             onSend={() => void send()}
           />
+          </div>
+          </div>
+          {listener.supported && view.hint && <p className="text-xs text-white/60">{view.hint}</p>}
+          {listener.supported && unclear && view.tone === "listening" && <p role="status" className="text-sm text-amber-200">Não entendi. Pode repetir, devagar?</p>}
+          {listener.supported && voiceReady.error && <p role="alert" className="text-center text-sm text-red-200">{voiceReady.error}</p>}
           {listener.error && <p role="alert" className="text-center text-xs text-red-300">{listener.error}</p>}
         </div>
 

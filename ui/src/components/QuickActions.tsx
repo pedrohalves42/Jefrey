@@ -15,14 +15,14 @@ export default function QuickActions({ onAsk, onSummary, busy = false }: Props) 
     { icon: "💡", label: "O que posso pedir?", run: () => onAsk("O que você consegue fazer por mim?") },
   ]
   return (
-    <ul className="flex w-full max-w-3xl flex-wrap justify-center gap-2" aria-label="Atalhos">
+    <ul className="flex w-full max-w-3xl flex-nowrap gap-1.5 overflow-x-auto pb-0.5 sm:justify-center" aria-label="Atalhos">
       {items.map(i => (
-        <li key={i.label}>
+        <li key={i.label} className="shrink-0">
           <button
             type="button"
             onClick={i.run}
             disabled={busy && i.label === "Resumo do dia"}
-            className="jf-focus jf-chip flex items-center gap-1.5 whitespace-nowrap rounded-full border border-white/20 bg-black/35 px-3 py-1.5 text-sm text-white/90 hover:bg-white/10"
+            className="jf-focus jf-chip flex items-center gap-1.5 whitespace-nowrap rounded-full border border-white/20 bg-black/35 px-2.5 py-1 text-xs text-white/90 hover:bg-white/10"
           >
             <span aria-hidden="true">{i.icon}</span>
             {i.label}
