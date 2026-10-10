@@ -102,6 +102,9 @@ CATALOG: dict[str, ToolPolicy] = {
     "tasks_list": _p("low", "Ver tarefas"),
     "tasks_add": _p("medium", "Criar tarefa"),
     "tasks_done": _p("medium", "Marcar tarefa como feita"),
+    "tasks_delete": _p("high", "Apagar tarefa"),
+    "tasks_edit": _p("medium", "Mudar tarefa"),
+    "tasks_recent": _p("low", "Ver tarefas feitas"),
     "contacts_find": _p("low", "Buscar contato"),
     "cancel_reminder": _p("medium", "Cancelar lembrete"),
 }

@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query"
 import ListenButton from "@/components/ListenButton"
 import NameField from "@/components/NameField"
-import { getAdvice, getPullStatus, overallPercent, saveConfig, skipWelcome, startOpenRouter, startPull, type Advice, type PullStatus } from "@/lib/llm"
+import { getAdvice, getPullStatus, overallPercent, saveConfig, skipWelcome, startPull, type Advice, type PullStatus } from "@/lib/llm"
 
 const INTRO = "Oi! Eu sou o Jefrey, o seu assistente. Para começar, me diga como você se chama e depois aperte o botão para me ligar à inteligência que me faz pensar."
 
@@ -25,11 +25,8 @@ export default function BemVindo() {
   async function oneClick() {
     setBusy("oneclick")
     setMsg(null)
-    const err = await startOpenRouter()
-    if (err) {
-      setMsg({ ok: false, text: err })
-      setBusy(null)
-    }
+    setBusy(null)
+    nav("/conexoes?aba=cerebros") // 9router ou Gemini: a pessoa escolhe o cartao e cola a chave
   }
 
   async function useLocal(m: string) {

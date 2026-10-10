@@ -87,6 +87,7 @@ export function Ticker({ d }: { d: TodayData }) {
 /** Escolha dos assuntos: marcar/desmarcar salva na hora. */
 function InterestPicker({ onChanged }: { onChanged: () => void }) {
   const [it, setIt] = useState<Interests | null>(null)
+  const [saved, setSaved] = useState(false)
   useEffect(() => {
     void getInterests().then(r => setIt(r.data))
   }, [])
@@ -98,11 +99,13 @@ function InterestPicker({ onChanged }: { onChanged: () => void }) {
     const next = on ? it.selected.filter(x => x !== id) : [...it.selected, id]
     setIt({ ...it, selected: next })
     await saveInterests(next)
+    setSaved(true)
+    window.setTimeout(() => setSaved(false), 2500)
     onChanged()
   }
   return (
     <div>
-      <p className="text-sm text-white/60">Escolha até {it.max} assuntos. O Jefrey só traz notícias do que você marcar.</p>
+      <p className="text-sm text-white/60">Escolha até {it.max} assuntos. O Jefrey só traz notícias do que você marcar. <span role="status" aria-live="polite" className={`ml-1 text-emerald-200 transition-opacity ${saved ? "opacity-100" : "opacity-0"}`}>✓ Salvo</span></p>
       {(it.suggested?.length ?? 0) > 0 && (
         <p className="mt-2 text-sm text-cyan-100">
           Pelo que aprendi de você, talvez goste de:{" "}

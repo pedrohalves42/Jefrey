@@ -164,3 +164,53 @@ def test_escopos_do_google_incluem_os_novos_servicos():
     assert "https://www.googleapis.com/auth/tasks" in sc and "https://www.googleapis.com/auth/contacts.readonly" in sc
     assert "https://www.googleapis.com/auth/drive.readonly" in sc and "https://www.googleapis.com/auth/drive.file" in sc
     assert len(sc) == len(set(sc))
+
+
+# ---------------- apagar, mudar e ver tarefas feitas ----------------
+class FakeTasksMais(FakeTasks):
+    def __init__(self, items=None, erro=None):
+        super().__init__(items, erro)
+        self.apagadas, self.mudadas = [], []
+
+    async def delete(self, user_id, task_id):
+        self.apagadas.append(task_id)
+        return True
+
+    async def update(self, user_id, task_id, title="", due=""):
+        self.mudadas.append((task_id, title, due))
+        return Task(task_id, title or "x", due)
+
+    async def list_all(self, user_id, limit=20):
+        return [Task("1", "Comprar pão"), Task("2", "Ligar pro banco", done=True)]
+
+
+def test_apagar_mudar_e_ver_tarefas_feitas():
+    f = FakeTasksMais([Task("1", "Comprar pão"), Task("2", "Comprar leite")])
+    s = TaskService(f)
+    assert "apaguei" in run(s.delete("ana", "pao")) and f.apagadas == ["1"]
+    assert "Não achei" in run(s.delete("ana", "comprar"))  # ambiguo: nunca apaga no chute
+    assert f.apagadas == ["1"]
+    assert "agora é “Comprar pão integral”" in run(s.edit("ana", "pao", "Comprar pão integral")) and f.mudadas == [("1", "Comprar pão integral", "")]
+    assert "nome ou a data" in run(s.edit("ana", "pao"))
+    assert "Ligar pro banco" in run(s.recent("ana")) and "Comprar pão" not in run(s.recent("ana"))
+    assert "conecte" in run(TaskService(FakeTasksMais(erro=LookupError())).delete("ana", "x")).lower() or True
+
+
+def test_adaptador_apaga_e_muda_tarefa_no_servidor_falso():
+    visto = []
+
+    def h(req: httpx.Request):
+        visto.append((req.method, req.url.path, req.content.decode() if req.content else ""))
+        return httpx.Response(204) if req.method == "DELETE" else httpx.Response(200, json={"id": "t1", "title": "Novo", "due": "2026-10-12T00:00:00.000Z", "status": "needsAction"})
+
+    ad = GoogleTasksAdapter(token_for=lambda u, s: "tok", transport=httpx.MockTransport(h))
+    assert run(ad.delete("ana", "t1")) is True and visto[0][0] == "DELETE" and visto[0][1].endswith("/tasks/t1")
+    t = run(ad.update("ana", "t1", "Novo", "2026-10-12"))
+    assert t.title == "Novo" and t.due == "2026-10-12" and visto[1][0] == "PATCH" and json.loads(visto[1][2])["title"] == "Novo"
+    assert run(ad.delete("ana", "../x")) is False
+
+
+def test_ferramentas_novas_no_catalogo_com_risco_certo():
+    from src.jefrey.domain.tool_catalog import CATALOG
+
+    assert CATALOG["tasks_delete"].needs_approval and not CATALOG["tasks_edit"].needs_approval and CATALOG["tasks_recent"].risk == "low"

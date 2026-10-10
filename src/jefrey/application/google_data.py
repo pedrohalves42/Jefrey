@@ -53,6 +53,49 @@ class TaskService:
         return f"Pronto, marquei “{found.title}” como feita." if ok else "Não consegui marcar como feita agora."
 
 
+    async def delete(self, user_id: str, query: str) -> str:
+        try:
+            found = pick_task(await self._tasks.list_open(user_id, 50), query)
+            if found is None:
+                return "Não achei uma tarefa só com esse nome. Diga o nome do jeito que está na lista."
+            ok = await self._tasks.delete(user_id, found.id)
+        except LookupError:
+            return NOT_CONNECTED
+        except Exception as e:
+            logger.info("tarefas: nao apagou (%s)", type(e).__name__)
+            return "Não consegui apagar a tarefa agora."
+        return f"Pronto, apaguei “{found.title}”." if ok else "Não consegui apagar a tarefa agora."
+
+    async def edit(self, user_id: str, query: str, new_title: str = "", due: str = "") -> str:
+        new_title = clean_title(new_title) if new_title else ""
+        if not new_title and not due:
+            return "O que você quer mudar: o nome ou a data?"
+        try:
+            found = pick_task(await self._tasks.list_open(user_id, 50), query)
+            if found is None:
+                return "Não achei uma tarefa só com esse nome. Diga o nome do jeito que está na lista."
+            t = await self._tasks.update(user_id, found.id, new_title, due)
+        except LookupError:
+            return NOT_CONNECTED
+        except Exception as e:
+            logger.info("tarefas: nao mudou (%s)", type(e).__name__)
+            return "Não consegui mudar a tarefa agora."
+        return f"Pronto, a tarefa agora é “{t.title}”" + (f", até {t.due[8:10]}/{t.due[5:7]}." if t.due else ".")
+
+    async def recent(self, user_id: str) -> str:
+        try:
+            items = await self._tasks.list_all(user_id, 30)
+        except LookupError:
+            return NOT_CONNECTED
+        except Exception as e:
+            logger.info("tarefas: falhou (%s)", type(e).__name__)
+            return "Não consegui ler suas tarefas agora."
+        done = [t for t in items if t.done]
+        if not done:
+            return "Ainda não vi nenhuma tarefa feita."
+        return "Tarefas que você já fez:\n" + "\n".join(f"- {t.title}" for t in done[:10])
+
+
 class ContactService:
     def __init__(self, contacts: ContactsPort):
         self._contacts = contacts

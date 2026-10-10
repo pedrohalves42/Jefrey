@@ -12,7 +12,7 @@ def _need_user(user_id) -> bool:
 
 class GoogleTasksSkill(SkillBase):
     metadata = SkillMetadata(
-        name="google_tasks", description="Tarefas do Google (listar, criar e marcar como feita)",
+        name="google_tasks", description="Tarefas do Google (listar, criar, mudar, apagar e marcar como feita)",
         tags=["google", "productivity"], requires_auth=True, enabled_by_default=True,
     )
 
@@ -24,7 +24,7 @@ class GoogleTasksSkill(SkillBase):
         return True
 
     def get_tools(self) -> list:
-        return [self.tasks_list, self.tasks_add, self.tasks_done]
+        return [self.tasks_list, self.tasks_add, self.tasks_done, self.tasks_delete, self.tasks_edit, self.tasks_recent]
 
     @tool(description="Lista as tarefas abertas do Google Tarefas da pessoa")
     async def tasks_list(self, user_id: str | None = None) -> str:
@@ -37,6 +37,18 @@ class GoogleTasksSkill(SkillBase):
     @tool(description="Marca uma tarefa aberta como feita. title = o nome da tarefa como esta na lista")
     async def tasks_done(self, title: str, user_id: str | None = None) -> str:
         return "Preciso saber quem você é." if _need_user(user_id) else await self._svc.complete(user_id, title)
+
+    @tool(description="Apaga uma tarefa aberta do Google Tarefas. title = o nome da tarefa como esta na lista")
+    async def tasks_delete(self, title: str, user_id: str | None = None) -> str:
+        return "Preciso saber quem você é." if _need_user(user_id) else await self._svc.delete(user_id, title)
+
+    @tool(description="Muda o nome ou a data de uma tarefa aberta. title = nome atual; new_title = novo nome (opcional); due = nova data AAAA-MM-DD (opcional)")
+    async def tasks_edit(self, title: str, new_title: str = "", due: str = "", user_id: str | None = None) -> str:
+        return "Preciso saber quem você é." if _need_user(user_id) else await self._svc.edit(user_id, title, new_title, due)
+
+    @tool(description="Mostra as tarefas que a pessoa ja fez (concluidas) no Google Tarefas")
+    async def tasks_recent(self, user_id: str | None = None) -> str:
+        return "Preciso saber quem você é." if _need_user(user_id) else await self._svc.recent(user_id)
 
 
 class GoogleContactsSkill(SkillBase):

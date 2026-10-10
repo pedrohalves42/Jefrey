@@ -67,7 +67,7 @@ function GoogleSetup({ onDone }: { onDone: () => void }) {
 function Google() {
   const [params, setParams] = useSearchParams()
   const [st, setSt] = useState<GoogleStatus | null>(null)
-  const [pick, setPick] = useState<Record<GoogleService, boolean>>({ calendar: true, email: true, drive: false, tasks: false, contacts: false })
+  const [pick, setPick] = useState<Record<GoogleService, boolean>>({ calendar: true, email: true, drive: true, tasks: true, contacts: true })
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<Msg>(googleReturnMessage(params.get("google")))
 
@@ -85,7 +85,7 @@ function Google() {
   async function go(services?: GoogleService[]) {
     const wanted = services ?? chosen
     if (!wanted.length) {
-      setMsg({ ok: false, text: "Marque pelo menos uma coisa: Agenda ou E-mail." })
+      setMsg({ ok: false, text: "Marque pelo menos uma coisa." })
       return
     }
     setBusy(true)
@@ -174,7 +174,6 @@ function Google() {
                 {busy ? "Abrindo o Google…" : "Liberar o que marquei"}
               </button>
               <p className="mt-2 text-sm text-white/50">O Google vai pedir sua confirmação de novo. O que já estava liberado continua.</p>
-              <p className="mt-1 text-sm text-white/50">Primeira vez com Tarefas, Contatos ou Arquivos? No Google Cloud, em “APIs e serviços → Biblioteca”, ative: Google Tasks API, People API e Google Drive API.</p>
             </fieldset>
           )}
           <button type="button" onClick={() => void leave()} disabled={busy} className="jf-focus mt-3 rounded-lg border border-white/25 px-5 py-3 text-base text-white/85 hover:bg-white/5">
@@ -183,8 +182,9 @@ function Google() {
         </>
       ) : (
         <>
-          <fieldset className="mt-3">
-            <legend className="text-base text-white/80">O que o Jefrey pode usar?</legend>
+          <p className="mt-3 text-base text-white/80">Um clique só: o Jefrey pede ao Google, de uma vez, para ver sua agenda, seu e-mail, suas tarefas, seus contatos e seus arquivos.</p>
+          <details className="mt-2 rounded-xl border border-white/10 p-3">
+            <summary className="cursor-pointer text-base text-white/80">Quero escolher só algumas coisas</summary>
             <div className="mt-2 flex flex-wrap gap-4">
               {ALL_SERVICES.map(k => (
                 <label key={k} className="flex items-center gap-3 text-base text-white/85" title={SERVICE_HINT[k]}>
@@ -193,10 +193,10 @@ function Google() {
                 </label>
               ))}
             </div>
-          </fieldset>
+          </details>
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <button type="button" onClick={() => void go()} disabled={busy} className={big}>
-              {busy ? "Abrindo o Google…" : "Entrar com o Google"}
+              {busy ? "Abrindo o Google…" : "Conectar com o Google"}
             </button>
             <ListenButton text={listen} />
           </div>
@@ -207,10 +207,18 @@ function Google() {
             <p className="mt-3 break-all text-sm text-white/50">Se o Google disser “redirect_uri_mismatch”, cadastre este endereço no Google Cloud: <code className="text-white/80">{st.redirect_uri}</code></p>
           )}
           <Note msg={msg} />
-          {st && !st.configured && <GoogleSetup onDone={() => void load()} />}
+          {st && !st.configured && (
+            <div className="mt-4 rounded-xl border border-amber-300/30 p-4">
+              <p className="text-base text-amber-100">Este Jefrey ainda não veio com o acesso do Google pronto. Peça a versão completa a quem te entregou o programa.</p>
+              <details className="mt-2">
+                <summary className="cursor-pointer text-sm text-white/60">Avançado: configurar o acesso do Google (quem instala o Jefrey)</summary>
+                <GoogleSetup onDone={() => void load()} />
+              </details>
+            </div>
+          )}
           {st?.configured && (
             <details key={msg && !msg.ok ? "aberto" : "fechado"} open={!!msg && !msg.ok} className="mt-3 rounded-xl border border-white/10 p-3">
-              <summary className="cursor-pointer text-base text-white/85">Trocar o ID e a chave do Google</summary>
+              <summary className="cursor-pointer text-sm text-white/55">Avançado: trocar o acesso do Google (quem instala o Jefrey)</summary>
               <GoogleSetup onDone={() => void load()} />
             </details>
           )}

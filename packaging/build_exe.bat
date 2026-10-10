@@ -20,6 +20,12 @@ echo Versao: %VERSION%
 REM Carimbo da compilacao (data, hora e commit): aparece na tela, para saber QUAL instalador esta rodando.
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0write_build_info.ps1" || exit /b 1
 
+REM A interface (React) vai para src\jefrey\static: SEMPRE regerada aqui, senao o instalador leva a tela da ultima vez que alguem compilou.
+pushd ui
+call npm ci --no-audit --no-fund || (popd & echo [erro] npm ci falhou & exit /b 1)
+call npm run build:api || (popd & echo [erro] a interface nao compilou & exit /b 1)
+popd
+
 "%PY%" -m PyInstaller --noconfirm --clean --onedir --noconsole --name Jefrey ^
   --icon "%CD%\packaging\jefrey.ico" ^
   --distpath dist --workpath build --specpath build ^

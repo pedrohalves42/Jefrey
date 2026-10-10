@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { useSpeaker } from "@/hooks/useSpeaker"
 import { useListener } from "@/hooks/useListener"
-import { putProfile, skipWelcome, startOpenRouter } from "@/lib/llm"
+import { putProfile, skipWelcome } from "@/lib/llm"
 import { setEasy } from "@/lib/easy"
 import { initial, nextStep, script, type State } from "@/lib/primeiraVez"
 
@@ -27,7 +27,7 @@ export default function PrimeiraVez() {
   function finish(goBrain: boolean) {
     skipWelcome()
     setEasy(true) // quem passa por aqui comeca com letras grandes e botoes grandes
-    if (goBrain) void startOpenRouter().then(err => err && nav("/", { replace: true }))
+    if (goBrain) nav("/conexoes?aba=cerebros", { replace: true }) // 9router ou Gemini: a pessoa cola a chave ali
     else nav("/", { replace: true })
   }
 

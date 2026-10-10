@@ -56,6 +56,28 @@ class GoogleTasksAdapter(_Base):
         return d.get("status") == "completed"
 
 
+    async def delete(self, user_id: str, task_id: str) -> bool:
+        if not task_id or "/" in task_id:
+            return False
+        await self._call(user_id, "tasks", "DELETE", f"{TASKS_URL}/{task_id}")
+        return True
+
+    async def update(self, user_id: str, task_id: str, title: str = "", due: str = "") -> Task:
+        if not task_id or "/" in task_id:
+            raise ValueError("tarefa invalida")
+        body: dict = {}
+        if title:
+            body["title"] = title
+        if due:
+            body["due"] = f"{due[:10]}T00:00:00.000Z"
+        return _task(await self._call(user_id, "tasks", "PATCH", f"{TASKS_URL}/{task_id}", json=body))
+
+    async def list_all(self, user_id: str, limit: int = 20) -> list[Task]:
+        """As feitas recentes tambem (para 'o que eu fiz esta semana?')."""
+        d = await self._call(user_id, "tasks", "GET", TASKS_URL, params={"showCompleted": "true", "showHidden": "true", "maxResults": str(min(limit, 100))})
+        return [t for t in (_task(i) for i in d.get("items", [])) if t.title][:limit]
+
+
 class GoogleContactsAdapter(_Base):
     async def all(self, user_id: str) -> list[Contact]:
         d = await self._call(user_id, "contacts", "GET", PEOPLE_URL, params={"personFields": "names,phoneNumbers,emailAddresses", "pageSize": "1000"})

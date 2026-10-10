@@ -31,6 +31,16 @@ class Loja:
     def list_chats(self, user_id):
         return self.cs
 
+    inbox = []
+
+    def inbox_items(self, user_id):
+        return self.inbox
+
+    def touch_chat(self, user_id, name):
+        c = {"id": f"c{len(self.cs)}", "display": name, "mode": "pending"}
+        self.cs.append(c)
+        return c
+
     def queue_message(self, user_id, chat_id, text):
         if "senha" in text:
             raise ValueError("Esse texto não pode ser enviado (vazio ou com dado sensível).")
@@ -42,12 +52,12 @@ class Loja:
 def test_poe_na_fila_e_explica_como_vai_sair():
     loja = Loja(chats("Arnaldo"))
     out = queue_for_contact(loja, "ana", "arnaldo", "Chego às 8h")
-    assert loja.fila == [("Arnaldo", "Chego às 8h")] and "Na fila para Arnaldo" in out and "WhatsApp Web" in out
+    assert loja.fila == [("Arnaldo", "Chego às 8h")] and "Na fila para Arnaldo" in out and "WhatsApp" in out
 
 
 def test_nao_achou_ambiguo_e_texto_proibido_viram_mensagens_claras():
     loja = Loja(chats("Maria Clara", "Maria Bemzaozinho"))
-    assert "Não achei" in queue_for_contact(loja, "ana", "zeca", "oi") and "WhatsApp Web" in queue_for_contact(loja, "ana", "zeca", "oi")
+    assert "Não achei" in queue_for_contact(loja, "ana", "zeca", "oi") and "WhatsApp" in queue_for_contact(loja, "ana", "zeca", "oi")
     assert "mais de uma" in queue_for_contact(loja, "ana", "maria", "oi")
     assert "dado sensível" in queue_for_contact(loja, "ana", "maria clara", "minha senha é 123")
     assert loja.fila == []
@@ -78,3 +88,12 @@ def test_a_skill_nao_manda_sem_saber_quem_pediu():
     assert asyncio.run(s.wa_send_message.ainvoke({"contact": "Arnaldo", "message": "oi"})) == "Preciso saber quem você é."
     out = asyncio.run(s.wa_send_message.ainvoke({"contact": "Arnaldo", "message": "oi", "user_id": "ana"}))
     assert "Na fila para Arnaldo" in out
+
+
+def test_contato_so_da_lista_do_whatsapp_passa_a_ser_conhecido_e_recebe():
+    loja = Loja(chats("Arnaldo"))
+    loja.inbox = [{"title": "PH", "preview": "", "unread": 0}, {"title": "Paulo Henrique", "preview": "", "unread": 1}]
+    out = queue_for_contact(loja, "ana", "PH", "Teste do Jefrey")
+    assert loja.fila == [("PH", "Teste do Jefrey")] and "Na fila para PH" in out
+    assert [c["display"] for c in loja.cs] == ["Arnaldo", "PH"]  # agora conhecida
+    assert "Achei mais de uma" in queue_for_contact(loja, "ana", "paulo", "oi") or "Na fila" in queue_for_contact(loja, "ana", "paulo", "oi")

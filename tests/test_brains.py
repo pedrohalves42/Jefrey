@@ -37,9 +37,9 @@ def pasta(tmp_path, monkeypatch):
 # ---------------- catalogo ----------------
 def test_catalogo_simples_e_completo():
     nomes = [b["name"] for b in B.public_catalog()]
-    assert nomes[0] == "OpenRouter" and {"Claude", "ChatGPT", "Groq", "DeepSeek", "Mistral", "Grok", "Neste computador"} <= set(nomes)
+    assert nomes[:2] == ["9router", "Gemini"] and {"OpenRouter", "Claude", "ChatGPT", "Groq", "DeepSeek", "Mistral", "Grok", "Neste computador"} <= set(nomes)
     for b in B.public_catalog():
-        assert "key_url" in b and (b["key_url"].startswith("https://") or b["kind"] == "local")
+        assert "key_url" in b and (b["key_url"].startswith(("https://", "http://127.0.0.1")) or b["kind"] == "local")
         assert not {"api_key", "provider", "base_url", "model"} & set(b)  # nada tecnico na tela
     texto = " ".join(b["tagline"] for b in B.public_catalog()).lower()
     assert not any(j in texto for j in ("api", "token", "endpoint", "openai-compat"))

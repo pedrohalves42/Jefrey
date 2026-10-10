@@ -48,8 +48,20 @@ class LLMConfig:
         return self.provider in ("openai", "anthropic") and not _is_local_url(self.base_url)
 
 
+ROUTER_PORT = ":20128"  # 9router: roteador local que leva a modelos da nuvem (conta como nuvem: cerebro completo, nao o pequeno local)
+
+
 def _is_local_url(url: str) -> bool:
+    if ROUTER_PORT in url and any(h in url for h in ("localhost", "127.0.0.1")):
+        return False
     return any(h in url for h in ("localhost", "127.0.0.1", "host.docker.internal", "ollama:"))
+
+
+def _chat_url(base: str) -> str:
+    """Endereco do chat no formato OpenAI. O Gemini usa .../v1beta/openai/chat/completions (sem /v1)."""
+    if "generativelanguage.googleapis.com" in base:
+        return f"{base.rstrip('/')}/chat/completions"
+    return f"{base}/v1/chat/completions"
 
 
 # ---- override em tempo de execucao (escolhido pela interface) -----------------
@@ -264,7 +276,7 @@ class LLMClient:
             }
             if defs:
                 body["tools"] = defs
-            return f"{base}/v1/chat/completions", headers, body
+            return _chat_url(base), headers, body
         body = {
             "model": c.model,
             "messages": msgs,
@@ -383,7 +395,8 @@ class LLMClient:
                             "detail": "modelo disponivel" if ok else f"modelo nao instalado; instalados: {names}"}
                 if c.provider == "openai":
                     base = c.base_url[:-3] if c.base_url.endswith("/v1") else c.base_url
-                    r = await client.get(f"{base}/v1/models",
+                    models_url = f"{base.rstrip('/')}/models" if "generativelanguage.googleapis.com" in base else f"{base}/v1/models"
+                    r = await client.get(models_url,
                                          headers={"Authorization": f"Bearer {c.api_key}"} if c.api_key else {})
                     r.raise_for_status()
                     return {"ok": True, "provider": c.provider, "model": c.model, "detail": "conectado"}

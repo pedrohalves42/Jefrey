@@ -21,7 +21,13 @@ class BrainError(Exception):
 
 # kind: oneclick (entra no site e volta) | key (cola um codigo) | local (neste computador)
 CATALOG: list[dict[str, Any]] = [
-    {"id": "openrouter", "name": "OpenRouter", "tagline": "Um login só dá acesso a vários cérebros. Recomendado.", "kind": "oneclick", "recommended": True,
+    {"id": "9router", "name": "9router", "tagline": "O seu roteador de cérebros, já instalado neste computador. Recomendado.", "kind": "key", "recommended": True,
+     "provider": "openai", "base_url": "http://127.0.0.1:20128", "model": "gamehouse", "prefix": "",
+     "key_url": "http://127.0.0.1:20128/dashboard"},
+    {"id": "gemini", "name": "Gemini", "tagline": "Do Google. Tem plano gratuito.", "kind": "key", "recommended": True,
+     "provider": "openai", "base_url": "https://generativelanguage.googleapis.com/v1beta/openai", "model": "gemini-2.5-flash", "prefix": "AIza",
+     "key_url": "https://aistudio.google.com/apikey"},
+    {"id": "openrouter", "name": "OpenRouter", "tagline": "Um login só dá acesso a vários cérebros.", "kind": "oneclick",
      "provider": "openai", "base_url": "https://openrouter.ai/api", "model": "openai/gpt-6-luna", "prefix": "sk-or-",
      "key_url": "https://openrouter.ai/keys"},
     {"id": "anthropic", "name": "Claude", "tagline": "Da Anthropic. Ótimo para conversar e escrever.", "kind": "key",
