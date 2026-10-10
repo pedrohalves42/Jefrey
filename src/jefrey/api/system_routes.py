@@ -104,6 +104,17 @@ async def show_orb(request: Request):
     return {"ok": True}
 
 
+@router.post("/messages")
+async def open_messages(request: Request):
+    """Abre a janela de Mensagens (WhatsApp Web dentro do Jefrey) para a pessoa logada."""
+    uid = _login(request)
+    from src.jefrey.native import control
+
+    if not control.open_messages(uid):
+        raise HTTPException(status_code=404, detail="indisponivel neste modo")
+    return {"ok": True}
+
+
 @router.post("/restart")
 async def restart_app(request: Request, background: BackgroundTasks):
     """Fecha e abre o Jefrey de novo (so no programa instalado/nativo)."""

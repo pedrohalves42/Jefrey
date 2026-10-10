@@ -251,7 +251,7 @@ def find_free_port(start: int = DEFAULT_PORT, tries: int = 20) -> int:
     raise OSError(f"nenhuma porta livre entre {start} e {start + tries - 1}")
 
 
-def start_tray(url: str, logs_dir: Path, on_quit, on_open=None, on_orb=None, on_restart=None) -> "object | None":
+def start_tray(url: str, logs_dir: Path, on_quit, on_open=None, on_orb=None, on_restart=None, on_messages=None) -> "object | None":
     """Icone na bandeja com Abrir / Ver registros / Sair. Sem pystray ou sem bandeja, segue sem (nunca derruba)."""
     try:
         import pystray
@@ -276,6 +276,10 @@ def start_tray(url: str, logs_dir: Path, on_quit, on_open=None, on_orb=None, on_
             if on_orb is not None:
                 on_orb()
 
+        def messages(_icon=None, _item=None):
+            if on_messages is not None:
+                on_messages()
+
         def open_logs(_icon=None, _item=None):
             try:
                 os.startfile(str(logs_dir))  # type: ignore[attr-defined]
@@ -287,6 +291,7 @@ def start_tray(url: str, logs_dir: Path, on_quit, on_open=None, on_orb=None, on_
 
         menu = pystray.Menu(
             pystray.MenuItem("Abrir o Jefrey", open_app, default=True),
+            *([pystray.MenuItem("Mensagens (WhatsApp dentro do Jefrey)", messages)] if on_messages is not None else []),
             *([pystray.MenuItem("Mostrar o orbe (bolinha na tela)", orb)] if on_orb is not None else []),
             pystray.MenuItem("Ver registros (para suporte)", open_logs),
             *([pystray.MenuItem("Reiniciar o Jefrey", restart)] if on_restart is not None else []),
@@ -512,7 +517,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     shell_mod.watch_quit_signal(home, quit_all, quit_watch_stop)  # "Reiniciar o Jefrey" de fora pede por arquivo
     if shell is not None:
         control.set_window_hooks(shell.show, shell.show_orb)
-    tray =None if no_tray else start_tray(url, logs_dir, quit_all, on_open=shell.show if shell else None, on_orb=shell.show_orb if shell else None, on_restart=restart_self)
+        control.set_messages_hook(shell.show_messages)
+    tray =None if no_tray else start_tray(url, logs_dir, quit_all, on_open=shell.show if shell else None, on_orb=shell.show_orb if shell else None, on_restart=restart_self,
+                     on_messages=(lambda: shell.show_messages()) if shell else None)
     if shell is not None and tray is not None:
         shell.set_tray_notice(lambda title, text: tray.notify(text, title))
     tray_updates = start_tray_updates(tray) if tray is not None else None
@@ -542,6 +549,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             tray_updates.set()
         control.set_quit_hook(None)
         control.set_window_hooks(None, None)
+        control.set_messages_hook(None)
         control.set_restart_hook(None)
         quit_watch_stop.set()
         if tray is not None:

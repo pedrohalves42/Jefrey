@@ -38,6 +38,15 @@ export async function restartApp(): Promise<boolean> {
   }
 }
 
+/** Abre o WhatsApp dentro do Jefrey (janela "Mensagens"). So existe no app instalado. */
+export async function openMessages(): Promise<boolean> {
+  try {
+    return (await authedFetch("/system/messages", { method: "POST" })).ok
+  } catch {
+    return false
+  }
+}
+
 export async function showOrb(): Promise<boolean> {
   try {
     return (await authedFetch("/system/orb", { method: "POST" })).ok

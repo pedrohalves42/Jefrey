@@ -204,7 +204,18 @@
     return found;
   }
 
+  /* Previa de grupo: "Fulano: texto". "Voce: texto" e conversa individual onde a ultima mensagem foi da pessoa. */
+  function looksLikeGroupPreview(prev) {
+    var m = /^([^:]{1,40}):\s/.exec(String(prev || ""));
+    return !!m && !/^(voc[eê]|you)$/i.test(m[1].trim());
+  }
+
   function cellPreview(el, title, unread) {
+    var st = el.querySelector('[data-testid="last-msg-status"]'); // o WhatsApp de hoje: a previa tem um marcador proprio
+    if (st) {
+      var tt = (st.textContent || "").trim();
+      if (tt) return tt.slice(0, 120);
+    }
     var best = "";
     Array.prototype.forEach.call(el.querySelectorAll("span[dir], span[title]"), function (n) {
       var t = (n.getAttribute("title") || n.textContent || "").trim();
@@ -224,11 +235,13 @@
         if (!key || seen[key]) return;
         seen[key] = true;
         var unread = cellUnread(cell);
+        var preview = cellPreview(cell, title, unread);
         out.push({
           title: title,
-          preview: cellPreview(cell, title, unread),
+          preview: preview,
           unread: unread,
-          group: !!cell.querySelector('[data-icon*="group"]'),
+          // grupo: icone de grupo OU previa "Fulano: texto" (na duvida, trata como grupo: o Jefrey nunca mostra nem guarda grupos)
+          group: !!cell.querySelector('[data-icon*="group"]') || looksLikeGroupPreview(preview),
         });
       });
     }
@@ -255,7 +268,7 @@
   }
 
   var api = {
-    parseSidebar: parseSidebar, isSelfChat: isSelfChat, isBotText: isBotText, newCommands: newCommands,
+    parseSidebar: parseSidebar, looksLikeGroupPreview: looksLikeGroupPreview, isSelfChat: isSelfChat, isBotText: isBotText, newCommands: newCommands,
     norm: norm, sameChat: sameChat, chatTitle: chatTitle, isGroup: isGroup, parseRows: parseRows, newIncoming: newIncoming,
     context: context, composer: composer, sendButton: sendButton, composerText: composerText, typeText: typeText,
     canSendNow: canSendNow, humanDelayMs: humanDelayMs,

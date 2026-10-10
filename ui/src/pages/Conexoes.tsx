@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { isDesktop } from "@/lib/shell"
+import { isDesktop, openMessages } from "@/lib/shell"
 import { useSearchParams } from "react-router-dom"
 import ListenButton from "@/components/ListenButton"
 import { disconnectGoogle, getGoogle, saveGoogleCredentials, googleReturnMessage, SERVICE_LABEL, SERVICE_HINT, ALL_SERVICES, startGoogle, type GoogleService, type GoogleStatus } from "@/lib/connections"
@@ -294,6 +294,23 @@ function WhatsApp() {
       </p>
       <p className="mt-2 text-sm text-amber-100/90">{WA_RISK_NOTE}</p>
       <p className="mt-2 text-sm text-white/60">{WA_PRIVACY_NOTE}</p>
+
+      {isDesktop() && (
+        <div className="mt-4 rounded-xl border border-cyan-300/30 bg-cyan-400/5 p-4">
+          <h3 className="text-lg font-medium text-white">WhatsApp aqui dentro do Jefrey</h3>
+          <p className="mt-1 text-base text-white/75">
+            Sem Chrome e sem extensão: o Jefrey abre o WhatsApp numa janela dele. Você lê o QR code uma vez e ele fica conectado.
+            Pode fechar a janela: o Jefrey continua atento por trás.
+          </p>
+          <button
+            type="button"
+            className={`${big} mt-3`}
+            onClick={async () => setMsg((await openMessages()) ? { ok: true, text: "Abri a janela de Mensagens. Se pedir, leia o QR code com o celular." } : { ok: false, text: "Não consegui abrir agora. Tente de novo." })}
+          >
+            Abrir o WhatsApp no Jefrey
+          </button>
+        </div>
+      )}
 
       {!paired && (
         <div className="mt-4 rounded-xl border border-white/10 p-4">

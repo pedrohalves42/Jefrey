@@ -194,6 +194,10 @@ class Api:
         self._shell.hide()
         return True
 
+    def open_messages(self, user_id: str = "") -> bool:
+        """Abre o WhatsApp dentro do Jefrey (a tela diz quem e a pessoa)."""
+        return self._shell.show_messages(str(user_id or ""))
+
 
 class DesktopShell:
     def __init__(self, url: str, home: Path, quit_cb: Callable[[], None], start_hidden: bool = False):
@@ -209,6 +213,82 @@ class DesktopShell:
         self._on_tray_notice: Optional[Callable[[str, str], None]] = None
         self._stop = threading.Event()
         self.fullscreen = True
+        self.messages = None  # janela "Mensagens" (WhatsApp Web dentro do app), criada so quando preciso
+        self._bridge = None
+
+    # ---- mensagens (WhatsApp dentro do app) ----
+    def _wa_bridge(self):
+        if self._bridge is None:
+            from src.jefrey.native.messages import WaBridge, pair_in_process
+
+            self._bridge = WaBridge(self.url, self.home, pair_in_process)
+        return self._bridge
+
+    def _ensure_messages(self, hidden: bool) -> bool:
+        """Cria a janela do WhatsApp Web (com o codigo da extensao rodando dentro). Segue viva escondida para o Jefrey continuar atento."""
+        if self.messages is not None:
+            return True
+        try:
+            import webview
+
+            from src.jefrey.adapters.outbound.paths import extension_dir
+            from src.jefrey.native.messages import TITLE as MSG_TITLE, WA_URL, WaApi, build_script
+
+            ext = extension_dir()
+            if ext is None:
+                logger.warning("pasta da extensao nao encontrada: janela de mensagens indisponivel")
+                return False
+            script = build_script(ext)
+            win = webview.create_window(
+                MSG_TITLE, url=WA_URL, width=1180, height=800, min_size=(760, 520), background_color="#0b141a", js_api=WaApi(self._wa_bridge()),
+                text_select=True, hidden=hidden,
+            )
+
+            def closing():
+                if self.quitting:
+                    return True
+                try:
+                    win.hide()
+                except Exception as e:
+                    logger.debug("hide mensagens: %s", type(e).__name__)
+                return False
+
+            def loaded():
+                try:
+                    win.evaluate_js(script)
+                except Exception as e:
+                    logger.info("nao consegui ligar o Jefrey no WhatsApp (%s)", type(e).__name__)
+
+            win.events.closing += closing
+            win.events.loaded += loaded
+            self.messages = win
+            return True
+        except Exception as e:
+            logger.warning("janela de mensagens indisponivel (%s)", type(e).__name__)
+            return False
+
+    def show_messages(self, user_id: str = "") -> bool:
+        bridge = self._wa_bridge()
+        if user_id and not bridge.set_user(user_id):
+            return False
+        if not bridge.enabled():
+            return False  # ainda nao sei quem e a pessoa: a tela do Jefrey precisa abrir primeiro
+        if not self._ensure_messages(hidden=False):
+            return False
+        try:
+            self.messages.show()
+            self.messages.restore()
+        except Exception as e:
+            logger.info("nao consegui mostrar as mensagens (%s)", type(e).__name__)
+        return True
+
+    def start_messages_hidden(self) -> None:
+        """Se a pessoa ja usou a janela de mensagens, ela volta escondida a cada abertura para o Jefrey seguir atento."""
+        try:
+            if self._wa_bridge().enabled():
+                self._ensure_messages(hidden=True)
+        except Exception as e:
+            logger.info("mensagens nao iniciadas (%s)", type(e).__name__)
 
     # ---- acoes (podem ser chamadas de qualquer thread)
     def show(self) -> None:
@@ -273,7 +353,7 @@ class DesktopShell:
         self.quitting = True
         self._stop.set()
         self._snapshot()
-        for w in (self.orb, self.main):
+        for w in (self.messages, self.orb, self.main):
             try:
                 if w is not None:
                     w.destroy()
@@ -374,6 +454,7 @@ class DesktopShell:
                     self.main.load_html(splash("Não consegui iniciar. Abra o menu do relógio e escolha “Ver registros”."))
             except Exception as e:
                 logger.warning("falha ao carregar a tela (%s)", type(e).__name__)
+            self.start_messages_hidden()
             self._watch_signal()
 
         webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True

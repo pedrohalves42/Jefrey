@@ -358,6 +358,19 @@ describe("lista de conversas, historico e conversa comigo mesmo", () => {
     ])
   })
 
+  it("grupo pela previa 'Fulano: texto' e pelo marcador do WhatsApp de hoje", () => {
+    expect(C.looksLikeGroupPreview("Ana: bom dia")).toBe(true)
+    expect(C.looksLikeGroupPreview("Você: bom dia")).toBe(false)
+    expect(C.looksLikeGroupPreview("You: ok")).toBe(false)
+    expect(C.looksLikeGroupPreview("bom dia, tudo bem?")).toBe(false)
+    document.body.innerHTML = `<div id="side"><div id="pane-side">
+      <div data-testid="cell-frame-container"><span title="Promo"></span><div data-testid="last-msg-status"><span dir="ltr">Loja X: oferta de hoje</span></div><span data-testid="icon-unread-count" aria-label="3 mensagens não lidas">3</span></div>
+      <div data-testid="cell-frame-container"><span title="Arnaldo"></span><div data-testid="last-msg-status"><span dir="ltr">chego às 8</span></div></div></div></div>`
+    const items = C.parseSidebar(document)
+    expect(items.map(i => [i.title, i.group, i.unread])).toEqual([["Promo", true, 3], ["Arnaldo", false, 0]])
+    expect(items[1].preview).toBe("chego às 8")
+  })
+
   it("reconhece a conversa comigo mesmo e as respostas do proprio Jefrey", () => {
     expect(C.isSelfChat("Pedro (Você)")).toBe(true)
     expect(C.isSelfChat("Pedro (You)")).toBe(true)

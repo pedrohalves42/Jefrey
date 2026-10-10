@@ -7,11 +7,22 @@ _quit: Optional[Callable[[], None]] = None
 _show: Optional[Callable[[], None]] = None
 _orb: Optional[Callable[[], None]] = None
 _restart: Optional[Callable[[], None]] = None
+_messages: Optional[Callable[[str], bool]] = None
 
 
 def set_restart_hook(fn: Optional[Callable[[], None]]) -> None:
     global _restart
     _restart = fn
+
+
+def set_messages_hook(fn: Optional[Callable[[str], bool]]) -> None:
+    global _messages
+    _messages = fn
+
+
+def open_messages(user_id: str) -> bool:
+    """Abre o WhatsApp dentro do Jefrey para esta pessoa (so no programa nativo com janela propria)."""
+    return bool(_messages(user_id)) if _messages is not None else False
 
 
 def can_restart() -> bool:
