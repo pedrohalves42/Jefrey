@@ -120,7 +120,7 @@ def test_unico_provedor_em_espera_ainda_e_tentado():
 
 def test_is_retryable():
     mk = lambda c: httpx.HTTPStatusError("x", request=httpx.Request("GET", "http://x"), response=httpx.Response(c))  # noqa: E731
-    assert all(is_retryable(mk(c)) for c in (401, 429, 500, 503))
+    assert all(is_retryable(mk(c)) for c in (401, 402, 429, 500, 503))
     assert not any(is_retryable(mk(c)) for c in (400, 422))
     assert is_retryable(httpx.ConnectError("x")) and not is_retryable(ValueError("x"))
 
@@ -181,3 +181,26 @@ def test_reserva_mal_configurada_nao_derruba_o_principal(cfg):
     for f in (cfg / "credentials").glob("llm_key_*"):
         f.unlink()  # chave da reserva sumiu
     assert isinstance(lp.get_llm_client(), LLMClient)  # volta ao principal simples
+
+
+def test_cerebro_sem_credito_402_cai_na_reserva_e_fica_de_castigo_por_mais_tempo():
+    t = [0.0]
+    chamadas = []
+
+    def principal(r):
+        chamadas.append("principal")
+        return httpx.Response(402, json={"error": {"message": "Payment Required"}})
+
+    def reserva(r):
+        chamadas.append("reserva")
+        return sse("oi")
+
+    llm = RoutedLLM([client(principal, "a"), client(reserva, "b")], clock=lambda: t[0])
+    assert run(collect(llm))  # respondeu pela reserva, sem erro para a pessoa
+    assert chamadas == ["principal", "reserva"]
+    t[0] = 100.0  # bem depois dos 45 s do castigo comum: o principal sem credito continua de fora
+    run(collect(llm))
+    assert chamadas == ["principal", "reserva", "reserva"]
+    t[0] = 700.0  # passou o castigo longo: tenta de novo
+    run(collect(llm))
+    assert chamadas[-2:] == ["principal", "reserva"]

@@ -434,7 +434,9 @@ def friendly_error(e: Exception) -> str:
 # ---- reserva: se o provedor principal falhar, tenta o proximo ------------------------------
 MAX_FALLBACKS = 3
 COOLDOWN_S = 45.0
-_RETRY_STATUS = {401, 403, 404, 408, 409, 425, 429}
+_RETRY_STATUS = {401, 402, 403, 404, 408, 409, 425, 429}  # 402 = sem credito: troca de cerebro em vez de falhar
+LONG_COOLDOWN_S = 600.0  # sem credito ou chave recusada: nao adianta tentar de novo daqui a 45 s
+LONG_COOLDOWN_STATUS = {401, 402, 403}
 
 
 def _fallback_key_file(key_id: str) -> Path:
@@ -532,7 +534,8 @@ class RoutedLLM:
                 if started or not is_retryable(e):
                     raise  # ja respondeu algo (nao da para trocar) ou erro que outro provedor nao resolve
                 last = e
-                self._cool[i] = self._clock() + COOLDOWN_S
+                status = e.response.status_code if isinstance(e, httpx.HTTPStatusError) else 0
+                self._cool[i] = self._clock() + (LONG_COOLDOWN_S if status in LONG_COOLDOWN_STATUS else COOLDOWN_S)
         if last is not None:
             raise last
 
