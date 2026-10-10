@@ -46,11 +46,15 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 # ── Credenciais Google (carregadas via get_settings) ──────────────────────────────
 def _get_oauth_credentials():
-    """Get OAuth credentials from settings."""
+    """Credenciais do app Google: a fonte unica e core.google_oauth.credentials() (variavel de ambiente ou arquivo salvo na tela);
+    a configuracao do programa e so o ultimo recurso."""
+    from src.jefrey.core.google_oauth import credentials as _saved
+
     cfg = get_settings()
+    found = _saved() or {}
     return {
-        "client_id": getattr(cfg.oauth, "google_client_id", None) if hasattr(cfg, 'oauth') else os.getenv("JEFREY_OAUTH__CLIENT_ID"),
-        "client_secret": getattr(cfg.oauth, "google_client_secret", None) if hasattr(cfg, 'oauth') else os.getenv("JEFREY_OAUTH__CLIENT_SECRET"),
+        "client_id": found.get("client_id") or getattr(getattr(cfg, "oauth", None), "google_client_id", None),
+        "client_secret": found.get("client_secret") or getattr(getattr(cfg, "oauth", None), "google_client_secret", None),
         "redirect_uri": os.getenv("JEFREY_OAUTH__REDIRECT_URIS", "http://localhost:8000/auth/google/callback"),
         "aud": os.getenv("JEFREY_OAUTH__AUD", "jefrey"),
         "iss": os.getenv("JEFREY_OAUTH__ISS", "https://accounts.google.com"),
