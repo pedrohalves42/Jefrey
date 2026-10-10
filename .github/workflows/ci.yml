@@ -35,7 +35,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: ui/package-lock.json
       - run: npm ci
@@ -51,4 +51,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Compose config
+        env:
+          JEFREY_DATABASE__PASSWORD: ci-so-para-validar
+          JEFREY_REDIS__PASSWORD: ci-so-para-validar
         run: docker compose config -q
