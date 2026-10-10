@@ -22,7 +22,6 @@ class RiskLevel(Enum):
 class Role(Enum):
     GUEST = "guest"
     USER = "user"
-    MANAGER = "manager"
     ADMIN = "admin"
 
 @dataclass
@@ -69,14 +68,14 @@ def decide(tool_name: str, user_role: str = "guest", risk: str = "LOW", user_id:
     # Policy decisions by risk level
     if risk_upper == "LOW":
         # Low risk: allow if user_role is valid
-        if user_role_norm in ("ADMIN", "MANAGER", "USER", "GUEST"):
+        if user_role_norm in ("ADMIN", "USER", "GUEST"):
             return {"decision": "allow", "reason": "Low risk operation allowed"}
         return {"decision": "deny", "reason": f"Invalid user_role '{user_role_norm}' for LOW risk"}
 
     if risk_upper == "MEDIUM":
-        # Medium risk: allow user/admin/manager, deny guest (D3.1: USER must pass MEDIUM)
-        if user_role_norm in ("ADMIN", "MANAGER", "USER"):
-            return {"decision": "allow", "reason": "Medium risk operation allowed for user/admin/manager"}
+        # Medium risk: allow user/admin, deny guest (D3.1: USER must pass MEDIUM)
+        if user_role_norm in ("ADMIN", "USER"):
+            return {"decision": "allow", "reason": "Medium risk operation allowed for user/admin"}
         return {"decision": "deny", "reason": "Medium risk operation denied for guest/unknown role"}
 
     if risk_upper == "HIGH":
