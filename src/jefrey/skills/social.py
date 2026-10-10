@@ -1,7 +1,7 @@
 """Skill: redes sociais. O Jefrey escreve carrosseis (com as imagens prontas) e posts; quem publica e a pessoa."""
 from __future__ import annotations
 
-from src.jefrey.application.social import make_carousel, make_post
+from src.jefrey.application.social import make_carousel, make_post, publish
 from src.jefrey.skills import SkillBase, SkillMetadata, skill, tool
 
 
@@ -19,7 +19,7 @@ class SocialSkill(SkillBase):
         return True
 
     def get_tools(self) -> list:
-        return [self.social_carousel, self.social_post]
+        return [self.social_carousel, self.social_post, self.social_publish]
 
     @tool(description="Cria um carrossel para redes sociais sobre um assunto: escreve os slides e desenha as imagens prontas numa pasta. topic = assunto; slides = quantidade (3 a 10, padrao 6)")
     async def social_carousel(self, topic: str, slides: int = 6, user_id: str | None = None) -> str:
@@ -37,6 +37,13 @@ class SocialSkill(SkillBase):
             return "Preciso saber quem você é."
         r = await make_post(user_id, network, topic)
         return f"Rascunho para {r['network']}:\n{r['text']}" if r["ok"] else r["message"]
+
+    @tool(description="Publica de verdade numa rede social (x, facebook ou instagram) pela janela do Jefrey. text = o texto EXATO (so o que a pessoa pediu); folder = pasta de um carrossel criado antes (para as imagens; opcional)")
+    async def social_publish(self, network: str, text: str, folder: str = "", user_id: str | None = None) -> str:
+        if _need_user(user_id):
+            return "Preciso saber quem você é."
+        r = await publish(user_id, network, text, folder)
+        return r["message"]
 
 
 @skill("social", "Redes sociais", tags=["social", "conteudo"])

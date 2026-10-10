@@ -99,6 +99,7 @@ CATALOG: dict[str, ToolPolicy] = {
     "wa_send_message": _p("high", "Enviar mensagem no WhatsApp"),
     "social_carousel": _p("medium", "Criar carrossel"),
     "social_post": _p("low", "Escrever post"),
+    "social_publish": _p("high", "Publicar numa rede social"),
     "wa_inbox": _p("low", "Ver mensagens novas do WhatsApp"),
     "wa_conversation": _p("low", "Ler conversa do WhatsApp"),
     "tasks_list": _p("low", "Ver tarefas"),

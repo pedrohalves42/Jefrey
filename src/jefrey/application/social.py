@@ -67,3 +67,28 @@ async def make_post(user_id: str, network: str, topic: str) -> dict:
     if not text:
         return {"ok": False, "message": "Não consegui escrever um post bom desta vez. Tente de novo."}
     return {"ok": True, "network": net, "text": text, "message": text}
+
+
+async def publish(user_id: str, network: str, text: str, folder: str = "", send: bool = True) -> dict:
+    """Publica na rede pela janela do Jefrey (a pessoa ja entrou na conta). Trava de ritmo e limites antes. {ok, message}."""
+    import time
+
+    from src.jefrey.domain.social import publish_gap, validate_publish
+
+    net = (network or "").strip().lower().replace("twitter", "x")
+    env = use("social_env")
+    try:
+        images = env.read_images(folder) if folder else []
+    except Exception as e:
+        logger.info("publicar: pasta das imagens invalida (%s)", type(e).__name__)
+        return {"ok": False, "message": "Não achei as imagens desse carrossel."}
+    problem = validate_publish(net, text, len(images))
+    if problem:
+        return {"ok": False, "message": problem}
+    wait = publish_gap(env.publish_history(net), time.time())
+    if wait and send:
+        return {"ok": False, "message": wait}
+    result = await env.publish(net, text.strip(), images, send)
+    if result.get("ok") and send:
+        env.record_publish(net)
+    return {"ok": bool(result.get("ok")), "message": str(result.get("message") or "Não consegui publicar agora.")}

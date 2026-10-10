@@ -324,6 +324,23 @@ class DesktopShell:
             logger.info("nao consegui mostrar %s (%s)", net_id, type(e).__name__)
         return True
 
+    def publish_site(self, net_id: str, text: str, files: list, send: bool) -> dict:
+        """Publica na rede: mostra a janela dela, abre o campo de nova publicacao e roda o roteiro (bloqueia ate terminar)."""
+        from src.jefrey.native import publisher
+
+        if not self._ensure_site(net_id, hidden=False):
+            return {"ok": False, "message": "Não consegui abrir a janela dessa rede."}
+        win = self.sites[net_id]
+        try:
+            win.show()
+            win.restore()
+            win.load_url(publisher.COMPOSE_URLS[net_id])
+            time.sleep(6)  # a pagina da rede demora para montar
+            return publisher.run(win, net_id, text, files, send)
+        except Exception as e:
+            logger.warning("publicar em %s falhou (%s)", net_id, type(e).__name__)
+            return {"ok": False, "message": "Não consegui publicar agora. Confira a janela da rede."}
+
     def site_counts(self) -> dict:
         return dict(self._site_counts)
 

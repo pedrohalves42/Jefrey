@@ -114,3 +114,39 @@ def clean_post(raw: str, net_id: str) -> Optional[str]:
     if not t or has_secret(t):
         return None
     return t[:limit].rstrip()
+
+
+# ---------------- publicar (com travas para nao parecer robo) ----------------
+PUBLISH_NETWORKS = ("x", "facebook", "instagram")
+MAX_IMAGES = {"x": 4, "facebook": 10, "instagram": 10}
+MAX_PER_DAY = 5
+MIN_GAP_S = 600  # 10 minutos entre duas publicacoes na mesma rede
+
+
+def validate_publish(net: str, text: str, n_images: int) -> Optional[str]:
+    """Texto de erro para a pessoa, ou None se pode publicar."""
+    if net not in PUBLISH_NETWORKS:
+        return "Posso publicar no X, no Facebook e no Instagram. Para as outras redes, copie o texto e publique você."
+    t = (text or "").strip()
+    if net != "instagram" and not t and n_images == 0:
+        return "Falta o texto do post."
+    if has_secret(t):
+        return "O texto parece ter senha ou número de documento. Não publico isso."
+    if len(t) > POST_LIMITS.get(net, 1000):
+        return f"O texto passa do limite de {POST_LIMITS[net]} caracteres do {network_name(net)}."
+    if net == "instagram" and n_images == 0:
+        return "O Instagram precisa de imagens: crie um carrossel e publique a pasta dele."
+    if n_images > MAX_IMAGES[net]:
+        return f"O {network_name(net)} aceita no máximo {MAX_IMAGES[net]} imagens por publicação."
+    return None
+
+
+def publish_gap(history: list[float], now: float) -> Optional[str]:
+    """`history`: instantes (segundos) das ultimas publicacoes desta rede. Texto de espera, ou None se pode publicar agora."""
+    today = [h for h in history if now - h < 86400]
+    if len(today) >= MAX_PER_DAY:
+        return f"Já publiquei {MAX_PER_DAY} vezes nas últimas 24 horas. Espere um pouco para não parecer robô e perder a conta."
+    if today and now - max(today) < MIN_GAP_S:
+        faltam = int((MIN_GAP_S - (now - max(today))) // 60) + 1
+        return f"Publiquei há pouco. Espere mais {faltam} min para não parecer robô."
+    return None

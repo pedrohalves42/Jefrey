@@ -34,6 +34,54 @@ class SocialEnvironment:
         return render_carousel(carousel, folder, theme)
 
 
+    # ---- publicar ----
+    def read_images(self, folder: str) -> list:
+        """Imagens (slide-*.png) de uma pasta de carrossel, como [{name, type, b64}]. So pastas dentro da pasta dos carrosseis."""
+        import base64
+
+        from src.jefrey.adapters.outbound.carousel_renderer import default_output_root
+
+        root, target = default_output_root().resolve(), Path(folder).resolve()
+        if root not in target.parents or not target.is_dir():
+            raise ValueError("pasta fora da pasta dos carrosseis")
+        return [{"name": f.name, "type": "image/png", "b64": base64.b64encode(f.read_bytes()).decode()} for f in sorted(target.glob("slide-*.png"))[:10]]
+
+    def _log_file(self) -> Path:
+        import os
+
+        return Path(os.getenv("JEFREY_CONFIG_DIR", "config")) / "publicacoes.json"
+
+    def publish_history(self, net: str) -> list:
+        import json
+
+        try:
+            d = json.loads(self._log_file().read_text(encoding="utf-8"))
+            return [float(x) for x in d.get(net, [])]
+        except (OSError, ValueError, AttributeError):
+            return []
+
+    def record_publish(self, net: str) -> None:
+        import json
+        import time
+
+        f = self._log_file()
+        try:
+            d = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            d = {}
+        now = time.time()
+        d[net] = [x for x in d.get(net, []) if now - float(x) < 86400 * 2] + [now]
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(d), encoding="utf-8")
+
+    async def publish(self, net: str, text: str, images: list, send: bool) -> dict:
+        import asyncio
+
+        from src.jefrey.native import control
+
+        return await asyncio.to_thread(control.publish_in_site, net, text, images, send)
+
+
 def register() -> None:
     from src.jefrey.ports import registry
 

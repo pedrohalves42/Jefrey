@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from src.jefrey.application.social import make_carousel, make_post
+from src.jefrey.application.social import make_carousel, make_post, publish
 from src.jefrey.domain.social import NETWORKS
 
 router = APIRouter(prefix="/social", tags=["social"])
@@ -53,6 +53,25 @@ async def carousel(body: CarouselBody, request: Request):
 @router.post("/post")
 async def post(body: PostBody, request: Request):
     r = await make_post(_user(request), body.network, body.topic)
+    if not r["ok"]:
+        raise HTTPException(status_code=422, detail=r["message"])
+    return r
+
+
+class PublishBody(BaseModel):
+    network: str = Field(max_length=20)
+    text: str = Field(default="", max_length=3000)
+    folder: str = Field(default="", max_length=500)
+    confirm: bool = False  # a pessoa viu o texto e apertou "Publicar"
+
+
+@router.post("/publish")
+async def publish_route(body: PublishBody, request: Request):
+    """Publica na rede pela janela do Jefrey. Exige a confirmacao explicita da pessoa na tela."""
+    uid = _user(request)
+    if not body.confirm:
+        raise HTTPException(status_code=422, detail="Confirme a publicação na tela.")
+    r = await publish(uid, body.network, body.text, body.folder)
     if not r["ok"]:
         raise HTTPException(status_code=422, detail=r["message"])
     return r

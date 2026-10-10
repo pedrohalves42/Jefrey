@@ -20,6 +20,8 @@ export const openNetwork = (id: string) => call<{ ok: boolean }>(`/system/site/$
 export const createCarousel = (topic: string, slides: number, theme: string) =>
   call<CarouselResult>("/social/carousel", { method: "POST", body: JSON.stringify({ topic, slides, theme }) })
 export const createPost = (network: string, topic: string) => call<PostResult>("/social/post", { method: "POST", body: JSON.stringify({ network, topic }) })
+export const publishPost = (network: string, text: string, folder = "") =>
+  call<{ ok: boolean; message: string }>("/social/publish", { method: "POST", body: JSON.stringify({ network, text, folder, confirm: true }) })
 export const openCarouselFolder = (path: string) => call<{ ok: boolean }>("/social/open-folder", { method: "POST", body: JSON.stringify({ path }) })
 
 export const THEMES: { id: string; label: string }[] = [
@@ -27,6 +29,11 @@ export const THEMES: { id: string; label: string }[] = [
   { id: "claro", label: "Claro" },
   { id: "verde", label: "Verde" },
   { id: "quente", label: "Quente" },
+]
+export const PUBLISH_NETWORKS: { id: string; label: string }[] = [
+  { id: "x", label: "X (Twitter)" },
+  { id: "facebook", label: "Facebook" },
+  { id: "instagram", label: "Instagram" },
 ]
 export const POST_NETWORKS: { id: string; label: string }[] = [
   { id: "instagram", label: "Instagram" },

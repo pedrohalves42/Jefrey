@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { isDesktop } from "@/lib/shell"
 import {
-  POST_NETWORKS, THEMES, createCarousel, createPost, getNetworks, openCarouselFolder, openNetwork, type CarouselResult, type Network,
+  POST_NETWORKS, PUBLISH_NETWORKS, THEMES, createCarousel, createPost, getNetworks, openCarouselFolder, openNetwork, publishPost, type CarouselResult, type Network,
 } from "@/lib/social"
 
 const card = "jf-panel p-5"
@@ -13,6 +13,44 @@ type Msg = { ok: boolean; text: string } | null
 function Note({ msg }: { msg: Msg }) {
   if (!msg) return null
   return <p role={msg.ok ? "status" : "alert"} className={`mt-3 rounded-lg border px-3 py-2 text-base ${msg.ok ? "border-emerald-400/40 text-emerald-100" : "border-red-400/40 text-red-100"}`}>{msg.text}</p>
+}
+
+/** Publicar de verdade: a pessoa escolhe a rede, ve o texto e confirma. O Jefrey limita o ritmo (5 por dia, 10 min entre posts). */
+function PublishBox({ text, folder, networks }: { text: string; folder?: string; networks: { id: string; label: string }[] }) {
+  const [net, setNet] = useState(networks[0]!.id)
+  const [step, setStep] = useState<"idle" | "confirm" | "busy">("idle")
+  const [msg, setMsg] = useState<Msg>(null)
+  const label = networks.find(n => n.id === net)?.label ?? net
+  async function go() {
+    setStep("busy")
+    setMsg(null)
+    const r = await publishPost(net, text, folder ?? "")
+    setStep("idle")
+    setMsg(r.data?.ok ? { ok: true, text: r.data.message } : { ok: false, text: r.error || "Não consegui publicar agora." })
+  }
+  return (
+    <div className="mt-4 rounded-xl border border-amber-300/30 p-4">
+      <p className="text-base text-white/85">Publicar de verdade pelo Jefrey (a rede precisa estar aberta e com a sua conta em Conexões → Redes).</p>
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <select className={`${field} max-w-[14rem]`} value={net} onChange={e => { setNet(e.target.value); setStep("idle") }} aria-label="Rede">
+          {networks.map(n => <option key={n.id} value={n.id}>{n.label}</option>)}
+        </select>
+        {step === "idle" && <button type="button" className={big} onClick={() => setStep("confirm")}>Publicar no {label}</button>}
+        {step === "busy" && <span className="text-base text-white/70">Publicando… acompanhe na janela do {label}.</span>}
+      </div>
+      {step === "confirm" && (
+        <div className="mt-3 rounded-lg border border-white/15 p-3" role="alertdialog" aria-label="Confirmar publicação">
+          <p className="text-base text-white">Vou publicar no <b>{label}</b>{folder ? ", com as imagens do carrossel" : ""}:</p>
+          <p className="mt-1 whitespace-pre-wrap text-base text-white/85">“{text || "(só as imagens)"}”</p>
+          <div className="mt-3 flex gap-3">
+            <button type="button" className={big} onClick={() => void go()}>Sim, publicar</button>
+            <button type="button" className={`${big} border-white/25`} onClick={() => setStep("idle")}>Cancelar</button>
+          </div>
+        </div>
+      )}
+      <Note msg={msg} />
+    </div>
+  )
 }
 
 function Janelas() {
@@ -92,6 +130,7 @@ function Carrossel() {
           {res.caption && <p className="mt-3 text-base text-white/80"><b>Legenda:</b> {res.caption} {res.hashtags.join(" ")}</p>}
           <p className="mt-3 break-all text-sm text-white/55">{res.files.length} imagens em {res.folder}</p>
           <button type="button" className={`${big} mt-3`} onClick={() => void openCarouselFolder(res.folder)}>Abrir a pasta das imagens</button>
+          <PublishBox text={[res.caption, res.hashtags.join(" ")].join(" ").trim()} folder={res.folder} networks={PUBLISH_NETWORKS} />
         </div>
       )}
     </section>
@@ -138,6 +177,7 @@ function Post() {
         <div className="mt-3">
           <textarea className={`${field} min-h-[8rem]`} value={text} onChange={e => setText(e.target.value)} aria-label="Texto do post" />
           <button type="button" className={`${big} mt-2`} onClick={() => void copy()}>Copiar o texto</button>
+          {PUBLISH_NETWORKS.some(n => n.id === net) && <PublishBox key={net} text={text} networks={PUBLISH_NETWORKS.filter(n => n.id === net)} />}
         </div>
       )}
       <Note msg={msg} />

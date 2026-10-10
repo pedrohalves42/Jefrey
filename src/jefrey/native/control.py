@@ -10,6 +10,7 @@ _restart: Optional[Callable[[], None]] = None
 _messages: Optional[Callable[[str], bool]] = None
 _site: Optional[Callable[[str], bool]] = None
 _site_counts: Optional[Callable[[], dict]] = None
+_publish: Optional[Callable[..., dict]] = None
 
 
 def set_restart_hook(fn: Optional[Callable[[], None]]) -> None:
@@ -25,6 +26,18 @@ def set_messages_hook(fn: Optional[Callable[[str], bool]]) -> None:
 def set_site_hooks(open_fn: Optional[Callable[[str], bool]], counts_fn: Optional[Callable[[], dict]]) -> None:
     global _site, _site_counts
     _site, _site_counts = open_fn, counts_fn
+
+
+def set_publish_hook(fn: Optional[Callable[..., dict]]) -> None:
+    global _publish
+    _publish = fn
+
+
+def publish_in_site(net_id: str, text: str, files: list, send: bool) -> dict:
+    """Publica pela janela da rede. {"ok", "message"}; sem janela propria (modo navegador) devolve ok=False."""
+    if _publish is None:
+        return {"ok": False, "message": "Publicar só funciona no programa instalado do Jefrey."}
+    return _publish(net_id, text, files, send)
 
 
 def open_site(net_id: str) -> bool:
