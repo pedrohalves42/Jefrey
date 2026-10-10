@@ -1,6 +1,8 @@
 """Caso de uso: aprender com uma troca de conversa. Usa so portas (modelo de IA e armazenamento); nunca levanta erro."""
 from __future__ import annotations
 
+from src.jefrey.domain.llm_roles import chat_as
+
 import logging
 from typing import Any
 
@@ -17,7 +19,7 @@ async def extract_by_llm(client: Any, user_text: str, assistant_text: str) -> li
         {"role": "user", "content": f"<usuario>\n{user_text[:1500]}\n</usuario>\n<assistente>\n{assistant_text[:800]}\n</assistente>"},
     ]
     try:
-        return parse_llm_facts(await client.chat(messages))
+        return parse_llm_facts(await chat_as(client, messages, "resumo"))
     except Exception as e:
         logger.info("extracao por IA indisponivel (%s)", type(e).__name__)
         return []

@@ -2,7 +2,16 @@ import { authedFetch } from "@/lib/session"
 
 export type BrainCard = { id: string; name: string; tagline: string; kind: "oneclick" | "key" | "local"; key_url: string; recommended: boolean }
 export type BrainRole = "principal" | "reserva"
-export type BrainsState = { brains: { id: string; role: BrainRole; model: string }[]; catalog: BrainCard[]; max: number; machine?: { ram_gb: number; local_recommended: boolean } }
+export type RoleInfo = { id: string; label: string }
+export type BrainsState = {
+  brains: { id: string; role: BrainRole; model: string; roles?: string[]; all_roles?: boolean }[]
+  catalog: BrainCard[]
+  max: number
+  machine?: { ram_gb: number; local_recommended: boolean }
+  roles?: RoleInfo[]
+  team?: string[]
+  team_roles?: string[]
+}
 
 type Res<T> = { ok: boolean; status: number; data: T | null }
 
@@ -21,6 +30,11 @@ export const getBrains = () => json<BrainsState>("/brains")
 export const connectBrain = (id: string, api_key?: string) =>
   json<BrainsState>(`/brains/${encodeURIComponent(id)}/connect`, { method: "POST", body: JSON.stringify({ api_key }) })
 export const makePrimary = (id: string) => json<BrainsState>(`/brains/${encodeURIComponent(id)}/primary`, { method: "POST" })
+/** O que este cerebro faz. `null` = serve para tudo. */
+export const setBrainRoles = (id: string, roles: string[] | null) =>
+  json<BrainsState>(`/brains/${encodeURIComponent(id)}/roles`, { method: "PUT", body: JSON.stringify({ roles }) })
+/** Funcoes em que dois cerebros trabalham juntos (um escreve, outro revisa). */
+export const setBrainTeam = (roles: string[]) => json<BrainsState>("/brains/team", { method: "PUT", body: JSON.stringify({ roles }) })
 export const disconnectBrain = (id: string) => json<BrainsState>(`/brains/${encodeURIComponent(id)}`, { method: "DELETE" })
 
 export function roleOf(state: BrainsState | null, id: string): BrainRole | null {
@@ -34,6 +48,8 @@ export function routingSummary(state: BrainsState | null, names: Record<string, 
   const first = names[list[0]!.id] ?? list[0]!.id
   if (list.length === 1) return `O Jefrey está pensando com ${first}. Conecte mais um para ter uma reserva: se este falhar, ele usa o outro sozinho.`
   const rest = list.slice(1).map(b => names[b.id] ?? b.id).join(", ")
+  const split = list.some(b => b.all_roles === false)
+  if (split) return `O Jefrey usa os ${list.length} cérebros em equipe: cada um faz o que você marcou, e se um falhar outro assume sozinho.`
   return `O Jefrey pensa com ${first}. Se falhar ou acabar o crédito, ele usa sozinho: ${rest}.`
 }
 

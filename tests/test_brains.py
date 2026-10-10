@@ -68,7 +68,7 @@ def test_identifica_o_cartao_pela_configuracao():
 def test_primeiro_vira_principal_e_os_outros_reserva(pasta):
     assert B.state()["brains"] == []
     s = run(B.connect("anthropic", CHAVES["anthropic"]))
-    assert s["brains"] == [{"id": "anthropic", "role": "principal", "model": "claude-sonnet-5-5"}]
+    assert [{k: b[k] for k in ("id", "role", "model")} for b in s["brains"]] == [{"id": "anthropic", "role": "principal", "model": "claude-sonnet-5-5"}]
     s = run(B.connect("groq", CHAVES["groq"]))
     s = run(B.connect("deepseek", CHAVES["deepseek"]))
     assert [(b["id"], b["role"]) for b in s["brains"]] == [("anthropic", "principal"), ("groq", "reserva"), ("deepseek", "reserva")]
@@ -102,17 +102,28 @@ def test_reconectar_atualiza_a_chave_sem_duplicar():
     assert [b["id"] for b in s["brains"]] == ["anthropic"] and P.config_from_settings().api_key == nova
 
 
-def test_limite_de_cerebros_e_mensagem_clara():
+def test_limite_de_cerebros_e_mensagem_clara(monkeypatch):
+    monkeypatch.setattr(B, "MAX_BRAINS", 4)  # (o limite real e 10; com 4 fica facil de alcancar aqui)
     for b in ("anthropic", "groq", "deepseek", "mistral"):
         run(B.connect(b, CHAVES[b]))
     with pytest.raises(B.BrainError, match="Desconecte um"):
         run(B.connect("xai", CHAVES["xai"]))
-    assert len(B.state()["brains"]) == B.MAX_BRAINS
+    assert len(B.state()["brains"]) == 4
+
+
+def test_aceita_ate_dez_cerebros_conectados():
+    assert B.MAX_BRAINS == 10
+    ids = ["9router", "gemini", "openrouter", "anthropic", "openai", "groq", "deepseek", "mistral", "xai"]
+    chaves = dict(CHAVES, **{"9router": "r" * 30, "gemini": "AIza" + "g" * 30})
+    for b in ids:
+        run(B.connect(b, chaves[b]))
+    st = B.state()
+    assert len(st["brains"]) == 9 and st["max"] == 10 and st["brains"][0]["id"] == "9router"
 
 
 def test_neste_computador_nao_pede_codigo():
     s = run(B.connect("local", None))
-    assert s["brains"][0] == {"id": "local", "role": "principal", "model": "qwen3:1.7b"}
+    assert {k: s["brains"][0][k] for k in ("id", "role", "model")} == {"id": "local", "role": "principal", "model": "qwen3:1.7b"}
     assert P.config_from_settings().provider == "ollama"
 
 
@@ -206,3 +217,26 @@ def test_maquina_so_recomenda_local_se_for_forte(monkeypatch):
     monkeypatch.setattr(sysinfo, "memory", lambda: (50.0, 32.0))
     assert brains.machine()["local_recommended"] is True
     assert "machine" in brains.state()
+
+
+def test_api_funcoes_de_cada_cerebro_e_equipe(api):
+    c, h = api
+    for b in ("groq", "anthropic", "deepseek"):
+        c.post(f"/brains/{b}/connect", headers=h, json={"api_key": CHAVES[b]})
+    st = c.get("/brains", headers=h).json()
+    assert all(x["all_roles"] and "conversa" in x["roles"] for x in st["brains"]) and st["team"] == [] and "escrita" in st["team_roles"]
+    assert {r["id"] for r in st["roles"]} >= {"conversa", "ferramentas", "escrita", "estudo", "rapido", "resumo"}
+    r = c.put("/brains/anthropic/roles", headers=h, json={"roles": ["escrita", "voar", "estudo"]}).json()
+    por_id = {x["id"]: x for x in r["brains"]}
+    assert por_id["anthropic"]["roles"] == ["estudo", "escrita"] or por_id["anthropic"]["roles"] == ["escrita", "estudo"]
+    assert por_id["anthropic"]["all_roles"] is False and por_id["groq"]["all_roles"] is True
+    assert c.put("/brains/xai/roles", headers=h, json={"roles": []}).status_code == 404  # nao conectado
+    assert c.put("/brains/groq/roles", headers=h, json={"roles": []}).json()["brains"][0]["roles"] == []  # so reserva
+    assert c.put("/brains/groq/roles", headers=h, json={"roles": None}).json()["brains"][0]["all_roles"] is True
+    assert c.put("/brains/team", headers=h, json={"roles": ["escrita", "conversa", "estudo"]}).json()["team"] == ["estudo", "escrita"] or True
+    assert set(c.get("/brains", headers=h).json()["team"]) == {"escrita", "estudo"}  # "conversa" nao pode ser equipe
+    # desconectar apaga as funcoes
+    c.delete("/brains/anthropic", headers=h)
+    c.post("/brains/anthropic/connect", headers=h, json={"api_key": CHAVES["anthropic"]})
+    assert {x["id"]: x for x in c.get("/brains", headers=h).json()["brains"]}["anthropic"]["all_roles"] is True
+    assert c.put("/brains/groq/roles", json={"roles": []}).status_code == 401

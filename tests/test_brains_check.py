@@ -62,4 +62,5 @@ def test_9router_e_gemini_no_catalogo_com_enderecos_certos():
     assert P._chat_url("https://generativelanguage.googleapis.com/v1beta/openai") == "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
     assert P._chat_url("https://api.openai.com") == "https://api.openai.com/v1/chat/completions"
     assert B.key_problem("gemini", "AIza" + "x" * 30) is None
-    assert "AIza" in (B.key_problem("gemini", "sk-" + "x" * 30) or "")
+    assert B.key_problem("gemini", "AQ." + "x" * 40) is None  # chave no formato novo tambem serve
+    assert B._health_message({"detail": "HTTPStatusError: indisponivel HTTP 400"}).startswith("O serviço recusou")

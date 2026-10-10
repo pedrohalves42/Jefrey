@@ -1,6 +1,8 @@
 """O que os casos de uso das redes sociais usam do mundo de fora: o modelo, o perfil, as pastas e o desenho das imagens."""
 from __future__ import annotations
 
+from src.jefrey.domain.llm_roles import chat_as
+
 from pathlib import Path
 from typing import Any, Optional
 
@@ -9,7 +11,7 @@ class SocialEnvironment:
     async def llm_text(self, messages: list[dict]) -> str:
         from src.jefrey.core.llm_provider import get_llm_client
 
-        return await get_llm_client().chat(messages)
+        return await chat_as(get_llm_client(), messages, "escrita")
 
     def person_name(self, user_id: str) -> Optional[str]:
         from src.jefrey.core.profile import ProfileStore

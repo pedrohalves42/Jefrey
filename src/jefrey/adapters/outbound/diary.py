@@ -5,6 +5,8 @@ Gerado sem pressa, em segundo plano, so para dias que ja acabaram. Com modelo de
 """
 from __future__ import annotations
 
+from src.jefrey.domain.llm_roles import chat_as
+
 import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
@@ -115,7 +117,7 @@ async def summarize_day(user_id: str, day: date, tz, client: Any = None) -> Opti
         if client is not None and getattr(getattr(client, "config", None), "is_cloud", False):
             dialog = "\n".join(f"{'Pessoa' if t['role'] == 'user' else 'Jefrey'}: {t['content'][:300]}" for t in turns[-30:])
             try:
-                summary = (await client.chat([{"role": "system", "content": _PROMPT}, {"role": "user", "content": f"<dia>\n{dialog}\n</dia>"}])).strip()
+                summary = (await chat_as(client, [{"role": "system", "content": _PROMPT}, {"role": "user", "content": f"<dia>\n{dialog}\n</dia>"}], "resumo")).strip()
             except Exception as e:
                 logger.info("resumo do dia por IA indisponivel (%s)", type(e).__name__)
         from src.jefrey.core.learning import has_secret

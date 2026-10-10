@@ -98,14 +98,59 @@
     return icon ? icon.closest("button") || icon : null;
   }
 
-  function composerText(doc) {
-    var c = composer(doc);
-    return c ? (c.textContent || "").trim() : "";
+  /* O editor do WhatsApp (Lexical) guarda o texto em spans proprios e o atualiza um instante DEPOIS do comando de digitar:
+   * le-se so o que a pessoa de fato ve (nunca o texto de dica) e confere-se depois de esperar o editor. */
+  function readText(el) {
+    if (!el) return "";
+    var spans = el.querySelectorAll('[data-lexical-text="true"]');
+    if (spans.length) {
+      return Array.prototype.map
+        .call(spans, function (n) {
+          return n.textContent || "";
+        })
+        .join("")
+        .trim();
+    }
+    return (el.textContent || "").trim();
   }
 
-  /* Digita em um campo editavel como uma pessoa (o editor do WhatsApp ignora simples troca de texto). */
-  function insertInto(doc, el, text) {
+  function composerText(doc) {
+    return readText(composer(doc));
+  }
+
+  /* Apaga o que ha no campo (como selecionar tudo e apagar). Usado para nao deixar rascunho solto quando algo da errado. */
+  function clearField(doc, el) {
+    if (!el) return;
+    el.focus();
+    try {
+      var view = doc.defaultView || g;
+      var range = doc.createRange();
+      range.selectNodeContents(el);
+      var sel = view.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      doc.execCommand("delete");
+    } catch (e) {
+      /* sem selecao: tenta o jeito simples */
+    }
+    if (readText(el) !== "") {
+      el.textContent = "";
+      var v2 = doc.defaultView || g;
+      el.dispatchEvent(new v2.InputEvent("input", { bubbles: true, data: "", inputType: "deleteContentBackward" }));
+    }
+  }
+
+  function wait(ms) {
+    return new Promise(function (r) {
+      setTimeout(r, ms);
+    });
+  }
+
+  /* Digita em um campo editavel como uma pessoa. Devolve uma promessa: o editor demora um instante para mostrar o texto,
+   * e conferir antes disso fazia o Jefrey digitar de novo (texto duplicado) e desistir de enviar. */
+  async function insertInto(doc, el, text, sleep) {
     if (!el) return false;
+    var pause = sleep || wait;
     el.focus();
     var done = false;
     try {
@@ -113,16 +158,23 @@
     } catch (e) {
       done = false;
     }
-    if (!done || (el.textContent || "").trim() !== text.trim()) {
-      el.textContent = text;
-      var view = doc.defaultView || g;
-      el.dispatchEvent(new view.InputEvent("input", { bubbles: true, data: text, inputType: "insertText" }));
+    for (var i = 0; i < 6; i++) {
+      await pause(done ? 250 : 100);
+      if (readText(el) === text.trim()) return true;
     }
-    return (el.textContent || "").trim() === text.trim();
+    // nao apareceu (ou apareceu errado): limpa e tenta UMA vez pelo jeito alternativo
+    clearField(doc, el);
+    el.textContent = text;
+    var view = doc.defaultView || g;
+    el.dispatchEvent(new view.InputEvent("input", { bubbles: true, data: text, inputType: "insertText" }));
+    await pause(300);
+    if (readText(el) === text.trim()) return true;
+    clearField(doc, el); // nunca deixa texto pela metade
+    return false;
   }
 
-  function typeText(doc, text) {
-    return insertInto(doc, composer(doc), text);
+  function typeText(doc, text, sleep) {
+    return insertInto(doc, composer(doc), text, sleep);
   }
 
   /* ---- abrir a conversa certa (so para enviar o que a pessoa aprovou) ---- */
@@ -163,8 +215,8 @@
     return doc.querySelector('#side div[contenteditable="true"][data-tab="3"]') || doc.querySelector('#side div[contenteditable="true"]');
   }
 
-  function typeInSearch(doc, text) {
-    return insertInto(doc, searchBox(doc), text);
+  function typeInSearch(doc, text, sleep) {
+    return insertInto(doc, searchBox(doc), text, sleep);
   }
 
   function clearSearch(doc) {
@@ -271,7 +323,7 @@
     parseSidebar: parseSidebar, looksLikeGroupPreview: looksLikeGroupPreview, isSelfChat: isSelfChat, isBotText: isBotText, newCommands: newCommands,
     norm: norm, sameChat: sameChat, chatTitle: chatTitle, isGroup: isGroup, parseRows: parseRows, newIncoming: newIncoming,
     context: context, composer: composer, sendButton: sendButton, composerText: composerText, typeText: typeText,
-    canSendNow: canSendNow, humanDelayMs: humanDelayMs,
+    canSendNow: canSendNow, readText: readText, clearField: clearField, humanDelayMs: humanDelayMs,
     findChatCell: findChatCell, openChat: openChat, typeInSearch: typeInSearch, clearSearch: clearSearch, searchBox: searchBox,
   };
   if (typeof module === "object" && module.exports) module.exports = api;

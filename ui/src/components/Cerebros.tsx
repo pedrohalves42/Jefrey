@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query"
 import ListenButton from "@/components/ListenButton"
-import { apiDetail, checkBrains, connectBrain, disconnectBrain, getBrains, type BrainCheck, makePrimary, roleOf, routingSummary, steps, type BrainCard, type BrainsState } from "@/lib/brains"
+import { apiDetail, checkBrains, connectBrain, disconnectBrain, getBrains, setBrainRoles, setBrainTeam, type BrainCheck, makePrimary, roleOf, routingSummary, steps, type BrainCard, type BrainsState } from "@/lib/brains"
 import { KEY_COST_NOTE } from "@/lib/keyGuide"
 import { startOpenRouter } from "@/lib/llm"
 
@@ -135,6 +135,28 @@ export default function Cerebros() {
     } else setMsg({ ok: false, text: apiDetail(r, "Não consegui mudar agora.") })
   }
 
+  async function toggleRole(brainId: string, roleId: string) {
+    const b = st?.brains.find(x => x.id === brainId)
+    if (!b || !st?.roles) return
+    const cur = b.roles ?? st.roles.map(r => r.id)
+    const next = cur.includes(roleId) ? cur.filter(r => r !== roleId) : [...cur, roleId]
+    const r = await setBrainRoles(brainId, next)
+    if (r.ok && r.data) setSt(r.data)
+    else setMsg({ ok: false, text: apiDetail(r, "Não consegui mudar agora.") })
+  }
+
+  async function allRoles(brainId: string) {
+    const r = await setBrainRoles(brainId, null)
+    if (r.ok && r.data) setSt(r.data)
+  }
+
+  async function toggleTeam(roleId: string) {
+    const cur = st?.team ?? []
+    const r = await setBrainTeam(cur.includes(roleId) ? cur.filter(x => x !== roleId) : [...cur, roleId])
+    if (r.ok && r.data) setSt(r.data)
+    else setMsg({ ok: false, text: apiDetail(r, "Não consegui mudar agora.") })
+  }
+
   async function remove(c: BrainCard) {
     const r = await disconnectBrain(c.id)
     if (r.ok && r.data) {
@@ -178,6 +200,27 @@ export default function Cerebros() {
                 <Role role={role} />
               </div>
               <p className="mt-1 text-base text-white/65">{c.kind === "local" ? localNote(st) : c.tagline}</p>
+              {role && st?.roles && (
+                <div className="mt-3" aria-label={`O que o ${c.name} faz`}>
+                  <p className="text-sm text-white/60">
+                    O que este cérebro faz{st.brains.find(b => b.id === c.id)?.all_roles ? " (agora: tudo)" : ""}:
+                    {st.brains.find(b => b.id === c.id)?.all_roles === false && (
+                      <button type="button" onClick={() => void allRoles(c.id)} className="jf-focus ml-2 underline underline-offset-2 hover:text-white">fazer tudo</button>
+                    )}
+                  </p>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    {st.roles.map(r => {
+                      const on = (st.brains.find(b => b.id === c.id)?.roles ?? []).includes(r.id)
+                      return (
+                        <button key={r.id} type="button" aria-pressed={on} onClick={() => void toggleRole(c.id, r.id)}
+                          className={`jf-focus jf-chip rounded-full border px-3 py-1 text-sm ${on ? "border-cyan-300/70 bg-cyan-400/20 text-white" : "border-white/20 bg-black/30 text-white/60"}`}>
+                          {on ? "✓ " : ""}{r.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
               <div className="mt-3 flex flex-wrap gap-2">
                 {role ? (
                   <>
@@ -206,6 +249,25 @@ export default function Cerebros() {
           )
         })}
       </ul>
+
+      {(st?.brains.length ?? 0) >= 2 && st?.team_roles && (
+        <div className="mt-5 rounded-xl border border-white/10 p-4">
+          <h3 className="text-lg font-medium text-white">Trabalhar em equipe</h3>
+          <p className="mt-1 text-base text-white/70">Dois cérebros juntos dão um resultado melhor: um escreve e o outro revisa. Funciona quando pelo menos dois cérebros fazem a mesma função.</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {st.team_roles.map(id => {
+              const on = (st.team ?? []).includes(id)
+              const label = st.roles?.find(r => r.id === id)?.label ?? id
+              return (
+                <button key={id} type="button" aria-pressed={on} onClick={() => void toggleTeam(id)}
+                  className={`jf-focus jf-chip rounded-full border px-3 py-1.5 text-sm ${on ? "border-emerald-300/70 bg-emerald-400/20 text-white" : "border-white/20 bg-black/30 text-white/70"}`}>
+                  {on ? "✓ " : ""}{label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </section>
   )
 }

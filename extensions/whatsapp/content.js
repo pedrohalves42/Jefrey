@@ -172,7 +172,7 @@
     if (!isIdle()) return false; // a pessoa esta mexendo no WhatsApp: nao troca a conversa debaixo dela
     if (C.composerText(document) !== "") return false; // ha rascunho na conversa aberta
     let r = C.openChat(document, chat);
-    if (!r.ok && C.typeInSearch(document, chat)) {
+    if (!r.ok && (await C.typeInSearch(document, chat, sleep))) {
       await sleep(1500);
       r = C.openChat(document, chat);
       C.clearSearch(document);
@@ -203,7 +203,7 @@
     await sleep(C.humanDelayMs());
     const again = C.canSendNow(document, item.chat); // a pessoa pode ter mudado de conversa ou comecado a digitar
     if (!again.ok || state.paused) return false;
-    if (!C.typeText(document, item.text)) {
+    if (!(await C.typeText(document, item.text, sleep))) {
       await call("/wa/device/sent", "POST", { id: item.id, ok: false });
       return true;
     }

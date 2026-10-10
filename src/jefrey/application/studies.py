@@ -7,6 +7,8 @@ nuvem, so quando a pessoa esta ausente e fora do horario de silencio. O texto da
 """
 from __future__ import annotations
 
+from src.jefrey.domain.llm_roles import chat_as
+
 import logging
 import re
 from datetime import datetime
@@ -56,7 +58,7 @@ class _Budget:
         est = estimate_usd(sum(len(m["content"]) for m in messages), expect_out_chars)
         if self.remaining() < max(est, _MIN_CALL_USD):
             raise StudyError("O limite de gasto de hoje acabou. Eu continuo amanhã.")
-        out = await client.chat(messages)
+        out = await chat_as(client, messages, "estudo")
         self.store.charge(self.user_id, self.day, estimate_usd(sum(len(m["content"]) for m in messages), len(out or "")))
         return out or ""
 

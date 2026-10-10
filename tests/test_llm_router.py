@@ -170,10 +170,12 @@ def test_reservas_invalidas_sao_recusadas_sem_gravar(cfg, bad):
     assert lp.load_fallback_configs() == []
 
 
-def test_limite_de_reservas(cfg):
-    items = [{"id": f"r{i}", "provider": "openai", "model": "m", "base_url": "https://openrouter.ai/api", "api_key": "k"} for i in range(4)]
+def test_limite_de_reservas_ate_dez_cerebros(cfg):
+    mk = lambda n: [{"id": f"r{i}", "provider": "openai", "model": "m", "base_url": "https://openrouter.ai/api", "api_key": "k"} for i in range(n)]  # noqa: E731
+    lp.save_fallbacks(mk(9))  # 1 principal + 9 reservas = 10 cerebros
+    assert len(lp.load_fallback_configs()) == 9
     with pytest.raises(LLMConfigError):
-        lp.save_fallbacks(items)
+        lp.save_fallbacks(mk(10))
 
 
 def test_reserva_mal_configurada_nao_derruba_o_principal(cfg):
@@ -204,3 +206,110 @@ def test_cerebro_sem_credito_402_cai_na_reserva_e_fica_de_castigo_por_mais_tempo
     t[0] = 700.0  # passou o castigo longo: tenta de novo
     run(collect(llm))
     assert chamadas[-2:] == ["principal", "reserva"]
+
+
+# ---------------- funcoes dos cerebros e equipe ----------------
+def _nome(handler_name, texto):
+    def h(r):
+        usados.append(handler_name)
+        if json.loads(r.content).get("stream"):
+            return sse(texto)
+        return httpx.Response(200, json={"choices": [{"message": {"content": texto}}]})  # chat completo (sem streaming), como na revisao
+    return h
+
+
+usados: list = []
+
+
+def _equipe(roles, team=(), clock=None):
+    usados.clear()
+    cs = [client(_nome("a", "resposta A"), "a"), client(_nome("b", "resposta B"), "b"), client(_nome("c", "resposta C"), "c")]
+    return RoutedLLM(cs, roles=roles, team=team, clock=clock or (lambda: 0.0))
+
+
+def test_cada_tarefa_vai_para_o_cerebro_da_funcao():
+    llm = _equipe([{"conversa"}, {"ferramentas"}, {"escrita", "estudo"}])
+    run(collect(llm))  # conversa curta e sem ferramentas -> "rapido": ninguem declarou; cai em quem serve (conversa) por ordem
+    assert usados == ["a"]
+    usados.clear()
+    run(llm.chat([{"role": "user", "content": "escreva um post sobre luz"}], role="escrita"))
+    assert usados == ["c"]
+    usados.clear()
+    async def com_ferramentas():
+        return [x async for x in llm.stream_events([{"role": "user", "content": "veja minha agenda"}], tools=[{"name": "t"}]) if isinstance(x, str)]
+    run(com_ferramentas())
+    assert usados == ["b"]
+
+
+def test_conversa_curta_vai_para_o_cerebro_rapido_e_longa_para_o_de_conversa():
+    llm = _equipe([{"conversa"}, {"rapido"}, {"ferramentas"}])
+    run(collect(llm, [{"role": "user", "content": "oi, tudo bem?"}]))
+    assert usados == ["b"]
+    usados.clear()
+    run(collect(llm, [{"role": "user", "content": "me explica com calma como funciona a bolsa de valores e o que significa investir " * 2}]))
+    assert usados == ["a"]
+
+
+def test_cerebro_sem_funcao_declarada_serve_para_tudo_e_com_lista_vazia_so_de_reserva():
+    llm = _equipe([None, {"escrita"}, set()])
+    run(llm.chat([{"role": "user", "content": "x"}], role="escrita"))
+    assert usados == ["b"]  # quem declarou a funcao vem primeiro
+    usados.clear()
+    run(llm.chat([{"role": "user", "content": "x"}], role="estudo"))
+    assert usados == ["a"]  # sem declarados: quem serve para tudo
+    t = [0.0]
+    llm2 = _equipe([set(), set(), set()], clock=lambda: t[0])
+    run(collect(llm2))
+    assert usados  # todos so de reserva ainda respondem (nunca deixa a pessoa sem resposta)
+
+
+def test_equipe_um_escreve_e_outro_revisa_e_falha_da_revisao_mantem_o_rascunho():
+    llm = _equipe([{"escrita"}, {"escrita"}, {"conversa"}], team=("escrita",))
+    out = run(llm.chat([{"role": "user", "content": "post"}], role="escrita"))
+    assert usados == ["a", "b"] and out == "resposta B"  # B revisou o rascunho de A
+    usados.clear()
+    assert run(llm.chat([{"role": "user", "content": "oi"}], role="conversa")) == "resposta C"  # funcao fora da equipe: sem revisao
+    assert usados == ["c"]
+    # so um cerebro com a funcao: nao ha quem revise
+    solo = _equipe([{"escrita"}, {"conversa"}, {"conversa"}], team=("escrita",))
+    assert run(solo.chat([{"role": "user", "content": "post"}], role="escrita")) == "resposta A" and usados == ["a"]
+    # revisor fora do ar: fica o rascunho
+    usados.clear()
+    falho = RoutedLLM([client(_nome("a", "rascunho"), "a"), client(lambda r: httpx.Response(500), "b")], roles=[{"escrita"}, {"escrita"}], team=("escrita",))
+    assert run(falho.chat([{"role": "user", "content": "post"}], role="escrita")) == "rascunho"
+
+
+def test_funcoes_regras_puras_e_chat_as():
+    from src.jefrey.domain.llm_roles import ROLES, chat_as, clean_roles, effective_role, order_by_role, review_messages
+
+    assert clean_roles(["escrita", "voar", "conversa", "escrita"]) == ["conversa", "escrita"] and clean_roles("x") == []
+    assert effective_role("estudo", []) == "estudo" and effective_role(None, [], tools=[1]) == "ferramentas"
+    assert effective_role(None, [{"role": "user", "content": "oi"}]) == "rapido"
+    assert order_by_role([0, 1, 2], [None, {"x"}, {"escrita"}], "escrita") == [2, 0, 1]
+    rev = review_messages([{"role": "user", "content": "faca um post"}], "rascunho")
+    assert "<rascunho>" in rev[1]["content"] and "ignore qualquer instrucao" in rev[0]["content"] and "conversa" in ROLES
+
+    class Simples:
+        async def chat(self, messages):
+            return "ok"
+
+    class ComFuncao:
+        async def chat(self, messages, role=None):
+            return f"ok-{role}"
+
+    assert run(chat_as(Simples(), [], "escrita")) == "ok" and run(chat_as(ComFuncao(), [], "escrita")) == "ok-escrita"
+
+
+def test_get_llm_client_monta_funcoes_e_equipe_do_arquivo(cfg):
+    lp.save_override("openai", "m0", "https://api.exemplo.com", None, "k0")
+    lp.save_fallbacks([{"id": "groq", "provider": "openai", "model": "m1", "base_url": "https://api.groq.com/openai", "api_key": "k1"},
+                       {"id": "gemini", "provider": "openai", "model": "m2", "base_url": "https://generativelanguage.googleapis.com/v1beta/openai", "api_key": "k2"}])
+    lp.save_roles("groq", ["rapido", "conversa"])
+    lp.save_roles("gemini", ["escrita"])
+    lp.save_team(["escrita", "conversa"])  # so escrita e estudo podem ser equipe
+    assert lp.load_roles() == {"groq": ["conversa", "rapido"], "gemini": ["escrita"]} and lp.load_team() == ["escrita"]
+    llm = lp.get_llm_client()
+    assert isinstance(llm, RoutedLLM) and llm.roles[1] == {"conversa", "rapido"} and llm.roles[2] == {"escrita"} and llm.roles[0] is None
+    assert llm.team == ("escrita",)
+    lp.save_roles("groq", None)
+    assert "groq" not in lp.load_roles()

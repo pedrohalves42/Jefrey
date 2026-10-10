@@ -90,9 +90,9 @@ describe("leitura da pagina (core)", () => {
     expect(C.context(rows, 2).map(r => r.from_me)).toEqual([true, false])
   })
 
-  it("digita no campo e confere o texto", () => {
+  it("digita no campo e confere o texto", async () => {
     page()
-    expect(C.typeText(document, "Oi! Tudo certo por aqui.")).toBe(true)
+    expect(await C.typeText(document, "Oi! Tudo certo por aqui.", () => Promise.resolve())).toBe(true)
     expect(C.composerText(document)).toBe("Oi! Tudo certo por aqui.")
   })
 
@@ -452,5 +452,50 @@ describe("extensao: caixa de entrada, historico e comandos", () => {
     expect(cmds).toHaveLength(1)
     expect(cmds[0].body).toMatchObject({ chat: "Pedro (Você)", text: "que horas são?" })
     expect(api("/wa/device/inbound").every(c => c.body.messages.length === 0)).toBe(true) // nunca "responde como a pessoa" a si mesma
+  })
+})
+
+describe("editor do WhatsApp que atualiza o texto um instante depois (Lexical)", () => {
+  let C
+  beforeEach(() => {
+    C = loadCore()
+  })
+
+  function lexicalPage() {
+    document.body.innerHTML = `<div id="main"><header><span dir="auto" title="ph">ph</span></header>
+      <footer><div contenteditable="true" data-tab="10"><p><br></p></div><button aria-label="Enviar"></button></footer></div>`
+    return document.querySelector("footer div[contenteditable]")
+  }
+  const showAfter = (el, text, ms) =>
+    setTimeout(() => {
+      el.innerHTML = `<p><span data-lexical-text="true">${text.replace("🙂", "")}</span><span data-lexical-text="true">🙂</span></p>`
+    }, ms)
+
+  it("espera o editor mostrar o texto e NAO digita duas vezes", async () => {
+    const el = lexicalPage()
+    let chamadas = 0
+    document.execCommand = () => {
+      chamadas++
+      showAfter(el, "Oi, tudo bem? 🙂", 120) // o editor so mostra depois
+      return true
+    }
+    expect(await C.typeText(document, "Oi, tudo bem? 🙂")).toBe(true)
+    expect(chamadas).toBe(1)
+    expect(C.readText(el)).toBe("Oi, tudo bem? 🙂") // so uma vez, mesmo com o emoji repetido dentro do span
+  })
+
+  it("se o texto nunca aparece, limpa o campo e devolve falso (nao deixa rascunho)", async () => {
+    const el = lexicalPage()
+    document.execCommand = () => true // diz que digitou, mas nada aparece
+    Object.defineProperty(el, "textContent", { get: () => "", set: () => {}, configurable: true }) // e o editor ignora a troca direta do texto
+    expect(await C.typeText(document, "Oi", () => Promise.resolve())).toBe(false)
+    expect(C.readText(el)).toBe("")
+  })
+
+  it("leitura do campo ignora o texto de dica e conta so o que a pessoa ve", () => {
+    const el = lexicalPage()
+    el.innerHTML = '<p><span data-lexical-text="true">abc</span></p><span>Digite uma mensagem</span>'
+    expect(C.readText(el)).toBe("abc")
+    expect(C.composerText(document)).toBe("abc")
   })
 })

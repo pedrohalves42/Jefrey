@@ -1,6 +1,8 @@
 """Casos de uso do WhatsApp: rascunhar resposta, escrever mensagem a pedido e tratar o que chegou. So portas, nenhum banco aqui."""
 from __future__ import annotations
 
+from src.jefrey.domain.llm_roles import chat_as
+
 import logging
 from typing import Any, Optional
 
@@ -19,7 +21,7 @@ async def draft_reply(client: Any, name: str, known: list[str], context: list[di
     messages = [{"role": "system", "content": _SYSTEM.format(name=name or "a pessoa", known=known_txt)},
                 {"role": "user", "content": f"<conversa>\n{dialog}\n</conversa>\n<mensagem_nova>\n{new_text[:MAX_TEXT]}\n</mensagem_nova>"}]
     try:
-        return clean_reply(await client.chat(messages))
+        return clean_reply(await chat_as(client, messages, "escrita"))
     except Exception as e:
         logger.info("whatsapp: modelo indisponivel (%s)", type(e).__name__)
         return None
@@ -31,7 +33,7 @@ async def compose_message(client: Any, name: str, known: list[str], contact: str
     messages = [{"role": "system", "content": _COMPOSE_SYSTEM.format(name=name or "a pessoa", known=known_txt)},
                 {"role": "user", "content": f"<contato>{contact[:80]}</contato>\n<ideia>\n{instruction[:MAX_TEXT]}\n</ideia>"}]
     try:
-        return clean_reply(await client.chat(messages))
+        return clean_reply(await chat_as(client, messages, "escrita"))
     except Exception as e:
         logger.info("whatsapp: modelo indisponivel para escrever (%s)", type(e).__name__)
         return None

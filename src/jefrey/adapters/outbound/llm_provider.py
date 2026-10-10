@@ -11,6 +11,7 @@ A chave da nuvem vem de JEFREY_LLM__API_KEY e nunca e registrada em log.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from pathlib import Path
@@ -22,6 +23,8 @@ import httpx
 from src.jefrey.core.llm_tools import StreamItem, StreamParser, tool_defs, to_provider_messages
 
 Message = dict[str, str]
+
+logger = logging.getLogger(__name__)
 
 PROVIDERS = ("ollama", "openai", "anthropic")
 
@@ -234,8 +237,8 @@ class LLMClient:
             LLM_TOKENS.labels(type="input", provider=c.provider, model=c.model).inc(
                 _approx_tokens(" ".join(m.get("content", "") for m in messages)))
             LLM_TOKENS.labels(type="output", provider=c.provider, model=c.model).inc(_approx_tokens(output))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("metrica de resposta nao registrada (%s)", type(e).__name__)
 
     def __init__(self, config: LLMConfig, transport: Optional[httpx.AsyncBaseTransport] = None):
         if config.provider not in PROVIDERS:
@@ -300,7 +303,7 @@ class LLMClient:
         return _Borrowed(_pooled())
 
     # ---- chat completo ----------------------------------------------------------
-    async def chat(self, messages: list[Message]) -> str:
+    async def chat(self, messages: list[Message], role: Optional[str] = None) -> str:
         started = time.monotonic()
         url, headers, body = self._request(messages, stream=False)
         async with self._client() as client:
@@ -322,13 +325,13 @@ class LLMClient:
         return "".join(b.get("text", "") for b in blocks if b.get("type") == "text")
 
     # ---- streaming --------------------------------------------------------------
-    async def stream(self, messages: list[Message]) -> AsyncIterator[str]:
+    async def stream(self, messages: list[Message], role: Optional[str] = None) -> AsyncIterator[str]:
         """Somente texto (sem ferramentas)."""
         async for item in self.stream_events(messages):
             if isinstance(item, str):
                 yield item
 
-    async def stream_events(self, messages: list[Message], tools: Optional[list[dict]] = None) -> AsyncIterator[StreamItem]:
+    async def stream_events(self, messages: list[Message], tools: Optional[list[dict]] = None, role: Optional[str] = None) -> AsyncIterator[StreamItem]:
         """Texto (str) e chamadas de ferramenta (ToolCall) conforme chegam."""
         started = time.monotonic()
         out: list[str] = []
@@ -405,8 +408,9 @@ class LLMClient:
                 r.raise_for_status()
                 return {"ok": True, "provider": c.provider, "model": c.model, "detail": "conectado"}
         except Exception as e:  # nunca incluir a chave na mensagem
+            code = f" HTTP {e.response.status_code}" if isinstance(e, httpx.HTTPStatusError) else ""
             return {"ok": False, "provider": c.provider, "model": c.model,
-                    "detail": f"{type(e).__name__}: indisponivel"}
+                    "detail": f"{type(e).__name__}: indisponivel{code}"}
 
 
 def friendly_error(e: Exception) -> str:
@@ -432,7 +436,7 @@ def friendly_error(e: Exception) -> str:
 
 
 # ---- reserva: se o provedor principal falhar, tenta o proximo ------------------------------
-MAX_FALLBACKS = 3
+MAX_FALLBACKS = 9  # 1 principal + 9 = ate 10 cerebros conectados
 COOLDOWN_S = 45.0
 _RETRY_STATUS = {401, 402, 403, 404, 408, 409, 425, 429}  # 402 = sem credito: troca de cerebro em vez de falhar
 LONG_COOLDOWN_S = 600.0  # sem credito ou chave recusada: nao adianta tentar de novo daqui a 45 s
@@ -452,18 +456,63 @@ def is_retryable(e: Exception) -> bool:
     return False
 
 
-def load_fallback_configs() -> list[LLMConfig]:
+def load_fallback_entries() -> list[tuple[str, LLMConfig]]:
+    """[(id do cerebro, configuracao)] das reservas validas, na ordem em que foram conectadas."""
     from src.jefrey.core.secret_store import read_secret
 
-    out: list[LLMConfig] = []
+    out: list[tuple[str, LLMConfig]] = []
     for item in (load_override().get("fallbacks") or [])[:MAX_FALLBACKS]:
         if not isinstance(item, dict) or item.get("provider") not in PROVIDERS or not item.get("model"):
             continue
         provider = item["provider"]
-        out.append(LLMConfig(provider=provider, model=str(item["model"]),
-                             base_url=_normalize_base(provider, str(item.get("base_url") or "")),
-                             api_key=read_secret(_fallback_key_file(str(item.get("id", "")))) if item.get("id") else None))
+        out.append((str(item.get("id", "")), LLMConfig(provider=provider, model=str(item["model"]),
+                                                      base_url=_normalize_base(provider, str(item.get("base_url") or "")),
+                                                      api_key=read_secret(_fallback_key_file(str(item.get("id", "")))) if item.get("id") else None)))
     return out
+
+
+def load_fallback_configs() -> list[LLMConfig]:
+    return [cfg for _, cfg in load_fallback_entries()]
+
+
+# ---- funcoes de cada cerebro (quem faz o que) e trabalho em equipe ----
+def load_roles() -> dict[str, list[str]]:
+    """{id do cerebro: funcoes}. Cerebro sem registro serve para tudo; com lista vazia, so como reserva."""
+    from src.jefrey.domain.llm_roles import clean_roles
+
+    raw = load_override().get("roles")
+    return {str(k): clean_roles(v) for k, v in raw.items()} if isinstance(raw, dict) else {}
+
+
+def load_team() -> list[str]:
+    from src.jefrey.domain.llm_roles import TEAM_ROLES, clean_roles
+
+    return [r for r in clean_roles(load_override().get("team")) if r in TEAM_ROLES]
+
+
+def _save_override_key(key: str, value: Any) -> None:
+    data = load_override()
+    data[key] = value
+    _config_dir().mkdir(parents=True, exist_ok=True)
+    _override_file().write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def save_roles(brain_id: str, roles: Optional[list[str]]) -> None:
+    """roles None apaga o registro (o cerebro volta a servir para tudo)."""
+    from src.jefrey.domain.llm_roles import clean_roles
+
+    cur = load_roles()
+    if roles is None:
+        cur.pop(brain_id, None)
+    else:
+        cur[brain_id] = clean_roles(roles)
+    _save_override_key("roles", cur)
+
+
+def save_team(roles: list[str]) -> None:
+    from src.jefrey.domain.llm_roles import TEAM_ROLES, clean_roles
+
+    _save_override_key("team", [r for r in clean_roles(roles) if r in TEAM_ROLES])
 
 
 def save_fallbacks(items: list[dict]) -> None:
@@ -505,28 +554,39 @@ def save_fallbacks(items: list[dict]) -> None:
 class RoutedLLM:
     """Mesma interface do LLMClient, com reserva. So troca de provedor ANTES de a resposta comecar."""
 
-    def __init__(self, clients: list[LLMClient], clock=time.monotonic):
+    def __init__(self, clients: list[LLMClient], clock=time.monotonic, roles: Optional[list] = None, team: tuple = ()):
         self.clients = clients
         self._clock = clock
         self._cool: dict[int, float] = {}
         self.last_label = ""
+        self.last_index = 0
+        self.roles: list = list(roles) if roles is not None else [None] * len(clients)  # funcoes de cada cerebro (None = serve para tudo)
+        self.team = tuple(team)  # funcoes em que dois cerebros trabalham juntos (um escreve, outro revisa)
 
     @property
     def config(self) -> LLMConfig:
         return self.clients[0].config
 
-    def _order(self) -> list[int]:
+    def _order(self, role: Optional[str] = None) -> list[int]:
         now = self._clock()
         ready = [i for i in range(len(self.clients)) if self._cool.get(i, 0) <= now]
-        return ready or [min(range(len(self.clients)), key=lambda i: self._cool.get(i, 0))]  # todos em espera: o que sai primeiro
+        base = ready or [min(range(len(self.clients)), key=lambda i: self._cool.get(i, 0))]  # todos em espera: o que sai primeiro
+        if role and any(r is not None for r in self.roles):
+            from src.jefrey.domain.llm_roles import order_by_role
 
-    async def stream_events(self, messages: list[Message], tools: Optional[list[dict]] = None) -> AsyncIterator[StreamItem]:
+            return order_by_role(base, self.roles, role)
+        return base
+
+    async def stream_events(self, messages: list[Message], tools: Optional[list[dict]] = None, role: Optional[str] = None) -> AsyncIterator[StreamItem]:
+        from src.jefrey.domain.llm_roles import effective_role
+
         last: Optional[Exception] = None
-        for i in self._order():
+        for i in self._order(effective_role(role, messages, tools)):
             client, started = self.clients[i], False
             try:
                 async for item in client.stream_events(messages, tools=tools):
                     started = True
+                    self.last_index = i
                     self.last_label = f"{client.config.provider}:{client.config.model}"
                     yield item
                 return
@@ -539,24 +599,55 @@ class RoutedLLM:
         if last is not None:
             raise last
 
-    async def stream(self, messages: list[Message]) -> AsyncIterator[str]:
-        async for item in self.stream_events(messages):
+    async def stream(self, messages: list[Message], role: Optional[str] = None) -> AsyncIterator[str]:
+        async for item in self.stream_events(messages, role=role):
             if isinstance(item, str):
                 yield item
 
-    async def chat(self, messages: list[Message]) -> str:
-        return "".join([t async for t in self.stream(messages)])
+    async def chat(self, messages: list[Message], role: Optional[str] = None) -> str:
+        draft = "".join([t async for t in self.stream(messages, role=role)])
+        if role in self.team and draft.strip():
+            return await self._review(messages, draft, role)
+        return draft
+
+    async def _review(self, messages: list[Message], draft: str, role: str) -> str:
+        """Trabalho em equipe: outro cerebro com a mesma funcao revisa o rascunho. Qualquer falha devolve o rascunho (nunca piora)."""
+        from src.jefrey.domain.llm_roles import review_messages
+
+        others = [i for i in self._order(role) if i != self.last_index and self.roles[i] is not None and role in self.roles[i]]
+        if not others:
+            return draft
+        try:
+            better = await self.clients[others[0]].chat(review_messages(messages, draft))
+        except Exception as e:
+            logger.info("revisao em equipe falhou (%s): fica o rascunho", type(e).__name__)
+            return draft
+        return better.strip() or draft
 
     async def health(self) -> dict:
         return await self.clients[0].health()
 
 
 def get_llm_client() -> "LLMClient | RoutedLLM":
+    from src.jefrey.domain.llm_roles import ROLES  # noqa: F401
+
     primary = LLMClient(config_from_settings())
-    extra = []
-    for cfg in load_fallback_configs():
+    extra: list[LLMClient] = []
+    ids: list[str] = [_primary_id(primary.config)]
+    for bid, cfg in load_fallback_entries():
         try:
             extra.append(LLMClient(cfg))
+            ids.append(bid)
         except LLMConfigError:
             continue  # reserva mal configurada nao derruba o principal
-    return RoutedLLM([primary, *extra]) if extra else primary
+    if not extra:
+        return primary
+    roles_map = load_roles()
+    roles = [set(roles_map[i]) if i in roles_map else None for i in ids]
+    return RoutedLLM([primary, *extra], roles=roles, team=tuple(load_team()))
+
+
+def _primary_id(cfg: LLMConfig) -> str:
+    from src.jefrey.adapters.outbound.brains import identify
+
+    return identify(cfg.provider, cfg.base_url)

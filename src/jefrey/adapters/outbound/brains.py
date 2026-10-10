@@ -25,7 +25,7 @@ CATALOG: list[dict[str, Any]] = [
      "provider": "openai", "base_url": "http://127.0.0.1:20128", "model": "gamehouse", "prefix": "",
      "key_url": "http://127.0.0.1:20128/dashboard"},
     {"id": "gemini", "name": "Gemini", "tagline": "Do Google. Tem plano gratuito.", "kind": "key", "recommended": True,
-     "provider": "openai", "base_url": "https://generativelanguage.googleapis.com/v1beta/openai", "model": "gemini-2.5-flash", "prefix": "AIza",
+     "provider": "openai", "base_url": "https://generativelanguage.googleapis.com/v1beta/openai", "model": "gemini-2.5-flash", "prefix": "",  # as chaves novas do AI Studio nem sempre comecam com AIza
      "key_url": "https://aistudio.google.com/apikey"},
     {"id": "openrouter", "name": "OpenRouter", "tagline": "Um login só dá acesso a vários cérebros.", "kind": "oneclick",
      "provider": "openai", "base_url": "https://openrouter.ai/api", "model": "openai/gpt-6-luna", "prefix": "sk-or-",
@@ -114,7 +114,14 @@ def state() -> dict:
             continue
         if it.get("provider") == "ollama" or read_secret(P._fallback_key_file(str(it["id"]))):
             out.append({"id": str(it["id"]), "role": "reserva", "model": str(it.get("model"))})
-    return {"brains": out, "catalog": public_catalog(), "max": MAX_BRAINS, "machine": machine()}
+    from src.jefrey.domain.llm_roles import ROLES, TEAM_ROLES
+
+    saved = P.load_roles()
+    for b in out:
+        b["roles"] = saved.get(b["id"], list(ROLES))  # sem registro: serve para tudo
+        b["all_roles"] = b["id"] not in saved
+    return {"brains": out, "catalog": public_catalog(), "max": MAX_BRAINS, "machine": machine(),
+            "roles": [{"id": k, "label": v} for k, v in ROLES.items()], "team": P.load_team(), "team_roles": list(TEAM_ROLES)}
 
 
 LOCAL_MIN_RAM_GB = 24.0  # abaixo disso, modelo local costuma ser fraco/lento: a conta na nuvem e a melhor escolha
@@ -213,7 +220,7 @@ async def connect(brain_id: str, key: Optional[str], *, primary: Optional[bool] 
 
 def _health_message(h: dict) -> str:
     d = str(h.get("detail", "")).lower()
-    if "401" in d or "403" in d or "unauthor" in d or "invalid" in d:
+    if "401" in d or "403" in d or "http 400" in d or "unauthor" in d or "invalid" in d:
         return "O serviço recusou esse código. Confira se copiou inteiro e se ainda está ativo."
     if "402" in d or "credit" in d or "billing" in d or "quota" in d:
         return "O código é válido, mas a conta está sem crédito. Adicione saldo no site do serviço."
@@ -291,6 +298,21 @@ def disconnect(brain_id: str) -> dict:
     if not any(e["id"] == brain_id for e in items):
         raise BrainError("Esse cérebro não está conectado.")
     _apply([e for e in items if e["id"] != brain_id])
+    P.save_roles(brain_id, None)
+    return state()
+
+
+def set_roles(brain_id: str, roles: Optional[list]) -> dict:
+    """Define o que este cerebro faz (None = serve para tudo). Lista vazia = so de reserva."""
+    if not any(e["id"] == brain_id for e in _entries()):
+        raise BrainError("Esse cérebro não está conectado.")
+    P.save_roles(brain_id, None if roles is None else list(roles))
+    return state()
+
+
+def set_team(roles: list) -> dict:
+    """Funcoes em que dois cerebros trabalham juntos (um escreve, outro revisa)."""
+    P.save_team(list(roles))
     return state()
 
 
