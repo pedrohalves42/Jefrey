@@ -58,4 +58,6 @@ jobs:
           JEFREY_EVENTBUS__HMAC_KEY: ci-so-para-validar-0123456789abcdef0123456789
           JEFREY_REDIS__PASSWORD: ci-so-para-validar-0123456789abcdef0123456789
           N8N_BASIC_AUTH_PASSWORD: ci-so-para-validar-0123456789abcdef0123456789
-        run: docker compose config -q
+        run: |
+          touch .env  # o compose le o .env (que nao vai para o Git); vazio basta para validar
+          docker compose config -q
