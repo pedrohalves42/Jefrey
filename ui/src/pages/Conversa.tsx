@@ -468,7 +468,7 @@ export default function Conversa() {
         {hud && <LivePanel />}
 
         {/* painel lateral: resumo do dia e saudacao ficam pequenos no canto, o cerebro continua inteiro */}
-        <aside className="pointer-events-none absolute bottom-2 left-3 z-20 hidden w-64 flex-col gap-2 lg:flex" aria-label="Resumo">
+        <aside className="pointer-events-none absolute bottom-2 right-3 z-20 hidden w-64 flex-col gap-2 lg:flex" aria-label="Resumo">
           <div className="pointer-events-auto"><BriefingCard /></div>
           {empty && (
             <div className="pointer-events-auto jf-glass rounded-xl px-3 py-2">
