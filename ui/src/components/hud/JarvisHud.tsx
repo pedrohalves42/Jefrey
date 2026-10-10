@@ -6,7 +6,7 @@ import { brainLine, buildLog, fmtUptime, gauges, getTelemetry, logTime, waveBars
 function Panel({ title, children, className = "" }: { title: string; children: ReactNode; className?: string }) {
   return (
     <section className={`jf-hudpanel jf-glass ${className}`} aria-label={title}>
-      <h3 className="mb-2 text-[10px] uppercase tracking-[0.28em] text-[hsl(var(--hue)_80%_72%)]">{title}</h3>
+      <h3 className="mb-2 text-xs font-medium tracking-wide text-[hsl(var(--hue)_55%_72%)]">{title}</h3>
       {children}
     </section>
   )
@@ -65,11 +65,11 @@ export function HudOverlay({ messages, activity }: { messages: Message[]; activi
     <>
       <Panel title="Registro" className="pointer-events-none absolute bottom-3 left-3 z-10 hidden w-56 2xl:block">
         {log.length === 0 ? (
-          <p className="text-[11px] text-white/50">Tudo quieto.</p>
+          <p className="text-xs text-white/50">Tudo quieto.</p>
         ) : (
           <ul className="space-y-1" aria-live="polite">
             {log.map((l, i) => (
-              <li key={i} className={`text-[11px] leading-snug ${l.tone === "ok" ? "text-emerald-200" : l.tone === "bad" ? "text-red-300" : l.tone === "warn" ? "text-amber-200" : "text-white/70"}`}>
+              <li key={i} className={`text-xs leading-snug ${l.tone === "ok" ? "text-emerald-200" : l.tone === "bad" ? "text-red-300" : l.tone === "warn" ? "text-amber-200" : "text-white/70"}`}>
                 <span className="mr-1.5 tabular-nums text-white/35">{logTime(l.at)}</span>
                 {l.text}
               </li>

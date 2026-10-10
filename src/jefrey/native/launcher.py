@@ -520,6 +520,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         control.set_messages_hook(shell.show_messages)
         control.set_site_hooks(shell.show_site, shell.site_counts)
         control.set_publish_hook(shell.publish_site)
+        control.set_screen_hook(shell.grab_screen)
     tray =None if no_tray else start_tray(url, logs_dir, quit_all, on_open=shell.show if shell else None, on_orb=shell.show_orb if shell else None, on_restart=restart_self,
                      on_messages=(lambda: shell.show_messages()) if shell else None)
     if shell is not None and tray is not None:
@@ -554,6 +555,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         control.set_messages_hook(None)
         control.set_site_hooks(None, None)
         control.set_publish_hook(None)
+        control.set_screen_hook(None)
         control.set_restart_hook(None)
         quit_watch_stop.set()
         if tray is not None:

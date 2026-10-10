@@ -12,6 +12,9 @@ def approval_detail(tool: str, args: Mapping[str, Any]) -> str:
     """Resumo dos argumentos de uma ferramenta de risco, so para as que enviam algo a outra pessoa. Vazio = sem detalhe."""
     if tool == "wa_send_message":
         return f"Para {_line(args.get('contact'), 60)}: “{_line(args.get('message'), 280)}”"
+    if tool == "screen_look":
+        q = _line(args.get("question"), 120)
+        return "Vou tirar uma foto da sua tela e mandar para a inteligência na nuvem" + (f": “{q}”" if q else "") + ". A imagem não fica guardada."
     if tool == "social_publish":
         extra = " (com as imagens do carrossel)" if args.get("folder") else ""
         return f"Publicar no {_line(args.get('network'), 20)}{extra}: “{_line(args.get('text'), 280)}”"

@@ -69,8 +69,8 @@ export function AppShell() {
       {/* barra lateral (desktop) */}
       <nav className="jf-panel m-3 mr-0 hidden w-56 shrink-0 flex-col p-3 md:flex" aria-label="Principal">
         <div className="mb-5 flex items-center gap-2 px-2 pt-1">
-          <span className="jf-orb !h-6 !w-6" aria-hidden="true" />
-          <span className="text-lg font-semibold tracking-tight text-white">Jefrey</span>
+          <span className="h-2.5 w-2.5 rounded-full bg-[hsl(var(--hue)_70%_62%)] shadow-[0_0_14px_hsl(var(--hue)_70%_55%/0.7)]" aria-hidden="true" />
+          <span className="jf-brand text-2xl text-white">Jefrey</span>
         </div>
         <ul className="space-y-1">
           {items.map(i => (
@@ -79,8 +79,8 @@ export function AppShell() {
                 to={i.to}
                 end={i.end}
                 className={({ isActive }) =>
-                  `jf-focus flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${
-                    isActive ? "bg-white/10 text-white jf-accent" : "text-white/65 hover:bg-white/5 hover:text-white"
+                  `jf-focus flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] ${
+                    isActive ? "bg-[hsl(var(--hue)_40%_28%/0.38)] text-white" : "text-white/60 hover:bg-white/5 hover:text-white"
                   }`
                 }
               >

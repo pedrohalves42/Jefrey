@@ -18,7 +18,7 @@
     --input: 217 32% 17%;
     --ring: 199 89% 48%;
     --radius: 0.75rem;
-    --hue: 191;
+    --hue: 32;
     --glass: rgba(6,182,214,0.08);
     --glass-border: rgba(34,211,238,0.18);
     --neon: 34 211 238;
@@ -307,3 +307,65 @@ html[data-easy="1"] .text-white\/65, html[data-easy="1"] .text-white\/70 { color
   .jf-rise, .jf-fade, .jf-flash-up, .jf-flash-down, .jf-progress { animation: none; }
   .jf-ticker { animation: none; flex-wrap: wrap; width: auto; }
 }
+
+
+/* ===== Identidade do Jefrey: calma, calor e clareza =====
+ * Sem neon, sem molduras de HUD e sem linhas de varredura. Paleta quente (a cor principal continua escolhida em Aparencia),
+ * titulos em fonte com serifa (a que ja vem no Windows) e superficies solidas e suaves. Este bloco vem por ultimo e vence os anteriores. */
+:root {
+  --background: 24 14% 6%;
+  --foreground: 36 33% 93%;
+  --card: 24 12% 9%;
+  --card-foreground: 36 33% 93%;
+  --muted-foreground: 30 12% 66%;
+  --border: 24 10% 18%;
+  --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+}
+html { font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+body {
+  background:
+    radial-gradient(1000px 520px at 50% -8%, hsl(var(--hue) 45% 30% / 0.20), transparent 65%),
+    hsl(var(--background));
+}
+main h1, main h2, .jf-serif, .jf-brand { font-family: var(--font-display); letter-spacing: -0.01em; font-weight: 500; }
+
+.jf-panel {
+  background: hsl(24 12% 10% / 0.92);
+  border: 1px solid hsl(30 20% 80% / 0.09);
+  border-radius: 20px;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+  box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.03), 0 14px 30px -20px #000;
+}
+.jf-btn {
+  background: hsl(var(--hue) 70% 62%);
+  border: 0;
+  color: hsl(24 30% 8%);
+  font-weight: 600;
+  border-radius: 999px;
+}
+.jf-btn:hover:not(:disabled) { background: hsl(var(--hue) 75% 69%); }
+.jf-accent { color: hsl(var(--hue) 65% 72%); }
+.jf-glass {
+  background: hsl(24 12% 9% / 0.8);
+  border: 1px solid hsl(30 20% 80% / 0.09);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.jf-stage {
+  background: radial-gradient(ellipse at 50% 38%, hsl(var(--hue) 50% 20% / 0.55), transparent 66%), hsl(24 14% 5%);
+  border: 0; box-shadow: none; border-radius: 28px;
+}
+.jf-stage::after, .jf-corner, .jf-rings { display: none; }
+.jf-stage-core { filter: drop-shadow(0 0 calc(6px + var(--pulse) * 34px) hsl(var(--hue) 80% 60% / calc(0.08 + var(--pulse) * 0.45))); }
+.jf-hudpanel {
+  border: 0; border-radius: 16px; padding: 12px 14px;
+  background: hsl(24 12% 9% / 0.62);
+  font-family: inherit;
+}
+.jf-hudpanel::before, .jf-hudpanel::after { display: none; }
+.jf-chip:hover { box-shadow: 0 6px 20px -8px hsl(var(--hue) 70% 55% / 0.45); }
+.jf-bubble-user { background: hsl(var(--hue) 45% 30% / 0.35); border: 1px solid hsl(var(--hue) 40% 60% / 0.25); }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: hsl(30 15% 60% / 0.28); }
+::-webkit-scrollbar-thumb:hover { background: hsl(30 15% 60% / 0.45); }
+/* janela baixa ou estreita: os paineis do canto saem do caminho do cerebro (ele e a estrela) */
+@media (max-height: 780px), (max-width: 1180px) { .jf-hudpanel { display: none; } }

@@ -11,6 +11,7 @@ _messages: Optional[Callable[[str], bool]] = None
 _site: Optional[Callable[[str], bool]] = None
 _site_counts: Optional[Callable[[], dict]] = None
 _publish: Optional[Callable[..., dict]] = None
+_screen: Optional[Callable[[], object]] = None
 
 
 def set_restart_hook(fn: Optional[Callable[[], None]]) -> None:
@@ -26,6 +27,19 @@ def set_messages_hook(fn: Optional[Callable[[str], bool]]) -> None:
 def set_site_hooks(open_fn: Optional[Callable[[str], bool]], counts_fn: Optional[Callable[[], dict]]) -> None:
     global _site, _site_counts
     _site, _site_counts = open_fn, counts_fn
+
+
+def set_screen_hook(fn: Optional[Callable[[], object]]) -> None:
+    global _screen
+    _screen = fn
+
+
+def grab_screen():
+    """Foto da tela com a janela do Jefrey escondida (None se nao ha janela propria)."""
+    try:
+        return _screen() if _screen is not None else None
+    except Exception:
+        return None
 
 
 def set_publish_hook(fn: Optional[Callable[..., dict]]) -> None:

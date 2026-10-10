@@ -314,6 +314,30 @@ class LLMClient:
         self._record(started, messages, text)
         return text
 
+    async def describe_image(self, prompt: str, system: str, jpeg_b64: str) -> str:
+        """Pergunta algo sobre uma imagem (JPEG em base64). Cerebro local (Ollama) nao ve: levanta LLMConfigError."""
+        c = self.config
+        if c.provider == "ollama":
+            raise LLMConfigError("este cérebro local não vê imagens")
+        url, headers, _ = self._request([{"role": "user", "content": "x"}], stream=False)
+        if c.provider == "openai":
+            body: dict[str, Any] = {
+                "model": c.model, "stream": False, "max_tokens": 900, "temperature": 0.2,
+                "messages": [{"role": "system", "content": system},
+                             {"role": "user", "content": [{"type": "text", "text": prompt},
+                                                          {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{jpeg_b64}"}}]}],
+            }
+        else:
+            body = {
+                "model": c.model, "max_tokens": 900, "temperature": 0.2, "system": system,
+                "messages": [{"role": "user", "content": [{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": jpeg_b64}},
+                                                          {"type": "text", "text": prompt}]}],
+            }
+        async with self._client() as client:
+            resp = await client.post(url, headers=headers, json=body)
+            resp.raise_for_status()
+            return self._extract_full(resp.json())
+
     def _extract_full(self, data: dict) -> str:
         p = self.config.provider
         if p == "ollama":
@@ -609,6 +633,23 @@ class RoutedLLM:
         if role in self.team and draft.strip():
             return await self._review(messages, draft, role)
         return draft
+
+    async def describe_image(self, prompt: str, system: str, jpeg_b64: str) -> str:
+        """Tenta os cerebros que veem imagens (funcao "visao" primeiro) ate um responder."""
+        last: Optional[Exception] = None
+        for i in self._order("visao"):
+            try:
+                out = await self.clients[i].describe_image(prompt, system, jpeg_b64)
+            except Exception as e:
+                last = e
+                if is_retryable(e):
+                    self._cool[i] = self._clock() + COOLDOWN_S
+                continue
+            if out.strip():
+                return out
+        if last is not None:
+            raise last
+        return ""
 
     async def _review(self, messages: list[Message], draft: str, role: str) -> str:
         """Trabalho em equipe: outro cerebro com a mesma funcao revisa o rascunho. Qualquer falha devolve o rascunho (nunca piora)."""

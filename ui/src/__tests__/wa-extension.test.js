@@ -499,3 +499,55 @@ describe("editor do WhatsApp que atualiza o texto um instante depois (Lexical)",
     expect(C.composerText(document)).toBe("abc")
   })
 })
+
+describe("WhatsApp no formato atual da pagina (conv-msg)", () => {
+  let C
+  beforeEach(() => {
+    C = loadCore()
+  })
+
+  const msg = (id, text, me, label) =>
+    `<div role="row"><div data-testid="conv-msg-${id}" data-id="${id}"><div data-testid="msg-container">${me ? '<span data-icon="tail-out"></span>' : '<span data-icon="tail-in"></span>'}
+      <span aria-label="${label}"></span><span data-testid="selectable-text">${text}</span></div></div></div>`
+
+  function pagina(rows, sub = "online") {
+    document.body.innerHTML = `<div id="main"><header><span dir="auto" title="Maria">Maria</span><span dir="auto" title="${sub}">${sub}</span></header><div>${rows}</div>
+      <footer><div contenteditable="true" data-tab="10"><p><br></p></div></footer></div>`
+  }
+
+  it("le as mensagens, quem enviou e o tipo", () => {
+    pagina(msg("AAA111", "oi, tudo bem?", false, "Maria:") + msg("BBB222", "tudo sim!", true, "Você:") + msg("CCC333", "", false, "Maria:"))
+    const r = C.parseRows(document)
+    expect(r.map(x => [x.id, x.from_me, x.kind, x.text])).toEqual([["AAA111", false, "text", "oi, tudo bem?"], ["BBB222", true, "text", "tudo sim!"], ["CCC333", false, "other", ""]])
+  })
+
+  it("mensagem minha sem 'cauda' (seguida de outra minha) continua sendo minha pelo rotulo", () => {
+    pagina(`<div role="row"><div data-testid="conv-msg-X1" data-id="X1"><span aria-label="Você:"></span><span data-testid="selectable-text">segunda seguida</span></div></div>`)
+    expect(C.parseRows(document)[0]).toMatchObject({ from_me: true, text: "segunda seguida" })
+    pagina(`<div role="row"><div data-testid="conv-msg-X2" data-id="X2"><span aria-label="You:"></span><span data-testid="selectable-text">in english</span></div></div>`)
+    expect(C.parseRows(document)[0].from_me).toBe(true)
+  })
+
+  it("grupo pelo subtitulo com participantes; conversa individual nao", () => {
+    pagina(msg("A1", "oi", false, "Ana:"), "Ana, Beto, Você")
+    expect(C.isGroup(document)).toBe(true)
+    pagina(msg("A1", "oi", false, "Maria:"), "online")
+    expect(C.isGroup(document)).toBe(false)
+    pagina(msg("A1", "oi", false, "Maria:"), "visto por último hoje às 19:29")
+    expect(C.isGroup(document)).toBe(false)
+  })
+
+  it("o formato antigo (data-id true_/false_) continua funcionando", () => {
+    document.body.innerHTML = `<div id="main"><header><span dir="auto" title="Maria">Maria</span></header>
+      <div data-id="true_5511@c.us_ABC"><span class="selectable-text copyable-text">antigo meu</span></div>
+      <div data-id="false_5511@c.us_DEF"><span class="selectable-text copyable-text">antigo dela</span></div></div>`
+    expect(C.parseRows(document).map(r => [r.from_me, r.text])).toEqual([[true, "antigo meu"], [false, "antigo dela"]])
+  })
+
+  it("mensagens novas e comandos da conversa com voce mesmo funcionam no formato novo", () => {
+    pagina(msg("N1", "que horas são?", true, "Você:") + msg("N2", "🤖 São 10 horas", true, "Você:") + msg("N3", "oi", false, "Maria:"))
+    const rows = C.parseRows(document)
+    expect(C.newCommands(rows, new Set()).map(r => r.text)).toEqual(["que horas são?"])
+    expect(C.newIncoming(rows, new Set(["N3"])).length).toBe(0)
+  })
+})

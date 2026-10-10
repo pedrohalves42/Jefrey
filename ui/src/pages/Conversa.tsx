@@ -14,6 +14,7 @@ import { useActivity } from "@/hooks/useActivity"
 import { ambientLabel } from "@/lib/briefing"
 import BriefingCard from "@/components/BriefingCard"
 import { HudOverlay, Wave } from "@/components/hud/JarvisHud"
+import { plainText } from "@/lib/utils"
 import { haltComputer } from "@/lib/halt"
 import QuickActions from "@/components/QuickActions"
 import LearnedToast from "@/components/LearnedToast"
@@ -45,6 +46,9 @@ const SUGGESTIONS = [
   "Quais são meus lembretes?",
   "O que você consegue fazer por mim?",
 ]
+
+/** Ferramentas que respondem na hora: nao precisam do "um instante". */
+const FAST_TOOLS = new Set(["current_time", "calculator", "list_reminders"])
 
 export default function Conversa() {
   const init = useMemo(initThreads, [])
@@ -179,11 +183,14 @@ export default function Conversa() {
     const ctrl = new AbortController()
     abortRef.current = ctrl
     const sb = new SentenceBuffer()
+    let acked = false // ja falou o "um instante" nesta resposta?
+    let gotAnyToken = false
     const result = await streamChat(
       text,
       tid,
       {
         onToken: chunk => {
+          gotAnyToken = true
           setGotToken(true)
           if (voiceReplyRef.current) sb.push(chunk).forEach(speaker.say)
           updateThread(tid, t => ({
@@ -194,13 +201,18 @@ export default function Conversa() {
         onPendingApproval: id => setPendingApproval({ id: id ?? null }),
         onRecall: items =>
           updateThread(tid, t => ({ ...t, messages: t.messages.map(m => (m.id === aiMsg.id ? { ...m, recall: items } : m)) })),
-        onToolStart: (tool, label, risk) =>
+        onToolStart: (tool, label, risk) => {
+          if (!acked && !gotAnyToken && voiceReplyRef.current && risk !== "high" && !FAST_TOOLS.has(tool)) {
+            acked = true
+            speaker.say("Um instante, já vejo isso.")
+          }
           updateThread(tid, t => ({
             ...t,
             messages: t.messages.map(m =>
               m.id === aiMsg.id ? { ...m, tools: [...(m.tools ?? []), { tool, label, risk, state: "running" } as ToolStep] } : m,
             ),
-          })),
+          }))
+        },
         onApprovalRequired: (id, tool, label, detail) => {
           setPendingApproval({ id, label, detail })
           updateThread(tid, t => ({
@@ -449,18 +461,16 @@ export default function Conversa() {
       <section className="jf-stage relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl" aria-label="Conversa com o Jefrey">
         <div className="relative min-h-0 basis-[80%] grow-0 shrink" onPointerMove={onTilt} onPointerLeave={offTilt}>
         <div ref={stageRef} className="jf-stage-core absolute inset-0 will-change-transform">
-        <div className="jf-rings" aria-hidden="true" />
           <div ref={tiltRef} className="jf-tilt h-full w-full cursor-pointer" role="button" tabIndex={0} aria-label="Toque no avatar para falar com o Jefrey" onClick={() => void toggleVoiceMode()} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); void toggleVoiceMode() } }}>
           <BrainStage state={brainState} level={speaker.speaking ? Math.max(micLevel, voiceLvl, 0.25) : micLevel} note={streaming || listeningNow ? null : note} className="h-full w-full" />
         </div>
         </div>
-        <span className="jf-corner jf-corner-tl" /><span className="jf-corner jf-corner-tr" /><span className="jf-corner jf-corner-bl" /><span className="jf-corner jf-corner-br" />
 
         {/* topo: relogio, estado e atalhos */}
         <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between p-3">
           <button type="button" onClick={() => setShowList(v => !v)} className={`jf-focus pointer-events-auto rounded-md border border-white/15 bg-black/40 px-2.5 py-1 text-xs text-white/75 md:hidden ${easy ? "hidden" : ""}`}>Conversas</button>
           <button type="button" onClick={() => setTodayOpen(true)} className="jf-focus jf-chip pointer-events-auto ml-auto mr-3 rounded-full border border-white/20 bg-black/40 px-3 py-1 text-xs text-white/85">☀️ Hoje</button>
-          <span className="text-xs tabular-nums tracking-[0.3em] text-[hsl(var(--hue)_80%_75%)] opacity-80">
+          <span className="jf-serif text-lg tabular-nums text-[hsl(var(--hue)_55%_78%)] opacity-90">
             {clock.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
           </span>
         </div>
@@ -488,7 +498,7 @@ export default function Conversa() {
         </div>
 
         {/* doca: legenda, atalhos, voz, texto e opcoes (fora do cerebro, nunca por cima dele) */}
-        <div className="relative z-30 flex min-h-[8.75rem] basis-[20%] grow shrink-0 flex-col items-center justify-center gap-1.5 overflow-y-auto border-t border-white/10 bg-black/50 px-4 py-2">
+        <div className="relative z-30 flex min-h-[8.75rem] basis-[20%] grow shrink-0 flex-col overflow-y-auto border-t border-white/[0.07] bg-[hsl(24_14%_5%/0.7)] px-4 py-2"><div className="my-auto flex w-full flex-col items-center gap-1.5">
           <div className="w-full max-w-lg lg:hidden"><BriefingCard /></div>
           <LearnedToast streaming={streaming} />
           <QuickActions onAsk={t => void send(t)} onSummary={() => void speakSummary()} busy={summaryBusy} />
@@ -499,7 +509,7 @@ export default function Conversa() {
               {streaming && !caption ? (
                 <span className="jf-typing" aria-label="Jefrey está pensando"><span /><span /><span /></span>
               ) : (
-                <p className={`text-[15px] leading-snug ${lastAi?.error ? "text-red-200" : "text-white/95"} line-clamp-2`}>{caption}</p>
+                <p className={`text-[15px] leading-snug ${lastAi?.error ? "text-red-200" : "text-white/95"} line-clamp-3`}>{plainText(caption)}</p>
               )}
               {lastAi?.recall && lastAi.recall.length > 0 && <p className="mt-1 text-xs text-white/55"><span className="jf-accent">Lembrei:</span> {lastAi.recall.map(r => r.text).join(" · ")}</p>}
               {caption.length > 220 && <button type="button" onClick={() => setDrawer(true)} className="jf-focus mt-1 text-xs text-[hsl(var(--hue)_80%_75%)] underline">ver tudo</button>}
@@ -565,6 +575,7 @@ export default function Conversa() {
           {listener.supported && unclear && view.tone === "listening" && <p role="status" className="text-sm text-amber-200">Não entendi. Pode repetir, devagar?</p>}
           {listener.supported && voiceReady.error && <p role="alert" className="text-center text-sm text-red-200">{voiceReady.error}</p>}
           {listener.error && <p role="alert" className="text-center text-xs text-red-300">{listener.error}</p>}
+        </div>
         </div>
 
         {/* gaveta do historico */}

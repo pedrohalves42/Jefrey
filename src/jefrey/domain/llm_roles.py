@@ -14,6 +14,7 @@ ROLES: dict[str, str] = {
     "escrita": "Escrever textos (posts, carrosséis, mensagens)",
     "estudo": "Estudar e pesquisar",
     "resumo": "Resumos e aprendizado em segundo plano",
+    "visao": "Ver a tela e imagens",
 }
 TEAM_ROLES = ("escrita", "estudo")  # funcoes em que dois cerebros podem trabalhar juntos (um escreve, outro revisa)
 SHORT_MESSAGE_CHARS = 60  # conversa curta sem ferramentas: vai para quem e bom em resposta rapida

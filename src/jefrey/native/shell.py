@@ -341,6 +341,20 @@ class DesktopShell:
             logger.warning("publicar em %s falhou (%s)", net_id, type(e).__name__)
             return {"ok": False, "message": "Não consegui publicar agora. Confira a janela da rede."}
 
+    def grab_screen(self):
+        """Foto da tela: esconde as janelas do Jefrey (senao a foto seria dele mesmo), espera, tira e mostra de novo."""
+        from PIL import ImageGrab
+
+        was_visible = self.main is not None
+        try:
+            if was_visible:
+                self.hide()
+                time.sleep(0.9)
+            return ImageGrab.grab()
+        finally:
+            if was_visible and not self.quitting:
+                self.show()
+
     def site_counts(self) -> dict:
         return dict(self._site_counts)
 

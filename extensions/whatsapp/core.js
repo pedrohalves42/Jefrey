@@ -35,16 +35,56 @@
     return "";
   }
 
+  /* O WhatsApp muda a pagina de tempos em tempos. Formato de hoje: cada mensagem e um elemento data-testid="conv-msg-<ID>" (com data-id).
+   * Formato antigo: data-id="true_..."/"false_...". Os dois sao aceitos. */
+  var LEGACY_ID = /^(true|false)_/;
+
   function rowNodes(doc) {
-    return Array.prototype.slice.call(doc.querySelectorAll("#main [data-id]")).filter(function (el) {
-      return /^(true|false)_/.test(el.getAttribute("data-id") || "");
+    var out = [];
+    var seen = [];
+    function add(el) {
+      if (seen.indexOf(el) === -1) {
+        seen.push(el);
+        out.push(el);
+      }
+    }
+    Array.prototype.forEach.call(doc.querySelectorAll("#main [data-testid^='conv-msg-']"), add);
+    Array.prototype.forEach.call(doc.querySelectorAll("#main [data-id]"), function (el) {
+      if (LEGACY_ID.test(el.getAttribute("data-id") || "")) add(el);
     });
+    return out;
   }
 
-  /* Grupo: o identificador das mensagens termina em @g.us. Grupos nunca sao atendidos. */
+  /* Identificador estavel da mensagem (nunca vazio). */
+  function rowId(el) {
+    var d = el.getAttribute("data-id") || "";
+    if (d) return d;
+    var t = el.getAttribute("data-testid") || "";
+    return t.indexOf("conv-msg-") === 0 ? t.slice("conv-msg-".length) : t;
+  }
+
+  /* Foi a propria pessoa que enviou? Antigo: prefixo true_. Novo: o rotulo "Voce:" (leitor de tela) ou a "cauda" de mensagem enviada. */
+  function rowFromMe(el) {
+    var d = el.getAttribute("data-id") || "";
+    if (LEGACY_ID.test(d)) return d.indexOf("true_") === 0;
+    var lab = el.querySelector('span[aria-label$=":"]');
+    if (lab && /^(voc[eê]|you)\s*:$/i.test((lab.getAttribute("aria-label") || "").trim())) return true;
+    return !!el.querySelector('[data-icon="tail-out"]');
+  }
+
+  /* Grupo: no formato antigo o identificador termina em @g.us; no novo, o subtitulo do cabecalho lista os participantes ("Ana, Beto, Voce"). */
   function isGroup(doc) {
-    return rowNodes(doc).some(function (el) {
+    var legacy = Array.prototype.slice.call(doc.querySelectorAll("#main [data-id]")).some(function (el) {
       return (el.getAttribute("data-id") || "").indexOf("@g.us") !== -1;
+    });
+    if (legacy) return true;
+    var head = doc.querySelector("#main header");
+    if (!head) return false;
+    var sub = Array.prototype.slice.call(head.querySelectorAll("span[dir], span[title]")).map(function (n) {
+      return (n.getAttribute("title") || n.textContent || "").trim();
+    });
+    return sub.some(function (t) {
+      return /,/.test(t) && /(^|,\s*)(voc[eê]|you)(\s*,|\s*$)/i.test(t);
     });
   }
 
@@ -68,10 +108,10 @@
   /* [{id, text, from_me, kind}] na ordem da tela. kind: "text" ou "other" (audio, imagem, figurinha...). */
   function parseRows(doc) {
     return rowNodes(doc).map(function (el) {
-      var id = el.getAttribute("data-id") || "";
+      var id = rowId(el);
       var text = rowText(el);
       // sem texto = audio, imagem, figurinha ou outro tipo: o Jefrey nunca responde sozinho a isso (pede aprovacao)
-      return { id: id, text: text.slice(0, 2000), from_me: id.indexOf("true_") === 0, kind: text ? "text" : "other" };
+      return { id: id, text: text.slice(0, 2000), from_me: rowFromMe(el), kind: text ? "text" : "other" };
     });
   }
 

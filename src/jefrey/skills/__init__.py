@@ -230,6 +230,7 @@ def load_skills() -> int:
         "src.jefrey.skills.google_extras",
         "src.jefrey.skills.whatsapp",
         "src.jefrey.skills.social",
+        "src.jefrey.skills.vision",
         "src.jefrey.skills.risk_assessment",
     ]
     loaded = 0

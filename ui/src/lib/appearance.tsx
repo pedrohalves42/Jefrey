@@ -16,7 +16,7 @@ export type Appearance = {
 }
 
 export const DEFAULT_APPEARANCE: Appearance = {
-  hue: 191,
+  hue: 32,
   shape: "brain",
   intensity: 0.7,
   particles: 0.6,
@@ -29,6 +29,7 @@ export const DEFAULT_APPEARANCE: Appearance = {
 }
 
 export const PRESETS: { id: string; label: string; value: Partial<Appearance> }[] = [
+  { id: "jefrey", label: "Jefrey (cobre, padrão)", value: { hue: 32, shape: "brain", intensity: 0.7 } },
   { id: "stark", label: "Stark (ciano)", value: { hue: 191, shape: "reactor", intensity: 0.8 } },
   { id: "holo", label: "Holograma", value: { hue: 191, shape: "hologram", intensity: 0.85, holoScan: 0.55, holoGlitch: 0.3 } },
   { id: "neural", label: "Neural (violeta)", value: { hue: 268, shape: "brain", intensity: 0.7 } },
@@ -37,7 +38,7 @@ export const PRESETS: { id: string; label: string; value: Partial<Appearance> }[
   { id: "calmo", label: "Calmo (sem animacao)", value: { hue: 210, shape: "orb", intensity: 0.4, motion: false } },
 ]
 
-const KEY = "jefrey_appearance_v1"
+const KEY = "jefrey_appearance_v2" // v2: identidade nova (cobre); quem personalizou antes escolhe de novo em Aparencia
 
 function clamp(n: unknown, lo: number, hi: number, fallback: number): number {
   const v = typeof n === "number" && Number.isFinite(n) ? n : fallback
