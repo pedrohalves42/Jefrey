@@ -8,6 +8,8 @@ _show: Optional[Callable[[], None]] = None
 _orb: Optional[Callable[[], None]] = None
 _restart: Optional[Callable[[], None]] = None
 _messages: Optional[Callable[[str], bool]] = None
+_site: Optional[Callable[[str], bool]] = None
+_site_counts: Optional[Callable[[], dict]] = None
 
 
 def set_restart_hook(fn: Optional[Callable[[], None]]) -> None:
@@ -18,6 +20,24 @@ def set_restart_hook(fn: Optional[Callable[[], None]]) -> None:
 def set_messages_hook(fn: Optional[Callable[[str], bool]]) -> None:
     global _messages
     _messages = fn
+
+
+def set_site_hooks(open_fn: Optional[Callable[[str], bool]], counts_fn: Optional[Callable[[], dict]]) -> None:
+    global _site, _site_counts
+    _site, _site_counts = open_fn, counts_fn
+
+
+def open_site(net_id: str) -> bool:
+    """Abre a janela de uma rede social (Instagram, Facebook, X, Telegram). So no programa nativo."""
+    return bool(_site(net_id)) if _site is not None else False
+
+
+def site_counts() -> dict:
+    """{rede: novidades} das janelas ja abertas (pelo titulo da pagina)."""
+    try:
+        return dict(_site_counts()) if _site_counts is not None else {}
+    except Exception:
+        return {}
 
 
 def open_messages(user_id: str) -> bool:

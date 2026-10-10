@@ -115,6 +115,21 @@ async def open_messages(request: Request):
     return {"ok": True}
 
 
+@router.post("/site/{net_id}")
+async def open_site(net_id: str, request: Request):
+    """Abre a janela de uma rede social dentro do Jefrey (WhatsApp, Instagram, Facebook, X, Telegram)."""
+    uid = _login(request)
+    from src.jefrey.domain.social import NETWORKS
+    from src.jefrey.native import control
+
+    if net_id not in NETWORKS:
+        raise HTTPException(status_code=404, detail="rede desconhecida")
+    ok = control.open_messages(uid) if net_id == "whatsapp" else control.open_site(net_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="indisponivel neste modo")
+    return {"ok": True}
+
+
 @router.post("/restart")
 async def restart_app(request: Request, background: BackgroundTasks):
     """Fecha e abre o Jefrey de novo (so no programa instalado/nativo)."""

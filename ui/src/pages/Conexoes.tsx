@@ -6,6 +6,7 @@ import { disconnectGoogle, getGoogle, saveGoogleCredentials, googleReturnMessage
 import AlexaTab from "@/components/AlexaTab"
 import WaCompose from "@/components/WaCompose"
 import Cerebros from "@/components/Cerebros"
+import Redes from "@/components/Redes"
 import {
   MODE_LABEL, minutesLeft, sortChats, waForgetAll, waInbox, waOpenFolder, waPairing, waRevoke, waSetMode, waSetPaused, waStatus, WA_PRIVACY_NOTE, WA_RISK_NOTE,
   type WaChat, type WaInboxItem, type WaMode, type WaStatus,
@@ -432,6 +433,7 @@ const TABS = [
   { id: "cerebros", label: "Cérebros" },
   { id: "google", label: "Google" },
   { id: "whatsapp", label: "WhatsApp" },
+  { id: "redes", label: "Redes" },
   { id: "alexa", label: "Alexa" },
 ] as const
 type TabId = (typeof TABS)[number]["id"]
@@ -474,6 +476,7 @@ export default function Conexoes() {
         {tab === "cerebros" && <Cerebros />}
         {tab === "google" && <Google />}
         {tab === "whatsapp" && <WhatsApp />}
+        {tab === "redes" && <Redes />}
         {tab === "alexa" && <AlexaTab />}
       </div>
     </div>

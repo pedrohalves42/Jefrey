@@ -213,6 +213,8 @@ class DesktopShell:
         self._on_tray_notice: Optional[Callable[[str, str], None]] = None
         self._stop = threading.Event()
         self.fullscreen = True
+        self.sites: dict = {}  # janelas das outras redes (Instagram, Facebook, X, Telegram)
+        self._site_counts: dict = {}
         self.messages = None  # janela "Mensagens" (WhatsApp Web dentro do app), criada so quando preciso
         self._bridge = None
 
@@ -266,6 +268,85 @@ class DesktopShell:
         except Exception as e:
             logger.warning("janela de mensagens indisponivel (%s)", type(e).__name__)
             return False
+
+    # ---- outras redes: janela com login guardado, sem robo; o Jefrey so conta as novidades pelo titulo da pagina ----
+    def _sites_file(self) -> Path:
+        return self.home / "config" / "sites.json"
+
+    def _remember_site(self, net_id: str) -> None:
+        try:
+            cur = json.loads(self._sites_file().read_text(encoding="utf-8"))
+            cur = [x for x in cur if isinstance(x, str)]
+        except (OSError, ValueError):
+            cur = []
+        if net_id not in cur:
+            self._sites_file().parent.mkdir(parents=True, exist_ok=True)
+            self._sites_file().write_text(json.dumps(cur + [net_id]), encoding="utf-8")
+
+    def _ensure_site(self, net_id: str, hidden: bool) -> bool:
+        from src.jefrey.domain.social import NETWORKS
+
+        if net_id == "whatsapp" or net_id not in NETWORKS:
+            return False
+        if net_id in self.sites:
+            return True
+        try:
+            import webview
+
+            name, url = NETWORKS[net_id]
+            win = webview.create_window(f"Jefrey · {name}", url=url, width=1180, height=800, min_size=(760, 520), background_color="#101418",
+                                        text_select=True, hidden=hidden)
+
+            def closing():
+                if self.quitting:
+                    return True
+                try:
+                    win.hide()
+                except Exception as e:
+                    logger.debug("hide %s: %s", net_id, type(e).__name__)
+                return False
+
+            win.events.closing += closing
+            self.sites[net_id] = win
+            self._remember_site(net_id)
+            return True
+        except Exception as e:
+            logger.warning("janela de %s indisponivel (%s)", net_id, type(e).__name__)
+            return False
+
+    def show_site(self, net_id: str) -> bool:
+        if not self._ensure_site(net_id, hidden=False):
+            return False
+        try:
+            self.sites[net_id].show()
+            self.sites[net_id].restore()
+        except Exception as e:
+            logger.info("nao consegui mostrar %s (%s)", net_id, type(e).__name__)
+        return True
+
+    def site_counts(self) -> dict:
+        return dict(self._site_counts)
+
+    def start_sites_hidden(self) -> None:
+        """As redes que a pessoa ja abriu voltam escondidas (o login fica guardado), e o Jefrey segue contando as novidades."""
+        try:
+            for net in json.loads(self._sites_file().read_text(encoding="utf-8")):
+                if isinstance(net, str):
+                    self._ensure_site(net, hidden=True)
+        except (OSError, ValueError):
+            pass
+
+        def poll() -> None:
+            from src.jefrey.domain.social import unread_from_title
+
+            while not self._stop.wait(30):
+                for net, win in list(self.sites.items()):
+                    try:
+                        self._site_counts[net] = unread_from_title(str(win.evaluate_js("document.title") or ""))
+                    except Exception as e:
+                        logger.debug("titulo de %s: %s", net, type(e).__name__)
+
+        threading.Thread(target=poll, daemon=True, name="jefrey-sites-poll").start()
 
     def show_messages(self, user_id: str = "") -> bool:
         bridge = self._wa_bridge()
@@ -353,7 +434,7 @@ class DesktopShell:
         self.quitting = True
         self._stop.set()
         self._snapshot()
-        for w in (self.messages, self.orb, self.main):
+        for w in (*self.sites.values(), self.messages, self.orb, self.main):
             try:
                 if w is not None:
                     w.destroy()
@@ -455,6 +536,7 @@ class DesktopShell:
             except Exception as e:
                 logger.warning("falha ao carregar a tela (%s)", type(e).__name__)
             self.start_messages_hidden()
+            self.start_sites_hidden()
             self._watch_signal()
 
         webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True

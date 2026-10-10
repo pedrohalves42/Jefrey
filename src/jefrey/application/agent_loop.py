@@ -55,6 +55,7 @@ GROUPS: list[tuple[tuple[str, ...], list[str]]] = [
      ["list_messages", "get_message", "search_messages", "send_message", "reply_message"]),
     (("whatsapp", "zap", "manda pro", "manda pra", "manda para", "mande pro", "mande pra", "mande para", "envia pro", "envia pra", "envie pro", "envie pra", "manda uma mensagem", "mande uma mensagem"), ["wa_send_message", "wa_inbox", "wa_conversation"]),
     (("mensagem nova", "mensagens novas", "recado", "quem me escreveu", "quem me mandou", "me disse", "me falou", "me mandou"), ["wa_inbox", "wa_conversation"]),
+    (("carrossel", "carrosseis", "carousel", "post", "postar", "instagram", "facebook", "twitter", "publicacao", "legenda"), ["social_carousel", "social_post"]),
     (("tarefa", "a fazer", "afazer", "to-do", "todo"), ["tasks_list", "tasks_add", "tasks_done", "tasks_delete", "tasks_edit", "tasks_recent"]),
     (("contato", "telefone do", "telefone da", "numero do", "numero da", "celular do", "celular da", "e-mail do", "e-mail da"), ["contacts_find"]),
     (("drive", "nuvem"), ["list_files", "search_files", "get_file_metadata", "download_file"]),
