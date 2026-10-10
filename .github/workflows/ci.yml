@@ -54,4 +54,7 @@ jobs:
         env:
           JEFREY_DATABASE__PASSWORD: ci-so-para-validar
           JEFREY_REDIS__PASSWORD: ci-so-para-validar
+          JEFREY_EVENTBUS__HMAC_KEY: ci-so-para-validar
+          JEFREY_API__SECRET_KEY: ci-so-para-validar-0123456789abcdef0123456789
+          GRAFANA_PASSWORD: ci-so-para-validar
         run: docker compose config -q
