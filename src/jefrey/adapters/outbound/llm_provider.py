@@ -465,6 +465,8 @@ def friendly_error(e: Exception) -> str:
 # ---- reserva: se o provedor principal falhar, tenta o proximo ------------------------------
 MAX_FALLBACKS = 9  # 1 principal + 9 = ate 10 cerebros conectados
 FIRST_TOKEN_TIMEOUT_S = 12.0  # sem primeiro token em 12 s, a resposta vem do proximo cerebro
+ROUTER_FIRST_TOKEN_TIMEOUT_S = 25.0  # o 9router (combo com varios modelos) pode demorar mais para o primeiro token
+ROUTER_LOCAL_MARK = "127.0.0.1:20128"  # endereco do 9router neste computador
 COOLDOWN_S = 45.0
 _RETRY_STATUS = {400, 401, 402, 403, 404, 408, 409, 422, 425, 429}  # 400/422: cada servico aceita um formato; o proximo cerebro pode aceitar  # 402 = sem credito: troca de cerebro em vez de falhar
 LONG_COOLDOWN_S = 600.0  # sem credito ou chave recusada: nao adianta tentar de novo daqui a 45 s
@@ -582,10 +584,12 @@ def save_fallbacks(items: list[dict]) -> None:
 class RoutedLLM:
     """Mesma interface do LLMClient, com reserva. So troca de provedor ANTES de a resposta comecar."""
 
-    def __init__(self, clients: list[LLMClient], clock=time.monotonic, roles: Optional[list] = None, team: tuple = (), timeout_s: float = FIRST_TOKEN_TIMEOUT_S, cool: Optional[dict] = None):
+    def __init__(self, clients: list[LLMClient], clock=time.monotonic, roles: Optional[list] = None, team: tuple = (), timeout_s: float = FIRST_TOKEN_TIMEOUT_S, cool: Optional[dict] = None,
+                 slow_timeout_s: float = ROUTER_FIRST_TOKEN_TIMEOUT_S):
         self.clients = clients
         self._clock = clock
         self.timeout_s = timeout_s  # sem primeiro token dentro deste tempo, o cerebro e trocado pelo proximo
+        self.slow_timeout_s = slow_timeout_s  # o roteador local (9router) junta varios modelos e ganha mais tempo
         # quem esta em espera, por cerebro (chave = provedor+modelo+endereco). Pode ser compartilhado entre pedidos.
         self._cool: dict[str, float] = cool if cool is not None else {}
         self.last_label = ""
@@ -607,6 +611,9 @@ class RoutedLLM:
             return order_by_role(base, self.roles, role)
         return base
 
+    def _timeout_for(self, i: int) -> float:
+        return self.slow_timeout_s if ROUTER_LOCAL_MARK in self.clients[i].config.base_url else self.timeout_s
+
     def _key(self, i: int) -> str:
         c = self.clients[i].config
         return f"{c.provider}|{c.model}|{c.base_url}"
@@ -620,7 +627,7 @@ class RoutedLLM:
             stream = client.stream_events(messages, tools=tools).__aiter__()
             try:
                 # o primeiro item tem prazo (cerebro lento vira falha e sai da frente); depois, o fluxo segue sem limite
-                first = await asyncio.wait_for(stream.__anext__(), self.timeout_s)
+                first = await asyncio.wait_for(stream.__anext__(), self._timeout_for(i))
                 started = True
                 self.last_index = i
                 self.last_label = f"{client.config.provider}:{client.config.model}"

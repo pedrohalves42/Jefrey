@@ -50,6 +50,22 @@ def _hide_user_id(schema: dict) -> dict:
     return s
 
 
+_DROP_KEYS = ("description", "title", "examples", "default")
+
+
+def _strip(node: Any) -> Any:
+    if isinstance(node, dict):
+        return {k: _strip(v) for k, v in node.items() if k not in _DROP_KEYS}
+    if isinstance(node, list):
+        return [_strip(x) for x in node]
+    return node
+
+
+def compact_spec(spec: dict) -> dict:
+    """Versao leve do esquema para o modelo: nome, tipos e obrigatorios ficam; textos longos saem (menos tempo e menos cota)."""
+    return {"name": spec["name"], "description": spec["description"][:120], "parameters": _strip(spec["parameters"])}
+
+
 def tool_spec(tool: Any) -> dict:
     """Descricao neutra {name, description, parameters} de uma BaseTool."""
     schema: dict = {"type": "object", "properties": {}}

@@ -62,3 +62,18 @@ def test_cerebro_lento_fica_de_fora_nos_pedidos_seguintes():
     assert texto == "da reserva"
     assert len(chamadas) == 1  # o lento nao foi procurado de novo
     assert time.monotonic() - inicio < 1
+
+
+def test_9router_ganha_mais_tempo_que_os_outros():
+    async def atrasado(r):
+        await asyncio.sleep(0.25)
+        return sse("do 9router")
+
+    async def mais_atrasado(r):
+        await asyncio.sleep(1.0)
+        return sse("da nuvem")
+
+    router = LLMClient(LLMConfig("openai", "gamehouse", "http://127.0.0.1:20128/v1", api_key="k"), transport=httpx.MockTransport(atrasado))
+    nuvem = LLMClient(LLMConfig("openai", "outro", "https://api.exemplo.com", api_key="k"), transport=httpx.MockTransport(mais_atrasado))
+    texto = run(collect(RoutedLLM([router, nuvem], timeout_s=0.2, slow_timeout_s=0.5)))
+    assert texto == "do 9router"  # 0,25 s passa no prazo do 9router (0,5 s), mas nao no da nuvem (0,2 s)

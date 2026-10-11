@@ -23,7 +23,7 @@ from src.jefrey.domain.agenda import agenda_day, day_bounds, format_agenda
 from src.jefrey.domain.whatsapp import asks_whatsapp_chat, asks_whatsapp_inbox
 from src.jefrey.domain.email_ask import QUERY as UNREAD_QUERY, asks_unread_email, format_unread
 from src.jefrey.domain.weather_ask import weather_ask
-from src.jefrey.application.tool_runtime import ToolOutcome, ToolRuntime, tool_spec
+from src.jefrey.application.tool_runtime import ToolOutcome, ToolRuntime, compact_spec, tool_spec
 from src.jefrey.domain.tool_catalog import CATALOG, policy_for
 from src.jefrey.ports.registry import use
 
@@ -303,7 +303,7 @@ async def run_agent(
     msgs = list(messages)
     offer_all = cfg.offer_all if cfg.offer_all is not None else bool(getattr(getattr(llm, "config", None), "is_cloud", False))
     offered = select_tools(user_input, list(tools.keys()), offer_all)
-    specs = [tool_spec(tools[n]) for n in offered]
+    specs = [compact_spec(tool_spec(tools[n])) for n in offered]  # esquema leve: menos peso em cada pedido ao cerebro
     allowed = set(offered)
 
     # ---- atalho deterministico (hora, contas) ----
