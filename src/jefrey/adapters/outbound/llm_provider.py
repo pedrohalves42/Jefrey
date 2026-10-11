@@ -582,11 +582,12 @@ def save_fallbacks(items: list[dict]) -> None:
 class RoutedLLM:
     """Mesma interface do LLMClient, com reserva. So troca de provedor ANTES de a resposta comecar."""
 
-    def __init__(self, clients: list[LLMClient], clock=time.monotonic, roles: Optional[list] = None, team: tuple = (), timeout_s: float = FIRST_TOKEN_TIMEOUT_S):
+    def __init__(self, clients: list[LLMClient], clock=time.monotonic, roles: Optional[list] = None, team: tuple = (), timeout_s: float = FIRST_TOKEN_TIMEOUT_S, cool: Optional[dict] = None):
         self.clients = clients
         self._clock = clock
         self.timeout_s = timeout_s  # sem primeiro token dentro deste tempo, o cerebro e trocado pelo proximo
-        self._cool: dict[int, float] = {}
+        # quem esta em espera, por cerebro (chave = provedor+modelo+endereco). Pode ser compartilhado entre pedidos.
+        self._cool: dict[str, float] = cool if cool is not None else {}
         self.last_label = ""
         self.last_index = 0
         self.roles: list = list(roles) if roles is not None else [None] * len(clients)  # funcoes de cada cerebro (None = serve para tudo)
@@ -598,13 +599,17 @@ class RoutedLLM:
 
     def _order(self, role: Optional[str] = None) -> list[int]:
         now = self._clock()
-        ready = [i for i in range(len(self.clients)) if self._cool.get(i, 0) <= now]
-        base = ready or [min(range(len(self.clients)), key=lambda i: self._cool.get(i, 0))]  # todos em espera: o que sai primeiro
+        ready = [i for i in range(len(self.clients)) if self._cool.get(self._key(i), 0) <= now]
+        base = ready or [min(range(len(self.clients)), key=lambda i: self._cool.get(self._key(i), 0))]  # todos em espera: o que sai primeiro
         if role and any(r is not None for r in self.roles):
             from src.jefrey.domain.llm_roles import order_by_role
 
             return order_by_role(base, self.roles, role)
         return base
+
+    def _key(self, i: int) -> str:
+        c = self.clients[i].config
+        return f"{c.provider}|{c.model}|{c.base_url}"
 
     async def stream_events(self, messages: list[Message], tools: Optional[list[dict]] = None, role: Optional[str] = None) -> AsyncIterator[StreamItem]:
         from src.jefrey.domain.llm_roles import effective_role
@@ -631,14 +636,14 @@ class RoutedLLM:
                 if started:
                     raise
                 last = e
-                self._cool[i] = self._clock() + COOLDOWN_S
+                self._cool[self._key(i)] = self._clock() + COOLDOWN_S
                 logger.warning("cerebro %s demorou mais de %ss para comecar: trocando", client.config.model, self.timeout_s)
             except Exception as e:
                 if started or not is_retryable(e):
                     raise  # ja respondeu algo (nao da para trocar) ou erro que outro provedor nao resolve
                 last = e
                 status = e.response.status_code if isinstance(e, httpx.HTTPStatusError) else 0
-                self._cool[i] = self._clock() + (LONG_COOLDOWN_S if status in LONG_COOLDOWN_STATUS else COOLDOWN_S)
+                self._cool[self._key(i)] = self._clock() + (LONG_COOLDOWN_S if status in LONG_COOLDOWN_STATUS else COOLDOWN_S)
             finally:
                 await stream.aclose()
         if last is not None:
@@ -664,7 +669,7 @@ class RoutedLLM:
             except Exception as e:
                 last = e
                 if is_retryable(e):
-                    self._cool[i] = self._clock() + COOLDOWN_S
+                    self._cool[self._key(i)] = self._clock() + COOLDOWN_S
                 continue
             if out.strip():
                 return out
@@ -690,6 +695,10 @@ class RoutedLLM:
         return await self.clients[0].health()
 
 
+# quem esta lento ou sem cota fica de fora por um tempo, mesmo entre pedidos diferentes
+SHARED_COOLDOWNS: dict[str, float] = {}
+
+
 def get_llm_client() -> "LLMClient | RoutedLLM":
     from src.jefrey.domain.llm_roles import ROLES  # noqa: F401
 
@@ -706,7 +715,7 @@ def get_llm_client() -> "LLMClient | RoutedLLM":
         return primary
     roles_map = load_roles()
     roles = [set(roles_map[i]) if i in roles_map else None for i in ids]
-    return RoutedLLM([primary, *extra], roles=roles, team=tuple(load_team()))
+    return RoutedLLM([primary, *extra], roles=roles, team=tuple(load_team()), cool=SHARED_COOLDOWNS)
 
 
 def _primary_id(cfg: LLMConfig) -> str:

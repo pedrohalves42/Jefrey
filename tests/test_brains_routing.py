@@ -42,3 +42,23 @@ def test_conectar_groq_ou_gemini_aplica_as_funcoes_padrao(tmp_path, monkeypatch)
     monkeypatch.setattr(P.LLMClient, "health", health)
     run(B.connect("groq", "gsk_" + "c" * 30))
     assert set(P.load_roles()["groq"]) == {"ferramentas", "rapido", "resumo"}
+
+
+def test_cerebro_lento_fica_de_fora_nos_pedidos_seguintes():
+    # cada pedido cria um RoutedLLM novo: a memoria de quem esta lento precisa sobreviver entre eles
+    chamadas = []
+
+    async def lento(r):
+        chamadas.append("a")
+        await asyncio.sleep(5)
+        return sse("tarde demais")
+
+    memoria = {}
+    a = client(lento, "a")
+    b = client(lambda r: sse("da reserva"), "b")
+    run(collect(RoutedLLM([a, b], timeout_s=0.3, cool=memoria)))
+    inicio = time.monotonic()
+    texto = run(collect(RoutedLLM([client(lento, "a"), client(lambda r: sse("da reserva"), "b")], timeout_s=0.3, cool=memoria)))
+    assert texto == "da reserva"
+    assert len(chamadas) == 1  # o lento nao foi procurado de novo
+    assert time.monotonic() - inicio < 1
