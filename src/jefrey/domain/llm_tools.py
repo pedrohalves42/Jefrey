@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any, Union
+from typing import Any, Optional, Union
 
 
 @dataclass
@@ -19,9 +19,13 @@ class ToolCall:
     id: str
     name: str
     arguments: dict = field(default_factory=dict)
+    extra: Optional[dict] = None  # Gemini: "extra_content" (assinatura de raciocinio) que precisa voltar no historico
 
     def as_dict(self) -> dict:
-        return {"id": self.id, "name": self.name, "arguments": self.arguments}
+        out = {"id": self.id, "name": self.name, "arguments": self.arguments}
+        if self.extra:
+            out["extra_content"] = self.extra
+        return out
 
 
 StreamItem = Union[str, ToolCall]
@@ -67,7 +71,8 @@ def to_provider_messages(provider: str, messages: list[dict]) -> tuple[str, list
                 out.append({"role": "assistant", "content": m.get("content") or None,
                             "tool_calls": [{"id": c["id"], "type": "function",
                                             "function": {"name": c["name"],
-                                                         "arguments": json.dumps(c.get("arguments") or {}, ensure_ascii=False)}}
+                                                         "arguments": json.dumps(c.get("arguments") or {}, ensure_ascii=False)},
+                                            **({"extra_content": c["extra_content"]} if c.get("extra_content") else {})}
                                            for c in calls]})
         elif role == "tool":
             if provider == "ollama":
@@ -171,6 +176,8 @@ class StreamParser:
             slot = self._acc.setdefault(idx, {"id": "", "name": "", "args": ""})
             if tc.get("id"):
                 slot["id"] = tc["id"]
+            if isinstance(tc.get("extra_content"), dict):
+                slot["extra"] = tc["extra_content"]
             fn = tc.get("function") or {}
             if fn.get("name"):
                 slot["name"] = fn["name"]
@@ -211,6 +218,6 @@ class StreamParser:
         for idx in sorted(self._acc):
             slot = self._acc[idx]
             if slot["name"]:
-                out.append(ToolCall(slot["id"] or self._next_id(), slot["name"], _args(slot["args"])))
+                out.append(ToolCall(slot["id"] or self._next_id(), slot["name"], _args(slot["args"]), slot.get("extra")))
         self._acc.clear()
         return out

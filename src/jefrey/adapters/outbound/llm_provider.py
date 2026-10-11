@@ -462,7 +462,7 @@ def friendly_error(e: Exception) -> str:
 # ---- reserva: se o provedor principal falhar, tenta o proximo ------------------------------
 MAX_FALLBACKS = 9  # 1 principal + 9 = ate 10 cerebros conectados
 COOLDOWN_S = 45.0
-_RETRY_STATUS = {401, 402, 403, 404, 408, 409, 425, 429}  # 402 = sem credito: troca de cerebro em vez de falhar
+_RETRY_STATUS = {400, 401, 402, 403, 404, 408, 409, 422, 425, 429}  # 400/422: cada servico aceita um formato; o proximo cerebro pode aceitar  # 402 = sem credito: troca de cerebro em vez de falhar
 LONG_COOLDOWN_S = 600.0  # sem credito ou chave recusada: nao adianta tentar de novo daqui a 45 s
 LONG_COOLDOWN_STATUS = {401, 402, 403}
 

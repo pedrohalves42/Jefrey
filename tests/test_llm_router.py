@@ -54,13 +54,17 @@ def test_troca_em_timeout():
     assert run(collect(RoutedLLM([client(slow, "a"), client(lambda r: sse("ok"), "b")]))) == "ok"
 
 
-def test_pedido_invalido_400_nao_aciona_reserva():
+def test_pedido_recusado_400_passa_para_a_reserva():
     a = client(lambda r: httpx.Response(400), "a")
-    b_calls = []
-    b = client(lambda r: b_calls.append(1) or sse("x"), "b")
+    b = client(lambda r: sse("x"), "b")
+    assert "x" in run(collect(RoutedLLM([a, b])))  # cada servico aceita um formato: o proximo cerebro pode aceitar
+
+
+def test_400_em_todos_os_cerebros_vira_erro():
+    a = client(lambda r: httpx.Response(400), "a")
+    b = client(lambda r: httpx.Response(400), "b")
     with pytest.raises(httpx.HTTPStatusError):
         run(collect(RoutedLLM([a, b])))
-    assert b_calls == []  # outro provedor nao resolve um pedido mal formado
 
 
 def test_nunca_troca_no_meio_da_resposta():
@@ -121,7 +125,8 @@ def test_unico_provedor_em_espera_ainda_e_tentado():
 def test_is_retryable():
     mk = lambda c: httpx.HTTPStatusError("x", request=httpx.Request("GET", "http://x"), response=httpx.Response(c))  # noqa: E731
     assert all(is_retryable(mk(c)) for c in (401, 402, 429, 500, 503))
-    assert not any(is_retryable(mk(c)) for c in (400, 422))
+    assert all(is_retryable(mk(c)) for c in (400, 422))  # formato recusado por um servico: outro cerebro pode aceitar
+    assert not any(is_retryable(mk(c)) for c in (418, 451))
     assert is_retryable(httpx.ConnectError("x")) and not is_retryable(ValueError("x"))
 
 
