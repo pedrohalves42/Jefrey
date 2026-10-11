@@ -18,6 +18,13 @@ from src.jefrey.core.secret_store import read_secret, valid_id, write_secret
 logger = logging.getLogger(__name__)
 
 
+# Funcao de cada cerebro por padrao: o rapido (Groq) cuida de ferramentas e respostas curtas; o Gemini de conversa, escrita e visao.
+DEFAULT_BRAIN_ROLES = {
+    "groq": ["ferramentas", "rapido", "resumo"],
+    "gemini": ["conversa", "escrita", "estudo", "visao"],
+}
+
+
 class BrainError(Exception):
     """Mensagem pronta para a tela (portugues simples)."""
 
@@ -218,6 +225,9 @@ async def connect(brain_id: str, key: Optional[str], *, primary: Optional[bool] 
         _apply(ordered)
     except P.LLMConfigError as e:
         raise BrainError(str(e))
+    padrao = DEFAULT_BRAIN_ROLES.get(brain_id)
+    if padrao and brain_id not in P.load_roles():
+        P.save_roles(brain_id, list(padrao))  # funcoes padrao so se a pessoa ainda nao escolheu nenhuma
     return state()
 
 

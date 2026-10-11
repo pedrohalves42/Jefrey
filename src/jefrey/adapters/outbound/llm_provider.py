@@ -10,6 +10,7 @@ A chave da nuvem vem de JEFREY_LLM__API_KEY e nunca e registrada em log.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -463,6 +464,7 @@ def friendly_error(e: Exception) -> str:
 
 # ---- reserva: se o provedor principal falhar, tenta o proximo ------------------------------
 MAX_FALLBACKS = 9  # 1 principal + 9 = ate 10 cerebros conectados
+FIRST_TOKEN_TIMEOUT_S = 12.0  # sem primeiro token em 12 s, a resposta vem do proximo cerebro
 COOLDOWN_S = 45.0
 _RETRY_STATUS = {400, 401, 402, 403, 404, 408, 409, 422, 425, 429}  # 400/422: cada servico aceita um formato; o proximo cerebro pode aceitar  # 402 = sem credito: troca de cerebro em vez de falhar
 LONG_COOLDOWN_S = 600.0  # sem credito ou chave recusada: nao adianta tentar de novo daqui a 45 s
@@ -580,9 +582,10 @@ def save_fallbacks(items: list[dict]) -> None:
 class RoutedLLM:
     """Mesma interface do LLMClient, com reserva. So troca de provedor ANTES de a resposta comecar."""
 
-    def __init__(self, clients: list[LLMClient], clock=time.monotonic, roles: Optional[list] = None, team: tuple = ()):
+    def __init__(self, clients: list[LLMClient], clock=time.monotonic, roles: Optional[list] = None, team: tuple = (), timeout_s: float = FIRST_TOKEN_TIMEOUT_S):
         self.clients = clients
         self._clock = clock
+        self.timeout_s = timeout_s  # sem primeiro token dentro deste tempo, o cerebro e trocado pelo proximo
         self._cool: dict[int, float] = {}
         self.last_label = ""
         self.last_index = 0
@@ -609,19 +612,35 @@ class RoutedLLM:
         last: Optional[Exception] = None
         for i in self._order(effective_role(role, messages, tools)):
             client, started = self.clients[i], False
+            stream = client.stream_events(messages, tools=tools).__aiter__()
             try:
-                async for item in client.stream_events(messages, tools=tools):
-                    started = True
-                    self.last_index = i
-                    self.last_label = f"{client.config.provider}:{client.config.model}"
+                # o primeiro item tem prazo (cerebro lento vira falha e sai da frente); depois, o fluxo segue sem limite
+                first = await asyncio.wait_for(stream.__anext__(), self.timeout_s)
+                started = True
+                self.last_index = i
+                self.last_label = f"{client.config.provider}:{client.config.model}"
+                yield first
+                async for item in stream:
                     yield item
                 return
+            except StopAsyncIteration:
+                self.last_index = i
+                self.last_label = f"{client.config.provider}:{client.config.model}"
+                return
+            except asyncio.TimeoutError as e:
+                if started:
+                    raise
+                last = e
+                self._cool[i] = self._clock() + COOLDOWN_S
+                logger.warning("cerebro %s demorou mais de %ss para comecar: trocando", client.config.model, self.timeout_s)
             except Exception as e:
                 if started or not is_retryable(e):
                     raise  # ja respondeu algo (nao da para trocar) ou erro que outro provedor nao resolve
                 last = e
                 status = e.response.status_code if isinstance(e, httpx.HTTPStatusError) else 0
                 self._cool[i] = self._clock() + (LONG_COOLDOWN_S if status in LONG_COOLDOWN_STATUS else COOLDOWN_S)
+            finally:
+                await stream.aclose()
         if last is not None:
             raise last
 
