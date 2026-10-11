@@ -108,3 +108,16 @@ def test_ferramenta_esta_no_catalogo_como_baixo_risco_e_com_rotulo():
     from src.jefrey.domain.tool_catalog import CATALOG
 
     assert CATALOG["daily_summary"].risk == "low" and CATALOG["daily_summary"].label
+
+
+def test_ferramenta_e_carregada_pelo_app_de_verdade():
+    # o app so carrega as skills da lista de load_skills: a ferramenta precisa estar nela (antes ficou de fora e o pedido caia no modelo)
+    from src.jefrey.core.skill_prefs import enabled_tools
+    from src.jefrey.domain.tool_catalog import CATALOG
+    from src.jefrey.skills import load_skills, skill_registry
+
+    load_skills()
+    skills = [skill_registry.get_skill(m.name) for m in skill_registry.list_skills()]
+    tools = enabled_tools([sk for sk in skills if sk], CATALOG, set())
+    tools = tools[0] if isinstance(tools, tuple) else tools
+    assert "daily_summary" in tools
