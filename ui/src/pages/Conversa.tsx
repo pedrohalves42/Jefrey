@@ -539,7 +539,7 @@ export default function Conversa() {
                       disabled={!!votes[lastAi.id]}
                       onClick={() => {
                         setVotes(prev => ({ ...prev, [lastAi.id]: v }))
-                        void sendFeedback(lastAi.id, v)
+                        void sendFeedback(lastAi.id, v, "", lastUser?.content ?? "", lastAi.content)
                       }}
                       className={`jf-focus rounded-md px-2 py-0.5 text-sm transition-opacity ${votes[lastAi.id] === v ? "bg-white/15 opacity-100" : votes[lastAi.id] ? "opacity-25" : "opacity-60 hover:opacity-100"}`}
                     >

@@ -19,6 +19,12 @@ def _store():
     return _cache["s"]
 
 
+def _cases_dir():
+    from pathlib import Path
+
+    return Path.cwd() / "data" / "feedback_cases"  # o app instalado roda dentro da pasta de dados do usuario
+
+
 def _user(request: Request) -> str:
     uid = getattr(request.state, "user_id", None)
     if not uid or uid in ("anonymous", "system"):
@@ -30,6 +36,8 @@ class FeedbackBody(BaseModel):
     message_id: str = Field(..., min_length=1, max_length=120)
     value: str = Field(..., pattern="^(up|down)$")
     note: str = Field(default="", max_length=300)
+    question: str = Field(default="", max_length=500)  # so para o 👎: vira um caso de teste local para a pessoa revisar
+    answer: str = Field(default="", max_length=2000)
 
 
 @router.post("/feedback")
@@ -40,6 +48,10 @@ async def send_feedback(request: Request, body: FeedbackBody):
         _store().add_feedback(uid, body.message_id, body.value, body.note)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+    if body.value == "down" and body.question and body.answer:
+        from src.jefrey.application.improvement import save_case
+
+        save_case(_cases_dir(), body.message_id, body.question, body.answer, body.note)
     return {"ok": True}
 
 
