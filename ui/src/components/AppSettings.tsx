@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react"
 import { getAutostart, isDesktop, restartApp, setAutostart, showOrb, type Autostart } from "@/lib/shell"
+import { getClipboard, setClipboardEnabled } from "@/lib/clipboard"
 
 /** O Jefrey como programa do computador: iniciar com o Windows e a bolinha (orbe) na tela. So aparece no programa instalado. */
 export default function AppSettings() {
   const [auto, setAuto] = useState<Autostart | null>(null)
   const [msg, setMsg] = useState("")
+  const [clip, setClip] = useState(false)
   const desktop = isDesktop()
 
   useEffect(() => {
     void getAutostart().then(setAuto)
+    void getClipboard().then(s => setClip(!!s?.enabled))
   }, [])
 
   if (!desktop && !auto?.available) return null
@@ -33,6 +36,23 @@ export default function AppSettings() {
           <span>
             Abrir o Jefrey quando eu ligar o computador
             <span className="block text-sm text-white/50">Ele abre escondido, no relógio. Para falar com ele: Ctrl + Alt + J.</span>
+          </span>
+        </label>
+      )}
+      {desktop && (
+        <label className="mt-3 flex items-start gap-3 text-base text-white/85">
+          <input
+            type="checkbox"
+            className="mt-1 h-5 w-5"
+            checked={clip}
+            onChange={e => {
+              const on = e.target.checked
+              void setClipboardEnabled(on).then(ok => ok && setClip(on))
+            }}
+          />
+          <span>
+            Me ajudar com o que eu copiar
+            <span className="block text-sm text-white/50">Quando você copia um texto, o Jefrey oferece traduzir, resumir, explicar ou corrigir. Ele só lê texto, ignora senhas e nunca cola nada sozinho.</span>
           </span>
         </label>
       )}

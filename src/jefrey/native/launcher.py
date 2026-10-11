@@ -365,6 +365,21 @@ def start_tray_updates(icon, interval_s: float = 5.0) -> threading.Event:
 HALT_HOTKEY = "ctrl+alt+p"  # "Parar": interrompe qualquer acao do Jefrey no computador, de qualquer janela
 
 
+def start_clipboard_watch():
+    """Area de transferencia inteligente: so no Windows, e so oferece quando a pessoa ligou o recurso (desligado por padrao)."""
+    if os.getenv("JEFREY_NO_HOTKEY") or sys.platform != "win32":
+        return None
+    try:
+        from src.jefrey.application.clipboard import shared_store
+        from src.jefrey.native import clipboard_watch as cw
+
+        store = shared_store()
+        return cw.ClipboardWatcher(cw.win_read_text, cw.win_sequence, store.set, store.enabled).start()
+    except Exception as e:
+        logger.info("area de transferencia inteligente indisponivel (%s)", type(e).__name__)
+        return None
+
+
 def start_halt_hotkey():
     if os.getenv("JEFREY_NO_HOTKEY"):
         return None
@@ -551,6 +566,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     tray_updates = start_tray_updates(tray) if tray is not None else None
     stop_hotkey = start_global_hotkey(url, no_browser, on_show=shell.show if shell else None)
     stop_halt = start_halt_hotkey()
+    start_clipboard_watch()
     try:
         if shell is not None:
             server_thread = threading.Thread(target=server.run, daemon=True, name="jefrey-server")

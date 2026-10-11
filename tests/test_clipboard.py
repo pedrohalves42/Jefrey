@@ -41,3 +41,61 @@ def test_acao_desconhecida_e_recusada():
     with pytest.raises(ValueError):
         prompt_for("apagar", "texto")
     assert set(ACTIONS) == {"traduzir", "resumir", "explicar", "corrigir"}
+
+
+# ---------------- observador e oferta ----------------
+from src.jefrey.application.clipboard import OfferStore  # noqa: E402
+from src.jefrey.native.clipboard_watch import ClipboardWatcher  # noqa: E402
+
+EN = "The quick brown fox jumps over the lazy dog and keeps running through the forest."
+
+
+def _watcher(textos, ligado=True):
+    estado = {"seq": 0, "texto": ""}
+    ofertas = []
+
+    def copiar(t):
+        estado["seq"] += 1
+        estado["texto"] = t
+
+    w = ClipboardWatcher(read_text=lambda: estado["texto"], sequence=lambda: estado["seq"], on_offer=ofertas.append, enabled=lambda: ligado)
+    return w, copiar, ofertas
+
+
+def test_texto_novo_gera_uma_oferta_e_o_mesmo_texto_nao_repete():
+    w, copiar, ofertas = _watcher([])
+    w.poll()
+    assert ofertas == []
+    copiar(EN)
+    w.poll()
+    w.poll()  # nada mudou
+    assert len(ofertas) == 1 and "traduzir" in ofertas[0]["offers"] and ofertas[0]["text"] == EN
+
+
+def test_desligado_nao_le_nem_oferece():
+    leituras = []
+    w = ClipboardWatcher(read_text=lambda: leituras.append(1) or EN, sequence=lambda: len(leituras) + 1, on_offer=lambda o: None, enabled=lambda: False)
+    w.poll()
+    assert leituras == []  # desligado: nem le o conteudo
+
+
+def test_segredo_copiado_nunca_vira_oferta():
+    w, copiar, ofertas = _watcher([])
+    copiar("senha: Abc12345!xyz do banco")
+    w.poll()
+    assert ofertas == []
+
+
+def test_loja_guarda_uma_oferta_e_monta_o_pedido_so_com_acao_valida(tmp_path):
+    loja = OfferStore(tmp_path / "clip.json")
+    assert loja.get() is None and loja.enabled() is False
+    loja.set_enabled(True)
+    loja.set({"text": EN, "offers": ["traduzir", "explicar"]})
+    assert loja.get()["offers"][0] == "traduzir"
+    p = loja.prompt("traduzir")
+    assert "<dados>" in p and EN in p
+    with pytest.raises(ValueError):
+        loja.prompt("apagar")
+    loja.dismiss()
+    assert loja.get() is None
+    assert OfferStore(tmp_path / "clip.json").enabled() is True  # a escolha de ligar sobrevive a reiniciar

@@ -10,6 +10,7 @@ import { useVoiceReady } from "@/hooks/useVoiceReady"
 import { useWakeSignal } from "@/hooks/useWakeSignal"
 import { addressed } from "@/lib/voiceGate"
 import { FEEDBACK_LABEL, sendFeedback, type FeedbackValue } from "@/lib/feedback"
+import ClipboardCard from "@/components/ClipboardCard"
 import { voiceView } from "@/lib/voiceMode"
 import { useEasy } from "@/lib/easy"
 import { useActivity } from "@/hooks/useActivity"
@@ -516,6 +517,7 @@ export default function Conversa() {
           <div className="mx-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col items-center justify-end gap-1.5 overflow-y-auto pb-1">
           <div className="w-full max-w-lg lg:hidden"><BriefingCard /></div>
           <LearnedToast streaming={streaming} />
+          <ClipboardCard onAsk={t => void send(t)} />
           {(empty || !caption) && <QuickActions onAsk={t => void send(t)} onSummary={() => void speakSummary()} busy={summaryBusy} />}
 
           {!empty && (caption || streaming) && (

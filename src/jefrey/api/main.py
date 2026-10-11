@@ -383,6 +383,8 @@ def create_app() -> FastAPI:
     app.include_router(reminders_router)
     from src.jefrey.api.feedback_routes import router as feedback_router
     app.include_router(feedback_router)
+    from src.jefrey.api.clipboard_routes import router as clipboard_router
+    app.include_router(clipboard_router)
     from src.jefrey.api.system_routes import router as system_router
     app.include_router(system_router)
     from src.jefrey.api.profile_routes import router as profile_router
