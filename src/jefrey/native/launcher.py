@@ -208,6 +208,28 @@ class _RedactFilter(logging.Filter):
         return True
 
 
+def escrever_marca_arranque(logs_dir: Path, mensagem: str) -> Path:
+    """Marca de diagnostico: uma linha por arranque em logs/arranque.txt, com escrita simples (nao depende do log de arquivo)."""
+    import datetime
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    arq = logs_dir / "arranque.txt"
+    linha = f"{datetime.datetime.now():%Y-%m-%d %H:%M:%S} pid={os.getpid()} {mensagem}" + chr(10)
+    with open(arq, "a", encoding="utf-8") as f:
+        f.write(linha)
+    return arq
+
+
+def iniciar_logs(logs_dir: Path) -> "Path | None":
+    """Liga o log de arquivo. Se falhar, deixa a causa na marca de arranque em vez de sumir em silencio."""
+    import traceback
+    escrever_marca_arranque(logs_dir, "iniciando logs")
+    try:
+        return setup_logging(logs_dir)
+    except Exception as e:
+        escrever_marca_arranque(logs_dir, f"log de arquivo falhou: {type(e).__name__}: {e}" + chr(10) + traceback.format_exc())
+        return None
+
+
 def setup_logging(logs_dir: Path) -> Path:
     """Registros em arquivo com rodizio (3 x 1 MB). Sem console no programa instalado, e o que o suporte le."""
     logs_dir.mkdir(parents=True, exist_ok=True)
@@ -464,8 +486,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     import src.jefrey.core.logging  # noqa: F401,E402  (zera os handlers do logger raiz ao ser importado: tem que vir ANTES do arquivo)
 
     logs_dir = home / "logs"
-    log_path = setup_logging(logs_dir)
+    log_path = iniciar_logs(logs_dir)
     logging.getLogger("jefrey.launcher").info("iniciando na porta %s (registros em %s)", port, log_path)
+    escrever_marca_arranque(logs_dir, f"porta {port}, registros em {log_path}")
 
     if local_model_chosen():  # nuvem e o padrao: so prepara modelo local se a pessoa escolheu local
         ok, msg = ensure_ollama()
