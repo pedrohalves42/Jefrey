@@ -83,7 +83,7 @@ def test_padrao_do_servidor_e_a_voz_gratuita_e_a_conta_paga_so_por_escolha(monke
     monkeypatch.setattr(VR.LV, "_cache", {"voice": 1})
     out = run(VR.engines(Req()))
     ids = {e["id"]: e["available"] for e in out["engines"]}
-    assert out["default"] == "edge" and ids["edge"] and ids["edge-francisca"] and ids["edge-antonio"] and ids["cloud"] and ids["local"]
+    assert out["default"] == "edge-antonio" and ids["edge"] and ids["edge-francisca"] and ids["edge-antonio"] and ids["cloud"] and ids["local"]
     EV._cool_until = __import__("time").monotonic() + 100  # fora do ar: cai para a voz natural do computador
     assert run(VR.engines(Req()))["default"] == "local"
 

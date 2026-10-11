@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -321,6 +322,7 @@ class Agent:
 
     async def run_events(self, user_input: str, user_id: str, user_role: str = "user", thread_id: str | None = None):
         """Gera eventos do agente: token | tool_start | approval_required | tool_end | error."""
+        t0 = time.perf_counter()  # medida de tempo por etapa (aparece no log como [tempo])
         base_thread_id = thread_id or f"thread_{user_id}_{self._tool_executions}"
         namespaced_thread_id = _ns_thread_id(base_thread_id, user_id)
         state = AgentState(user_id=user_id, thread_id=namespaced_thread_id, user_role=user_role, user_input=user_input)
@@ -345,7 +347,12 @@ class Agent:
             runtime = ToolRuntime(user_id=user_id, thread_id=base_thread_id, resolver=tools.get)
             messages = [{"role": "system", "content": system_prompt}, *self._load_history(state),
                         {"role": "user", "content": user_input}]
+            logger.info("[tempo] antes do cerebro: %.2fs (prompt %d chars, %d ferramentas)", time.perf_counter() - t0, len(system_prompt), len(tools))
+            primeiro = True
             async for ev in _loop.run_agent(env.llm_client(), runtime, messages, tools, user_input):
+                if primeiro and ev["type"] == "token":
+                    logger.info("[tempo] primeiro token: %.2fs", time.perf_counter() - t0)
+                    primeiro = False
                 if ev["type"] == "token":
                     answer.append(ev["content"])
                 yield ev

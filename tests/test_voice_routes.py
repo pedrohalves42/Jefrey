@@ -31,7 +31,7 @@ def _engines(monkeypatch, cloud=False, local=False, edge=False):
 
 def test_padrao_prefere_gratuita_depois_local_depois_conta_depois_navegador(monkeypatch):
     _engines(monkeypatch, cloud=True, local=True, edge=True)
-    assert run(VR.engines(Req()))["default"] == "edge"
+    assert run(VR.engines(Req()))["default"] == "edge-antonio"  # voz masculina: o Jefrey e um assistente masculino
     _engines(monkeypatch, cloud=True, local=True)
     assert run(VR.engines(Req()))["default"] == "local"  # a conta paga so entra se a pessoa escolher
     _engines(monkeypatch, cloud=True)
@@ -71,9 +71,9 @@ def test_voz_gratuita_responde_mp3_e_a_escolhida_vale(monkeypatch):
         return b"ID3mp3"
     monkeypatch.setattr(VR.EV, "synth", gratis)
     r = run(VR.speak(Req(), VR.SpeakBody(text="oi")))
-    assert r.media_type == "audio/mpeg" and r.headers["x-voice-engine"] == "edge"
+    assert r.media_type == "audio/mpeg" and r.headers["x-voice-engine"] == "edge-antonio"
     r = run(VR.speak(Req(), VR.SpeakBody(text="oi", engine="edge-antonio")))
-    assert r.headers["x-voice-engine"] == "edge-antonio" and pedidas == ["edge", "edge-antonio"]
+    assert r.headers["x-voice-engine"] == "edge-antonio" and pedidas == ["edge-antonio", "edge-antonio"]
 
 
 def test_conta_paga_so_quando_escolhida(monkeypatch):

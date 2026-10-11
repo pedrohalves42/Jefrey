@@ -52,13 +52,13 @@ async def engines(request: Request):
         {"id": "browser", "available": True, "label": "Voz do computador"},
     ]
     # padrao: voz gratuita da nuvem; sem internet, a voz natural do computador; a conta do ChatGPT so quando a pessoa escolhe
-    return {"engines": items, "default": "edge" if edge else "local" if local else "cloud" if cloud else "browser", "local": LV.model_status()}
+    return {"engines": items, "default": "edge-antonio" if edge else "local" if local else "cloud" if cloud else "browser", "local": LV.model_status()}
 
 
 @router.post("/speak")
 async def speak(request: Request, body: SpeakBody):
     _login(request)
-    order = [body.engine] if body.engine else ["edge", "local"]
+    order = [body.engine] if body.engine else ["edge-antonio", "edge", "local"]
     last = ""
     for eng in order:
         if eng in EV.VOICES and EV.available():
