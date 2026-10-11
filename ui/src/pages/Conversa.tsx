@@ -8,6 +8,7 @@ import { getProfile } from "@/lib/llm"
 import { useListener } from "@/hooks/useListener"
 import { useVoiceReady } from "@/hooks/useVoiceReady"
 import { useWakeSignal } from "@/hooks/useWakeSignal"
+import { addressed } from "@/lib/voiceGate"
 import { voiceView } from "@/lib/voiceMode"
 import { useEasy } from "@/lib/easy"
 import { useActivity } from "@/hooks/useActivity"
@@ -81,11 +82,19 @@ export default function Conversa() {
   const continuousRef = useRef(continuous)
   continuousRef.current = continuous
   const sendRef = useRef<(t?: string) => Promise<void>>(async () => {})
+  // quando foi a ultima vez que a pessoa falou com o Jefrey (abre a janela para responder sem repetir o nome)
+  const engagedRef = useRef(0)
   const listener = useListener({
     onTranscript: t => {
+      const g = addressed(t, Date.now(), engagedRef.current)
+      if (!g.ok) {
+        // ruido de fundo, TV ou outra pessoa: nao vai para o chat
+        setUnclear(false)
+        return
+      }
       setUnclear(false)
       if (!continuousRef.current) setMicOn(false)
-      void sendRef.current(t)
+      void sendRef.current(g.text)
     },
     onUnclear: () => setUnclear(true),
     onSpeechStart: () => {
@@ -167,6 +176,7 @@ export default function Conversa() {
   async function send(textArg?: string) {
     const text = (textArg ?? input).trim()
     if (!text || streaming) return
+    engagedRef.current = Date.now() // conversa aberta: as proximas falas valem por uma janela curta
     const tid = active.id
     const userMsg: Message = { id: uid(), role: "user", content: text, at: Date.now() }
     const aiMsg: Message = { id: uid(), role: "assistant", content: "", at: Date.now() }
@@ -311,6 +321,7 @@ export default function Conversa() {
       return
     }
     speaker.cancel()
+    engagedRef.current = Date.now() // apertou o botao: a proxima fala e para o Jefrey, com ou sem o nome
     setMicOn(true)
     void listener.start()
   }
