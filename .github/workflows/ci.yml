@@ -45,19 +45,3 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
-
-  compose:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Compose config
-        env:
-          GRAFANA_PASSWORD: ci-so-para-validar-0123456789abcdef0123456789
-          JEFREY_API__SECRET_KEY: ci-so-para-validar-0123456789abcdef0123456789
-          JEFREY_DATABASE__PASSWORD: ci-so-para-validar-0123456789abcdef0123456789
-          JEFREY_EVENTBUS__HMAC_KEY: ci-so-para-validar-0123456789abcdef0123456789
-          JEFREY_REDIS__PASSWORD: ci-so-para-validar-0123456789abcdef0123456789
-          N8N_BASIC_AUTH_PASSWORD: ci-so-para-validar-0123456789abcdef0123456789
-        run: |
-          touch .env  # o compose le o .env (que nao vai para o Git); vazio basta para validar
-          docker compose config -q

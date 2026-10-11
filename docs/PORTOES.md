@@ -1,7 +1,7 @@
 # Portões de aceite
 
 Um portão só fecha com pessoas e contas reais. Anote cada tentativa na tabela do portão (data, quem, resultado, o que travou).
-Antes de qualquer portão: **feche qualquer outro Jefrey** (inclusive o do Docker: `docker ps` e `docker stop`), senão ele pode ocupar a porta 8000.
+Antes de qualquer portão: **feche qualquer outro Jefrey** (inclusive uma cópia antiga que ainda esteja aberta), senão ele pode ocupar a porta 8000.
 Rode `python scripts/verify_installed.py http://localhost:PORTA` no instalado: tudo deve dar OK.
 
 | Portão | Critério | Passa se |

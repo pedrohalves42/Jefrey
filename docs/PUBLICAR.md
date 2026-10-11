@@ -43,6 +43,3 @@ python scripts/sign_update.py --key C:\Users\Pedro\Jefrey-chaves\update_private_
 ```
 3. Publique o instalador no endereço do `--url` e o `manifest.json` em um endereço fixo, por exemplo `https://SEU-SITE/atualizacoes/manifest.json`.
 4. Uma única vez, coloque esse endereço em `packaging/defaults/update_url.txt` antes de gerar o instalador que você vai distribuir.
-
-## 4. Docker (projetos mais complexos)
-O caminho normal é o instalador do Windows (modo nativo). O Docker (`docker-compose.yml` e `docker-compose.prod.yml`) fica para quem quer rodar em servidor ou integrar com outros sistemas. Ele é opcional e não é o que o usuário comum usa.
