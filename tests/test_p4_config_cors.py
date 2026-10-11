@@ -5,11 +5,6 @@ def test_env_example_completeness():
     txt = pathlib.Path(".env.example").read_text(encoding="utf-8")
     for key in ["JEFREY_API__SECRET_KEY", "JEFREY_EVENTBUS__HMAC_KEY", "JEFREY_OAUTH__CLIENT_ID", "JEFREY_DATABASE__PASSWORD"]:
         assert key in txt, f"missing {key} in .env.example"
-    # compose must require PASSWORD, not provide fallback
-    comp = pathlib.Path("docker-compose.yml").read_text(encoding="utf-8")
-    assert "PASSWORD:?required" in comp or "PASSWORD:? required" in comp or "GRAFANA_PASSWORD" in comp
-    # volume :ro
-    assert ":ro" in comp
 
 
 def test_config_env_literal_no_trailing_space(monkeypatch):

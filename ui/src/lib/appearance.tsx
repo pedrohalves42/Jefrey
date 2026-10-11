@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 export type BrainShape = "brain" | "orb" | "reactor" | "hologram"
 
 export type Appearance = {
+  auto: boolean // a cor acompanha a hora do dia (desligar = cor fixa escolhida)
   hue: number // 0-360, cor principal
   shape: BrainShape // forma da visualizacao
   intensity: number // 0-1, brilho/energia
@@ -15,8 +16,27 @@ export type Appearance = {
   holoInvert: boolean // imagem de fundo claro
 }
 
+/** Cor do momento: muda ao longo do dia (alvorada cobre, manha dourada, tarde azul-agua, entardecer coral, noite violeta, madrugada azul). */
+const DAY_ANCHORS: [number, number][] = [[0, 224], [5, 214], [6.5, 28], [9, 46], [13, 184], [17, 196], [18.5, 10], [20.5, 268], [24, 224]]
+
+export function dayHue(date: Date = new Date()): number {
+  const h = date.getHours() + date.getMinutes() / 60
+  for (let i = 0; i < DAY_ANCHORS.length - 1; i++) {
+    const [h0, c0] = DAY_ANCHORS[i]
+    const [h1, c1] = DAY_ANCHORS[i + 1]
+    if (h >= h0 && h <= h1) {
+      let d = c1 - c0
+      if (d > 180) d -= 360
+      if (d < -180) d += 360
+      return Math.round((((c0 + (d * (h - h0)) / (h1 - h0)) % 360) + 360) % 360)
+    }
+  }
+  return 32
+}
+
 export const DEFAULT_APPEARANCE: Appearance = {
-  hue: 191,
+  auto: true,
+  hue: 32,
   shape: "brain",
   intensity: 0.7,
   particles: 0.6,
@@ -29,6 +49,7 @@ export const DEFAULT_APPEARANCE: Appearance = {
 }
 
 export const PRESETS: { id: string; label: string; value: Partial<Appearance> }[] = [
+  { id: "jefrey", label: "Jefrey (muda com o dia)", value: { auto: true, hue: 32, shape: "brain", intensity: 0.7 } },
   { id: "stark", label: "Stark (ciano)", value: { hue: 191, shape: "reactor", intensity: 0.8 } },
   { id: "holo", label: "Holograma", value: { hue: 191, shape: "hologram", intensity: 0.85, holoScan: 0.55, holoGlitch: 0.3 } },
   { id: "neural", label: "Neural (violeta)", value: { hue: 268, shape: "brain", intensity: 0.7 } },
@@ -37,7 +58,7 @@ export const PRESETS: { id: string; label: string; value: Partial<Appearance> }[
   { id: "calmo", label: "Calmo (sem animacao)", value: { hue: 210, shape: "orb", intensity: 0.4, motion: false } },
 ]
 
-const KEY = "jefrey_appearance_v1"
+const KEY = "jefrey_appearance_v2" // v2: identidade nova (cobre); quem personalizou antes escolhe de novo em Aparencia
 
 function clamp(n: unknown, lo: number, hi: number, fallback: number): number {
   const v = typeof n === "number" && Number.isFinite(n) ? n : fallback
@@ -49,6 +70,7 @@ export function sanitizeAppearance(raw: unknown): Appearance {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>
   const shape: BrainShape = r.shape === "orb" || r.shape === "reactor" || r.shape === "brain" || r.shape === "hologram" ? r.shape : DEFAULT_APPEARANCE.shape
   return {
+    auto: typeof r.auto === "boolean" ? r.auto : DEFAULT_APPEARANCE.auto,
     hue: Math.round(clamp(r.hue, 0, 360, DEFAULT_APPEARANCE.hue)),
     shape,
     intensity: clamp(r.intensity, 0, 1, DEFAULT_APPEARANCE.intensity),
@@ -91,23 +113,30 @@ type Ctx = {
 const AppearanceContext = createContext<Ctx | null>(null)
 
 export function AppearanceProvider({ children }: { children: ReactNode }) {
-  const [appearance, setAppearance] = useState<Appearance>(load)
+  const [stored, setAppearance] = useState<Appearance>(load)
+  const [tick, setTick] = useState(0)
+  useEffect(() => {
+    const t = window.setInterval(() => setTick(n => n + 1), 5 * 60 * 1000) // a cor do dia anda devagar
+    return () => window.clearInterval(t)
+  }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const appearance = useMemo(() => (stored.auto ? { ...stored, hue: dayHue() } : stored), [stored, tick])
 
   useEffect(() => {
     document.documentElement.style.setProperty("--hue", String(appearance.hue))
     document.documentElement.dataset.motion = appearance.motion ? "on" : "off"
     try {
-      localStorage.setItem(KEY, JSON.stringify(appearance))
+      localStorage.setItem(KEY, JSON.stringify(stored))
     } catch {
       /* ignora */
     }
-  }, [appearance])
+  }, [appearance, stored])
 
   const set = useCallback((patch: Partial<Appearance>) => {
-    setAppearance(prev => sanitizeAppearance({ ...prev, ...patch }))
+    setAppearance(prev => sanitizeAppearance({ ...prev, ...(patch.hue !== undefined && patch.auto === undefined ? { auto: false } : {}), ...patch }))
   }, [])
   const reset = useCallback(() => setAppearance({ ...DEFAULT_APPEARANCE }), [])
-  const exportJson = useCallback(() => JSON.stringify(appearance, null, 2), [appearance])
+  const exportJson = useCallback(() => JSON.stringify(stored, null, 2), [stored])
   const importJson = useCallback((text: string) => {
     try {
       setAppearance(sanitizeAppearance(JSON.parse(text)))

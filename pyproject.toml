@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [project]
 name = "jefrey"
-version = "0.9.0"
+version = "0.10.0"
 description = "Jefrey - Assistente pessoal IA com memória avançada e habilidades orientadas a eventos"
 authors = [
     {name = "Jefrey Team", email = "contato@jefrey.ai"}
@@ -52,8 +52,9 @@ dependencies = [
     "faster-whisper>=1.0.0",
     "elevenlabs>=1.12.0",
     "pyttsx3>=2.90",
+    "piper-tts>=1.8,<2",
     "onnxruntime>=1.17.0",
-    "av>=10.0.0",
+    "av>=14,<17",
 ]
 
 [project.optional-dependencies]
@@ -120,6 +121,8 @@ asyncio_default_fixture_loop_scope = "function"
 python_files = ["test_*.py", "*_test.py"]
 pythonpath = ["src"]
 testpaths = ["tests"]
+addopts = "-m \"not contract and not gate\""
+markers = ["contract: usa chaves reais de nuvem (opt-in, JEFREY_CONTRACT_KEYS)", "gate: portao de lancamento (so antes de publicar: pytest -m gate)"]
 
 [tool.coverage.run]
 source = ["src/jefrey"]

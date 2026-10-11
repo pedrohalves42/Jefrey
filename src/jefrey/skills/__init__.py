@@ -144,6 +144,21 @@ def skill(name: str, description: str, **metadata_kwargs):
     return decorator
 
 
+class _CallableTool(StructuredTool):
+    """Ferramenta que tambem pode ser chamada direto (`await self.outra_ferramenta(x=1)`) dentro de uma skill.
+
+    Sem isto, uma ferramenta que chamava outra (ex.: busca de e-mails -> lista de e-mails) quebrava com
+    "'StructuredTool' object is not callable". O modelo continua usando `ainvoke`, com validacao normal.
+    """
+
+    def __call__(self, *args, **kwargs):  # type: ignore[override]
+        if self.coroutine is not None and not args:
+            return self.coroutine(**kwargs)
+        if self.coroutine is not None and len(args) == 1 and isinstance(args[0], dict) and not kwargs:
+            return self.coroutine(**args[0])
+        return super().__call__(*args, **kwargs)
+
+
 def tool(name: str | None = None, description: str | None = None):
     """Decorator para criar ferramenta a partir de funcao async. Suporta metodos (self binding)."""
     def decorator(func: Callable[..., Awaitable[Any]]):
@@ -186,7 +201,7 @@ def tool(name: str | None = None, description: str | None = None):
                     return cached
                 async def bound_wrapper(**kwargs):
                     return await func(instance, **kwargs)
-                bound_tool = StructuredTool.from_function(
+                bound_tool = _CallableTool.from_function(
                     coroutine=bound_wrapper,
                     name=tool_name,
                     description=tool_desc,
@@ -202,6 +217,9 @@ def load_skills() -> int:
     """Importa modulos de skills para trigger dos decorators. Idempotente."""
     mods = [
         "src.jefrey.skills.essentials",
+        "src.jefrey.skills.computer",
+        "src.jefrey.skills.computer_ui",
+        "src.jefrey.skills.alexa",
         "src.jefrey.skills.notes",
         "src.jefrey.skills.reminders",
         "src.jefrey.skills.automation",
@@ -209,6 +227,10 @@ def load_skills() -> int:
         "src.jefrey.skills.email",
         "src.jefrey.skills.web_search",
         "src.jefrey.skills.drive",
+        "src.jefrey.skills.google_extras",
+        "src.jefrey.skills.whatsapp",
+        "src.jefrey.skills.social",
+        "src.jefrey.skills.vision",
         "src.jefrey.skills.risk_assessment",
     ]
     loaded = 0

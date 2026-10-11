@@ -59,6 +59,20 @@ async def set_prefs(body: PrefsBody, request: Request):
         raise HTTPException(status_code=422, detail=str(e))
 
 
+@activity_router.get("/telemetry")
+async def telemetry(request: Request):
+    """Medidores do painel: memoria, processador, tempo ligado e qual cerebro esta pensando."""
+    _user(request)
+    from src.jefrey.core import brains, sysinfo
+
+    snap = sysinfo.snapshot()
+    names = {c["id"]: c["name"] for c in brains.public_catalog()}
+    st = brains.state()["brains"]
+    snap["brain"] = names.get(st[0]["id"], st[0]["id"]) if st else None
+    snap["reserves"] = max(0, len(st) - 1)
+    return snap
+
+
 @activity_router.get("/activity")
 async def what_is_jefrey_doing(request: Request):
     """O que o Jefrey faz sozinho agora (a tela mostra no avatar)."""

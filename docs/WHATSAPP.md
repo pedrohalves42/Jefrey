@@ -36,7 +36,7 @@ JEFREY_WHATSAPP__PHONE_NUMBER_ID=123456789012345
 JEFREY_WHATSAPP__ALLOWED=5511999990000=demo
 ```
 
-Depois: `docker compose up -d jefrey-api`. Mande "oi" para o número do WhatsApp do seu app.
+Depois: reinicie o Jefrey. Mande "oi" para o número do WhatsApp do seu app.
 
 ## Segurança (o que o Jefrey faz por você)
 

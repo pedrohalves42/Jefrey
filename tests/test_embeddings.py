@@ -147,12 +147,30 @@ def test_sem_nenhum_backend_levanta_mensagem_clara():
     assert "Configurações" in str(ei.value) and E.load_choice() is None
 
 
-def test_escolha_gravada_nunca_troca_sozinha_mesmo_se_cair():
+def test_escolha_gravada_que_cai_usa_outra_so_por_enquanto_sem_trocar_a_gravada():
+    """Antes: o Ollama desligado deixava a memoria MORTA para sempre. Agora: usa a nuvem/motor embutido enquanto ele estiver fora."""
     E.save_choice(Choice("ollama", "embeddinggemma", "http://x"))
     a = AutoEmbeddings(CANDS, builder=fake_builder({"ollama": False, "openai": True, "chroma": True}))
-    with pytest.raises(EmbeddingsUnavailable):  # nao salta para a nuvem: misturaria espacos vetoriais
+    assert a.model_id == "openrouter-baai/bge-m3"  # outra colecao: nada se mistura
+    assert a.fallback_from == "ollama/embeddinggemma"
+    assert E.load_choice().backend == "ollama"  # a escolha gravada continua sendo o Ollama
+
+
+def test_gravada_que_cai_sem_nenhuma_alternativa_continua_indisponivel():
+    E.save_choice(Choice("ollama", "embeddinggemma", "http://x"))
+    a = AutoEmbeddings(CANDS, builder=fake_builder({"ollama": False, "openai": False, "chroma": False}))
+    with pytest.raises(EmbeddingsUnavailable):
         a.model_id
     assert E.load_choice().backend == "ollama"
+
+
+def test_quando_a_gravada_volta_as_memorias_antigas_voltam():
+    E.save_choice(Choice("ollama", "embeddinggemma", "http://x"))
+    works = {"ollama": False, "openai": True, "chroma": True}
+    assert AutoEmbeddings(CANDS, builder=fake_builder(works)).model_id == "openrouter-baai/bge-m3"
+    works["ollama"] = True
+    b = AutoEmbeddings(CANDS, builder=fake_builder(works))
+    assert b.model_id == "embeddinggemma" and b.fallback_from is None
 
 
 def test_modo_servidor_nao_grava_escolha(monkeypatch):

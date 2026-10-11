@@ -4,6 +4,7 @@ from typing import Final
 import logging
 from pathlib import Path
 
+from src.jefrey.adapters.outbound.google_credentials import GoogleCredentials
 from src.jefrey.skills import SkillBase, SkillMetadata, skill, tool
 from src.jefrey.core.config import get_settings
 
@@ -18,6 +19,23 @@ def _unprotect(v):
 def _protect(v):
     from src.jefrey.core.secret_store import protect
     return protect(v)
+
+def compact_message(msg_id: str, thread_id: str, headers: dict, detail: dict) -> dict:
+    """Um e-mail em poucas linhas: o resultado da ferramenta tem limite de tamanho (antes 10 e-mails completos estouravam
+    e o modelo recebia JSON cortado, tentava de novo e demorava ~30 s). `unread` responde "quantos nao lidos"."""
+    def cut(s: object, n: int) -> str:
+        return " ".join(str(s or "").split())[:n]
+
+    return {
+        "id": msg_id,
+        "thread_id": thread_id,
+        "subject": cut(headers.get("Subject", "(sem assunto)"), 90),
+        "from": cut(headers.get("From", ""), 60),
+        "date": cut(headers.get("Date", ""), 31),
+        "snippet": cut(detail.get("snippet", ""), 110),
+        "unread": "UNREAD" in (detail.get("labelIds") or []),
+    }
+
 
 class EmailSkill(SkillBase):
     metadata = SkillMetadata(
@@ -41,153 +59,12 @@ class EmailSkill(SkillBase):
         super().__init__()
         self._service = None
         self._creds = None
-        self._token_cache = {}  # Cache de credenciais por user_id (CIPHER-001 fix)
+        self._google = GoogleCredentials("gmail", "gmail", self.SCOPES)
+        self._token_cache = self._google.cache  # credenciais por pessoa (CIPHER-001)
 
     def _get_credentials_for_user(self, user_id: str | None = None):
-        """Obtém credenciais OAuth2 do PostgreSQL para um user_id específico (CIPHER-001 fix)."""
-        if not user_id:
-            logger.warning("CIPHER-001: user_id não fornecido - usando fallback single-tenant (não isolado)")
-            return self._get_fallback_credentials()
-        
-        # Verificar cache primeiro
-        if user_id in self._token_cache:
-            creds = self._token_cache[user_id]
-            if creds and creds.valid:
-                return creds
-            elif creds and creds.expired and creds.refresh_token:
-                try:
-                    creds.refresh(self._get_request())
-                    logger.info("CIPHER-001: Token OAuth2 refresh para user_id=%s", user_id)
-                    return creds
-                except Exception as e:
-                    logger.warning("CIPHER-001: Token refresh falhou user_id=%s: %s", user_id, e)
-        
-        # Buscar do PostgreSQL
-        try:
-            from src.jefrey.core.db import get_db
-            from src.jefrey.core.models import OAuthToken
-            from google.oauth2.credentials import Credentials
-            
-            with get_db() as session:
-                token_record = session.query(OAuthToken).filter(
-                    OAuthToken.user_id == user_id,
-                    OAuthToken.provider == "gmail"
-                ).first()
-                
-                if not token_record:
-                    logger.warning("CIPHER-001: No OAuth token found for user_id=%s provider=google - usando fallback", user_id)
-                    return self._get_fallback_credentials()
-                
-                creds = Credentials(
-                    token=_unprotect(token_record.access_token),
-                    refresh_token=_unprotect(token_record.refresh_token) if token_record.refresh_token else None,
-                    token_uri="https://oauth2.googleapis.com/token",
-                    client_id=self._get_client_id(),
-                    client_secret=self._get_client_secret(),
-                    scopes=token_record.scopes or self.SCOPES,
-                )
-                
-                if token_record.expires_at:
-                    creds.expiry = token_record.expires_at
-                
-                if creds and creds.expired and creds.refresh_token:
-                    try:
-                        creds.refresh(self._get_request())
-                        token_record.access_token = _protect(creds.token)
-                        token_record.expires_at = creds.expiry
-                        session.commit()
-                        logger.info("CIPHER-001: Token OAuth2 refresh + atualizado no PostgreSQL user_id=%s", user_id)
-                    except Exception as e:
-                        logger.warning("CIPHER-001: Token refresh falhou user_id=%s: %s", user_id, e)
-                
-                self._token_cache[user_id] = creds
-                logger.info("CIPHER-001: OAuth token carregado do PostgreSQL user_id=%s email=%s", user_id, token_record.email)
-                return creds
-        except Exception as e:
-            logger.error("CIPHER-001: Falha ao carregar OAuth token do PostgreSQL: %s", e)
-            return self._get_fallback_credentials()
-    
-    def _get_client_id(self):
-        from src.jefrey.core.google_oauth import credentials as _gc
-        _c = _gc()
-        if _c:
-            return _c['client_id']
-        return self._get_client_id_settings()
-
-    def _get_client_id_settings(self):
-        try:
-            from src.jefrey.core.config import get_settings
-            return get_settings().integrations.gmail.client_id
-        except Exception:
-            import os
-            return os.getenv("JEFREY_OAUTH__CLIENT_ID", "")
-    
-    def _get_client_secret(self):
-        from src.jefrey.core.google_oauth import credentials as _gc
-        _c = _gc()
-        if _c:
-            return _c['client_secret']
-        return self._get_client_secret_settings()
-
-    def _get_client_secret_settings(self):
-        try:
-            from src.jefrey.core.config import get_settings
-            return get_settings().integrations.gmail.client_secret
-        except Exception:
-            import os
-            return os.getenv("JEFREY_OAUTH__CLIENT_SECRET", "")
-    
-    def _get_request(self):
-        try:
-            from google.auth.transport.requests import Request
-            return Request()
-        except Exception:
-            return None
-
-    def _get_fallback_credentials(self):
-        """Fallback para credenciais do filesystem (single-tenant, não isolado)."""
-        try:
-            from google.auth.transport.requests import Request
-            from google.oauth2.credentials import Credentials
-            from google_auth_oauthlib.flow import InstalledAppFlow
-            from googleapiclient.discovery import build
-        except ImportError:
-            logger.warning("google-api-python-client nao instalado")
-            return None
-        cfg = get_settings().integrations.gmail
-        creds_file = Path(cfg.credentials_file)
-        token_file = Path(cfg.token_file)
-        if not creds_file.exists():
-            logger.warning(f"Credenciais Gmail nao encontradas: {creds_file}")
-            return None
-        try:
-            if token_file.exists():
-                creds = Credentials.from_authorized_user_file(str(token_file), self.SCOPES)
-            if not creds or not creds.valid:
-                if creds and creds.expired and creds.refresh_token:
-                    try:
-                        creds.refresh(Request())
-                    except Exception as e:
-                        logger.warning(f"Gmail token refresh falhou: {type(e).__name__}")
-                        return None
-                else:
-                    flow = InstalledAppFlow.from_client_secrets_file(str(creds_file), self.SCOPES)
-                    creds = flow.run_local_server(port=0)
-                token_file.parent.mkdir(parents=True, exist_ok=True)
-                try:
-                    token_file.parent.chmod(0o700)
-                except Exception as _e:
-                    logger.debug("ignorado (%s): %s", 'email.py', type(_e).__name__)
-                with open(token_file, "w", encoding="utf-8") as f:
-                    f.write(creds.to_json())
-                try:
-                    token_file.chmod(0o600)
-                except Exception as _e:
-                    logger.debug("ignorado (%s): %s", 'email.py', type(_e).__name__)
-            return creds
-        except Exception as e:
-            logger.warning(f"Gmail initialize falhou: {type(e).__name__}")
-            return None
+        """Credenciais OAuth2 desta pessoa (codigo compartilhado em adapters/outbound/google_credentials.py)."""
+        return self._google.for_user(user_id)
 
     def initialize(self) -> bool:
         return True
@@ -222,7 +99,7 @@ class EmailSkill(SkillBase):
         if not creds:
             return [{"error": f"OAuth token não encontrado para user_id={_uid}"}]
         
-        from googleapiclient.discovery import build
+        from src.jefrey.adapters.outbound.google_credentials import build_service as build
         try:
             params = {
                 "userId": "me",
@@ -246,16 +123,10 @@ class EmailSkill(SkillBase):
 
                 headers = {h["name"]: h["value"] for h in detail.get("payload", {}).get("headers", [])}
 
-                detailed.append({
-                    "id": msg["id"],
-                    "thread_id": msg["threadId"],
-                    "subject": headers.get("Subject", "(sem assunto)"),
-                    "from": headers.get("From", ""),
-                    "to": headers.get("To", ""),
-                    "date": headers.get("Date", ""),
-                    "snippet": detail.get("snippet", ""),
-                    "labels": detail.get("labelIds", []),
-                })
+                detailed.append(compact_message(msg["id"], msg.get("threadId", ""), headers, detail))
+            total = result.get("resultSizeEstimate")
+            if isinstance(total, int) and total > len(detailed):
+                detailed.append({"total_estimado": total, "mostrando": len(detailed)})  # para o modelo nao dizer que so existem estes
 
             return detailed
         except Exception as e:
@@ -271,7 +142,7 @@ class EmailSkill(SkillBase):
         if not creds:
             return {"error": f"OAuth token não encontrado para user_id={_uid}"}
         
-        from googleapiclient.discovery import build
+        from src.jefrey.adapters.outbound.google_credentials import build_service as build
         try:
             service = build("gmail", "v1", credentials=creds)
             msg = service.users().messages().get(userId="me", id=message_id, format="full").execute()
@@ -341,7 +212,7 @@ class EmailSkill(SkillBase):
         import base64
         from email.mime.text import MIMEText
         from email.mime.multipart import MIMEMultipart
-        from googleapiclient.discovery import build
+        from src.jefrey.adapters.outbound.google_credentials import build_service as build
 
         message = MIMEMultipart("alternative")
         message["to"] = ", ".join(to) if isinstance(to, list) else to
@@ -381,7 +252,7 @@ class EmailSkill(SkillBase):
         
         import base64
         from email.mime.text import MIMEText
-        from googleapiclient.discovery import build
+        from src.jefrey.adapters.outbound.google_credentials import build_service as build
         try:
             service = build("gmail", "v1", credentials=creds)
             original = service.users().messages().get(userId="me", id=message_id, format="metadata").execute()
@@ -430,7 +301,7 @@ class EmailSkill(SkillBase):
         if not creds:
             return {"error": f"OAuth token não encontrado para user_id={_uid}"}
         
-        from googleapiclient.discovery import build
+        from src.jefrey.adapters.outbound.google_credentials import build_service as build
         try:
             service = build("gmail", "v1", credentials=creds)
             body = {}
@@ -464,7 +335,7 @@ class EmailSkill(SkillBase):
         if not creds:
             return [{"error": f"OAuth token não encontrado para user_id={_uid}"}]
         
-        from googleapiclient.discovery import build
+        from src.jefrey.adapters.outbound.google_credentials import build_service as build
         try:
             service = build("gmail", "v1", credentials=creds)
             result = service.users().labels().list(userId="me").execute()

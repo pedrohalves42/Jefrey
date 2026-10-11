@@ -8,7 +8,6 @@ import secrets
 import time
 from typing import Optional
 
-import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
@@ -185,13 +184,18 @@ async def openrouter_callback(request: Request, code: str = "", state: str = "")
     if not code or entry is None or entry[1] < time.time():
         return RedirectResponse("/bem-vindo?erro=openrouter", status_code=303)
     try:
-        async with httpx.AsyncClient(timeout=20) as c:
-            r = await c.post(OPENROUTER_KEYS, json={"code": code, "code_verifier": entry[0], "code_challenge_method": "S256"})
-            r.raise_for_status()
-            key = str(r.json().get("key") or "")
+        from src.jefrey.adapters.outbound.weather_source import openrouter_key
+
+        key = await openrouter_key(code, entry[0], OPENROUTER_KEYS)
         if not key:
             raise ValueError("sem chave")
-        save_override("openai", OPENROUTER_DEFAULT_MODEL, OPENROUTER_BASE, None, key)
+        from src.jefrey.core import brains
+
+        try:
+            brains.attach_oneclick("openrouter", key)  # vira o principal; o cerebro anterior (se havia) vira reserva
+        except Exception as e:
+            logger.info("openrouter: reserva nao aplicada (%s); gravando so o principal", type(e).__name__)
+            save_override("openai", OPENROUTER_DEFAULT_MODEL, OPENROUTER_BASE, None, key)
     except Exception as e:  # nunca registra codigo nem chave
         logger.warning("openrouter callback falhou: %s", type(e).__name__)
         return RedirectResponse("/bem-vindo?erro=openrouter", status_code=303)

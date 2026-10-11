@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { speakable } from "@/lib/voice/sentences"
+import { authedFetch } from "@/lib/session"
+import { getEngines, pickEngine, splitSentences, type Engines } from "@/lib/voice"
+import { createLevelMeter, setLevelSource } from "@/lib/voiceLevel"
 
 const MAX_CHUNK = 200 // alguns motores de voz travam em falas longas
 
@@ -20,6 +23,32 @@ export function chunkForSpeech(text: string, max = MAX_CHUNK): string[] {
 
 export type SpeakerVoice = { uri: string; name: string; lang: string }
 
+const VOICE_KEY = "jefrey_voice_uri"
+const CLOUD_CHUNK = 220 // frases curtas: a 1a sai logo e o resto vem pre-pronto
+
+/** Nota de naturalidade: vozes neurais ("Natural", "Online", "Neural", Google) soam bem menos roboticas que as antigas do Windows. */
+export function voiceScore(v: { name: string; lang: string }): number {
+  const n = v.name.toLowerCase()
+  let s = 0
+  if (/natural|neural/.test(n)) s += 100
+  if (/online|google/.test(n)) s += 50
+  if (v.lang.toLowerCase() === "pt-br") s += 20
+  if (/desktop/.test(n)) s -= 10
+  return s
+}
+
+export function bestVoice<T extends { name: string; lang: string }>(list: T[]): T | undefined {
+  return [...list].sort((a, b) => voiceScore(b) - voiceScore(a))[0]
+}
+
+function savedVoice(): string | null {
+  try {
+    return localStorage.getItem(VOICE_KEY)
+  } catch {
+    return null
+  }
+}
+
 /**
  * Fala com as vozes instaladas no sistema (local: nada sai do computador).
  * `say` enfileira frases; `cancel` interrompe tudo na hora (interrupcao pelo usuario).
@@ -29,7 +58,31 @@ export function useSpeaker() {
   const [speaking, setSpeaking] = useState(false)
   const [voices, setVoices] = useState<SpeakerVoice[]>([])
   const pending = useRef(0)
-  const voiceUri = useRef<string | null>(null)
+  const voiceUri = useRef<string | null>(savedVoice())
+  const [voiceChoice, setVoiceChoice] = useState<string | null>(voiceUri.current)
+  const [engines, setEngines] = useState<Engines | null>(null)
+  const enginesRef = useRef<Engines | null>(null)
+  const gen = useRef(0) // cada cancel() invalida a fila de audio da nuvem
+  const queue = useRef<Promise<void>>(Promise.resolve())
+  const audio = useRef<HTMLAudioElement | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      try {
+        const r = await getEngines()
+        if (alive && r.ok && r.data) {
+          setEngines(r.data)
+          enginesRef.current = r.data
+        }
+      } catch {
+        /* sem motor do servidor: usa as vozes do computador */
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [])
 
   useEffect(() => {
     if (!supported) return
@@ -47,23 +100,73 @@ export function useSpeaker() {
 
   const setVoice = useCallback((uri: string | null) => {
     voiceUri.current = uri
+    setVoiceChoice(uri)
+    try {
+      if (uri) localStorage.setItem(VOICE_KEY, uri)
+      else localStorage.removeItem(VOICE_KEY)
+    } catch {
+      /* sem armazenamento: vale so ate fechar */
+    }
   }, [])
 
   const pickVoice = (): SpeechSynthesisVoice | undefined => {
     const all = window.speechSynthesis.getVoices()
-    return (
-      all.find(v => v.voiceURI === voiceUri.current) ||
-      all.find(v => v.lang.toLowerCase() === "pt-br") ||
-      all.find(v => v.lang.toLowerCase().startsWith("pt"))
-    )
+    return all.find(v => v.voiceURI === voiceUri.current) || bestVoice(all.filter(v => v.lang.toLowerCase().startsWith("pt")))
   }
 
-  const say = useCallback(
-    (raw: string) => {
-      if (!supported) return
-      const text = speakable(raw)
-      if (!text) return
-      for (const piece of chunkForSpeech(text)) {
+  /** Automatica = o melhor motor do servidor (nuvem, depois voz natural local); a pessoa pode escolher uma voz do computador. */
+  const serverEngine = (): string | null => {
+    const e = pickEngine(voiceUri.current, enginesRef.current)
+    return e === "browser" ? null : e
+  }
+
+  /** Pede o audio de um pedaco ao servidor (nao toca). Devolve null se falhar. */
+  const fetchAudio = async (piece: string, engine: string): Promise<Blob | null> => {
+    try {
+      const explicit = !!voiceUri.current && voiceUri.current !== "browser" && !!enginesRef.current?.engines.some(x => x.id === voiceUri.current)
+      const r = await authedFetch("/voice/speak", { method: "POST", body: JSON.stringify({ text: piece, engine: explicit ? engine : undefined }) })
+      if (!r.ok) {
+        if (r.status === 409 && enginesRef.current) enginesRef.current = { ...enginesRef.current, default: "browser" } // sem conta/voz: o computador fala nas proximas
+        return null
+      }
+      return await r.blob()
+    } catch {
+      return null
+    }
+  }
+
+  const playBlob = async (blob: Blob, myGen: number): Promise<boolean> => {
+    try {
+      if (myGen !== gen.current) return true // cancelado enquanto baixava
+      const url = URL.createObjectURL(blob)
+      const a = new Audio(url)
+      audio.current = a
+      const meter = createLevelMeter(a)
+      setLevelSource(meter.level) // o avatar pulsa com o volume REAL desta fala
+      await new Promise<void>(resolve => {
+        const end = () => {
+          setLevelSource(null)
+          meter.stop()
+          URL.revokeObjectURL(url)
+          resolve()
+        }
+        a.onended = end
+        a.onerror = end
+        a.onpause = () => {
+          if (a.ended || myGen !== gen.current) end()
+        }
+        void a.play().catch(end)
+      })
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  const sayBrowser = (piece: string) => {
+    if (!supported) return
+    {
+      {
         const u = new SpeechSynthesisUtterance(piece)
         const v = pickVoice()
         if (v) {
@@ -78,23 +181,67 @@ export function useSpeaker() {
           pending.current = Math.max(0, pending.current - 1)
           if (pending.current === 0) setSpeaking(false)
         }
+        u.onboundary = e => {
+          if (e.name === "word" || e.name === undefined) window.dispatchEvent(new Event("jefrey-word")) // o avatar pulsa a cada palavra
+        }
         u.onend = done
         u.onerror = done
         window.speechSynthesis.speak(u)
       }
+    }
+  }
+
+  const say = useCallback(
+    (raw: string) => {
+      const text = speakable(raw)
+      if (!text) return
+      const engine = serverEngine()
+      if (engine) {
+        const myGen = gen.current
+        pending.current += 1
+        setSpeaking(true)
+        const pieces = splitSentences(text, CLOUD_CHUNK)
+        queue.current = queue.current.then(async () => {
+          const ahead: Promise<Blob | null>[] = []
+          const want = (i: number) => {
+            if (i < pieces.length && !ahead[i]) ahead[i] = fetchAudio(pieces[i], engine)
+          }
+          want(0)
+          want(1)
+          for (let i = 0; i < pieces.length; i++) {
+            if (myGen !== gen.current) break
+            want(i + 1)
+            want(i + 2) // enquanto este toca, os proximos ja estao sendo preparados
+            const blob = await ahead[i]
+            const ok = blob ? await playBlob(blob, myGen) : false
+            if (!ok && myGen === gen.current) sayBrowser(pieces[i]) // falhou: o computador fala no lugar
+          }
+          if (myGen === gen.current) {
+            pending.current = Math.max(0, pending.current - 1)
+            if (pending.current === 0) setSpeaking(false)
+          }
+        })
+        return
+      }
+      for (const piece of chunkForSpeech(text)) sayBrowser(piece)
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [supported],
   )
 
   const cancel = useCallback(() => {
-    if (!supported) return
+    gen.current += 1
+    queue.current = Promise.resolve()
+    audio.current?.pause()
+    audio.current = null
     pending.current = 0
-    window.speechSynthesis.cancel()
+    if (supported) window.speechSynthesis.cancel()
     setSpeaking(false)
   }, [supported])
 
   useEffect(() => () => cancel(), [cancel])
 
-  return { supported, speaking, voices, setVoice, say, cancel }
+  const sorted = [...voices].sort((a, b) => voiceScore(b) - voiceScore(a))
+  const cloudOk = !!engines?.engines.some(e => e.id !== "browser" && e.available)
+  return { supported: supported || cloudOk, speaking, voices: sorted, voiceChoice, cloudOk, engines, setVoice, say, cancel }
 }

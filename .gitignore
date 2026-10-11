@@ -158,3 +158,16 @@ update_private_key*
 *.pfx
 *.p12
 *.snk
+
+# Padroes do instalador com credenciais (nao vao para o Git)
+packaging/defaults/*
+!packaging/defaults/README.md
+
+# area de trabalho de execucao de planos (local)
+.superpowers/
+
+# saidas de release (instaladores, manifestos, zips)
+release/
+
+# carimbo gerado a cada build
+src/jefrey/build_info.py

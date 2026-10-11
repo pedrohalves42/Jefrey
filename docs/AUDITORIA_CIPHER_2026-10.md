@@ -76,3 +76,9 @@ caracteres no chat; zip-slip tratado no restore; isolamento por usuário coberto
 - Teste real do WhatsApp Web (seletores mudam; só com o celular da pessoa) e do login do Google (precisa do app no Google Cloud).
 - Qualidade das respostas com modelo de nuvem (precisa de uma chave para medir).
 - Instalação em PC limpo, assinatura do instalador e antivírus (Sessão 13).
+
+## 5. Dependências (pip-audit, 2026-10-05)
+- `langchain-core` e `openai`: sem vulnerabilidades conhecidas nas versões instaladas (P-03 resolvido pelas versões atuais).
+- `chromadb 1.5.9`: 5 avisos (PYSEC-2026-311, 3813, 3814, 3815), sem versão corrigida publicada. Todos afetam o **modo servidor** do Chroma
+  (autenticação/RBAC do servidor e `trust_remote_code` ao carregar modelos). O Jefrey usa só o `PersistentClient` embutido, não abre servidor do
+  Chroma e não usa `trust_remote_code` (guardado por teste em `tests/test_closing_gaps.py`). **Risco aceito**; reauditar a cada versão.

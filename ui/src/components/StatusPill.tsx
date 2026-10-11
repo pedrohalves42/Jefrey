@@ -29,7 +29,7 @@ export function StatusPill() {
               {data.services.map(s => (
                 <li key={s.id} className="flex items-center justify-between gap-2">
                   <span className="text-white/75">{s.label}</span>
-                  <span className={s.state === "ok" ? "text-emerald-300" : "text-red-300"}>{s.state === "ok" ? "ok" : "fora do ar"}</span>
+                  <span className={s.state === "ok" ? "text-emerald-300" : "text-red-300"}>{s.state === "ok" ? "ok" : "com problema"}</span>
                 </li>
               ))}
             </ul>

@@ -1,3 +1,4 @@
+import ReportProblem from "@/components/ReportProblem"
 import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import ListenButton from "@/components/ListenButton"
@@ -118,6 +119,7 @@ export default function Ajuda() {
 
       <MorningSettings />
       <Updates />
+      <ReportProblem />
 
       <section className="jf-panel p-5">
         <h2 className="text-xl font-medium text-white">Meus dados e privacidade</h2>

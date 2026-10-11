@@ -5,7 +5,7 @@ export type ChatEvent =
   | { type: "pending_approval"; approval_id?: string; thread_id?: string }
   | { type: "tool_start"; tool: string; label: string; risk: string }
   | { type: "tool_end"; tool: string; ok: boolean; status: string; summary: string }
-  | { type: "approval_required"; approval_id: string; tool: string; label: string; risk?: string }
+  | { type: "approval_required"; approval_id: string; tool: string; label: string; risk?: string; detail?: string }
   | { type: "recall"; items: RecallItem[] }
 
 export type RecallItem = { kind: "fato" | "lembranca" | "diario" | "estudo"; text: string }
@@ -82,7 +82,7 @@ function parseBlock(block: string): ChatEvent | null {
           : null
       case "approval_required":
         return typeof j.approval_id === "string" && typeof j.tool === "string"
-          ? { type: "approval_required", approval_id: j.approval_id, tool: j.tool, label: typeof j.label === "string" ? j.label : j.tool, risk: j.risk }
+          ? { type: "approval_required", approval_id: j.approval_id, tool: j.tool, label: typeof j.label === "string" ? j.label : j.tool, risk: j.risk, detail: typeof j.detail === "string" ? j.detail.slice(0, 400) : undefined }
           : null
       case "recall": {
         const items = recallItems(j.items)

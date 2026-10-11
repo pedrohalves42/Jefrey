@@ -1,5 +1,6 @@
 /* Jefrey para WhatsApp Web: le a conversa ABERTA e responde, SO nas conversas que a pessoa liberou no Jefrey.
- * Nao abre conversas, nao inicia mensagens, nao envia em massa, ignora grupos. Sempre ha pausa humana antes de enviar. */
+ * Para ENVIAR algo que a pessoa aprovou, abre a conversa certa (so quando ela esta parada, sem digitar), envia e para.
+ * Nao inicia conversas com desconhecidos, nao envia em massa, ignora grupos. Sempre ha pausa humana antes de enviar. */
 "use strict";
 
 (function () {
@@ -16,9 +17,49 @@
   let pendingChat = "";
   let debounce = null;
   let busySending = false;
+  const tries = {}; // quantas vezes tentamos abrir a conversa de cada mensagem (depois de algumas, avisa que falhou)
+  const MAX_TRIES = 4;
+  const T0 = window.__JEFREY_WA_TEST__;
+  const IDLE_MS = T0 && typeof T0.idleMs === "number" ? T0.idleMs : 15000; // so troca de conversa se a pessoa esta parada
+  let lastInput = Date.now();
+  ["keydown", "mousedown", "wheel", "touchstart"].forEach((ev) => window.addEventListener(ev, () => (lastInput = Date.now()), true));
+  const isIdle = () => Date.now() - lastInput >= IDLE_MS;
   let state = { paired: false, paused: false, server: "" };
 
-  const call = (path, method, body) => chrome.runtime.sendMessage({ type: "api", path, method, body });
+  /* Se a extensao foi recarregada/atualizada com esta aba aberta, o contexto antigo morre ("Extension context invalidated"):
+   * em vez de encher o console de erros, este script para e avisa para recarregar a pagina. */
+  const timers = [];
+  let dead = false;
+  const alive = () => {
+    try {
+      return !!(chrome.runtime && chrome.runtime.id);
+    } catch (e) {
+      return false;
+    }
+  };
+  function shutdown() {
+    if (dead) return;
+    dead = true;
+    timers.forEach(clearInterval);
+    clearTimeout(debounce);
+    if (badge) {
+      badge.textContent = "Jefrey: extensão atualizada. Recarregue a página (F5)";
+      badge.style.opacity = "1";
+    }
+  }
+  async function send(msg) {
+    if (dead || !alive()) {
+      shutdown();
+      return undefined;
+    }
+    try {
+      return await chrome.runtime.sendMessage(msg);
+    } catch (e) {
+      if (!alive() || /context invalidated/i.test(String((e && e.message) || e))) shutdown();
+      return undefined;
+    }
+  }
+  const call = (path, method, body) => send({ type: "api", path, method, body });
 
   /* ---- plaquinha discreta no canto: mostra que o Jefrey esta atento e deixa pausar ---- */
   const badge = document.createElement("div");
@@ -27,17 +68,18 @@
   badge.title = "Clique para pausar ou continuar o Jefrey neste WhatsApp";
   document.documentElement.appendChild(badge);
   function paint(extra) {
+    if (dead) return; // extensao recarregada: o aviso de "recarregue a pagina" nao pode ser apagado
     badge.textContent = !state.paired ? "Jefrey: não pareado" : state.paused ? "Jefrey: pausado" : extra || "Jefrey: atento";
     badge.style.opacity = state.paused || !state.paired ? "0.6" : "0.92";
   }
   badge.addEventListener("click", async () => {
     const next = !state.paused;
-    await chrome.runtime.sendMessage({ type: "setPaused", paused: next });
+    await send({ type: "setPaused", paused: next });
     state.paused = next;
     paint();
   });
   async function refreshState() {
-    const s = await chrome.runtime.sendMessage({ type: "status" });
+    const s = await send({ type: "status" });
     state.paired = !!(s && s.paired);
     state.paused = !!(s && s.paused) || state.paused;
     paint();
@@ -59,12 +101,52 @@
     if (res && res.data && res.data.action === "queued") paint(res.data.asked ? "Jefrey: aguardando sua aprovação" : "Jefrey: respondendo…");
   }
 
+  /* ---- conversa comigo mesmo: o que a pessoa escreve ali e um pedido ao Jefrey ---- */
+  async function selfTick(title, rows, key) {
+    if (!primed.has(key)) {
+      rows.forEach((r) => seen.add(r.id));
+      primed.add(key);
+      call("/wa/device/inbound", "POST", { chat: title, is_group: false, messages: [], context: [] }); // a conversa aparece na lista do Jefrey
+      return;
+    }
+    for (const r of C.newCommands(rows, seen)) {
+      seen.add(r.id);
+      const res = await call("/wa/device/command", "POST", { chat: title, id: r.id, text: r.text });
+      if (res && res.data && res.data.action === "working") paint("Jefrey: pensando…");
+    }
+  }
+
+  /* ---- historico: as ultimas mensagens da conversa aberta, para o Jefrey poder responder "o que a Maria me disse?" ---- */
+  const lastHistory = {};
+  async function sendHistory(title, rows) {
+    const sig = rows.length + "|" + (rows.length ? rows[rows.length - 1].id : "");
+    const key = C.norm(title);
+    if (lastHistory[key] === sig) return;
+    lastHistory[key] = sig;
+    const msgs = rows.filter((r) => r.kind === "text" && r.text).slice(-30).map((r) => ({ id: r.id, text: r.text, from_me: r.from_me }));
+    if (msgs.length) await call("/wa/device/history", "POST", { chat: title, is_group: C.isGroup(document), messages: msgs });
+  }
+
+  /* ---- lista de conversas: quem escreveu e quantas mensagens nao lidas, sem abrir nada ---- */
+  let lastInbox = "";
+  async function inboxTick() {
+    if (!state.paired || state.paused) return;
+    const items = C.parseSidebar(document);
+    if (!items.length) return;
+    const sig = JSON.stringify(items.map((i) => [i.title, i.unread, i.preview]));
+    if (sig === lastInbox) return;
+    lastInbox = sig;
+    await call("/wa/device/inbox", "POST", { items });
+  }
+
   async function readTick() {
     if (!state.paired || state.paused) return;
     const title = C.chatTitle(document);
     if (!title) return;
     const rows = C.parseRows(document);
     const key = C.norm(title);
+    if (C.isSelfChat(title)) return selfTick(title, rows, key);
+    if (!C.isGroup(document)) sendHistory(title, rows).catch(() => {});
     if (!primed.has(key)) {
       rows.forEach((r) => seen.add(r.id)); // o que ja estava na tela nao e respondido
       primed.add(key);
@@ -85,14 +167,43 @@
   /* ---- enviar (so o que foi aprovado: pela regra automatica ou pela pessoa) ---- */
   const sleep = (window.__JEFREY_WA_TEST__ && window.__JEFREY_WA_TEST__.sleep) || ((ms) => new Promise((r) => setTimeout(r, ms)));
 
+  async function ensureChatOpen(chat) {
+    if (C.sameChat(C.chatTitle(document), chat)) return true;
+    if (!isIdle()) return false; // a pessoa esta mexendo no WhatsApp: nao troca a conversa debaixo dela
+    if (C.composerText(document) !== "") return false; // ha rascunho na conversa aberta
+    let r = C.openChat(document, chat);
+    if (!r.ok && (await C.typeInSearch(document, chat, sleep))) {
+      await sleep(1500);
+      r = C.openChat(document, chat);
+      C.clearSearch(document);
+    }
+    if (!r.ok) return false;
+    for (let i = 0; i < 8; i++) {
+      await sleep(500);
+      if (C.sameChat(C.chatTitle(document), chat)) return true;
+    }
+    return false;
+  }
+
   async function sendOne(item) {
+    if (!C.sameChat(C.chatTitle(document), item.chat)) {
+      const opened = await ensureChatOpen(item.chat);
+      if (!opened) {
+        tries[item.id] = (tries[item.id] || 0) + 1;
+        if (tries[item.id] >= MAX_TRIES && isIdle()) {
+          await call("/wa/device/sent", "POST", { id: item.id, ok: false }); // nao achei a conversa: avisa em vez de ficar na fila para sempre
+          return true;
+        }
+        return false;
+      }
+    }
     const can = C.canSendNow(document, item.chat);
-    if (!can.ok) return false; // outro chat aberto ou a pessoa digitando: fica na fila para depois
+    if (!can.ok) return false; // a pessoa digitando: fica na fila para depois
     paint("Jefrey: escrevendo…");
     await sleep(C.humanDelayMs());
     const again = C.canSendNow(document, item.chat); // a pessoa pode ter mudado de conversa ou comecado a digitar
     if (!again.ok || state.paused) return false;
-    if (!C.typeText(document, item.text)) {
+    if (!(await C.typeText(document, item.text, sleep))) {
       await call("/wa/device/sent", "POST", { id: item.id, ok: false });
       return true;
     }
@@ -114,6 +225,10 @@
   async function pollTick() {
     if (!state.paired || busySending) return;
     const res = await call("/wa/device/poll");
+    if (res && res.status === 401) {
+      state.paired = false; // pareamento desfeito: mostra "nao pareado" e para de ler/enviar ate parear de novo
+      return paint();
+    }
     if (!res || !res.ok || !res.data) return;
     state.server = res.data.paused ? "pausado" : "";
     if (res.data.paused || state.paused) return paint();
@@ -131,11 +246,13 @@
   const testing = window.__JEFREY_WA_TEST__;
   if (testing) {
     // gancho para os testes (pagina simulada): sem relogios reais
-    testing.hooks = { readTick, pollTick, flush, refreshState, state: () => state, seen, badge };
+    testing.hooks = { readTick, pollTick, flush, refreshState, inboxTick, state: () => state, seen, badge };
     return;
   }
   refreshState();
-  setInterval(refreshState, 15000);
-  setInterval(() => readTick().catch(() => {}), READ_MS);
-  setInterval(() => pollTick().catch(() => {}), POLL_MS);
+  const every = (fn, ms) => timers.push(setInterval(() => (alive() ? fn() : shutdown()), ms));
+  every(() => refreshState().catch(() => {}), 15000);
+  every(() => readTick().catch(() => {}), READ_MS);
+  every(() => pollTick().catch(() => {}), POLL_MS);
+  every(() => inboxTick().catch(() => {}), 8000);
 })();

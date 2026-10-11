@@ -18,7 +18,7 @@
     --input: 217 32% 17%;
     --ring: 199 89% 48%;
     --radius: 0.75rem;
-    --hue: 191;
+    --hue: 32;
     --glass: rgba(6,182,214,0.08);
     --glass-border: rgba(34,211,238,0.18);
     --neon: 34 211 238;
@@ -224,6 +224,46 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 }
 
 
+/* Palco: o avatar ocupa a tela; brilho e escala acompanham a voz (--pulse vem de useVoicePulse) */
+.jf-stage {
+  background: radial-gradient(ellipse at 50% 42%, hsl(var(--hue) 75% 20% / 0.55), transparent 68%), #03080d;
+  border: 1px solid hsl(var(--hue) 80% 60% / 0.2);
+  box-shadow: inset 0 0 80px hsl(var(--hue) 90% 50% / 0.08);
+}
+.jf-stage::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 5; opacity: 0.35;
+  background: repeating-linear-gradient(180deg, transparent 0 3px, hsl(var(--hue) 90% 70% / 0.035) 3px 4px);
+}
+.jf-stage-core {
+  --pulse: 0;
+  filter: drop-shadow(0 0 calc(8px + var(--pulse) * 46px) hsl(var(--hue) 95% 62% / calc(0.1 + var(--pulse) * 0.6)));
+}
+.jf-glass {
+  background: rgba(5, 16, 24, 0.58); border: 1px solid hsl(var(--hue) 80% 60% / 0.22);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+.jf-corner { position: absolute; width: 26px; height: 26px; z-index: 12; pointer-events: none; border: 2px solid hsl(var(--hue) 90% 62% / 0.75); }
+.jf-corner-tl { top: 8px; left: 8px; border-right: 0; border-bottom: 0; }
+.jf-corner-tr { top: 8px; right: 8px; border-left: 0; border-bottom: 0; }
+.jf-corner-bl { bottom: 8px; left: 8px; border-right: 0; border-top: 0; }
+.jf-corner-br { bottom: 8px; right: 8px; border-left: 0; border-top: 0; }
+.jf-rings { position: absolute; left: 50%; top: 45%; width: min(78vh, 78%); aspect-ratio: 1; transform: translate(-50%, -50%); pointer-events: none; z-index: 1; }
+.jf-rings::before, .jf-rings::after { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 1px dashed hsl(var(--hue) 85% 62% / 0.25); }
+.jf-rings::after { inset: 9%; border-style: solid; border-color: hsl(var(--hue) 85% 62% / 0.14); }
+html[data-motion="on"] .jf-rings::before { animation: jfSpin 60s linear infinite; }
+html[data-motion="on"] .jf-rings::after { animation: jfSpin 90s linear infinite reverse; }
+@keyframes jfSpin { to { transform: rotate(360deg); } }
+
+/* Painel Jarvis: molduras ciano com cantos, como num HUD */
+.jf-hudpanel {
+  padding: 12px 14px; border: 1px solid hsl(var(--hue) 80% 60% / 0.28); border-radius: 4px;
+  background: linear-gradient(180deg, hsl(var(--hue) 80% 50% / 0.07), transparent);
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+.jf-hudpanel::before, .jf-hudpanel::after { content: ""; position: absolute; width: 10px; height: 10px; border: 2px solid hsl(var(--hue) 90% 62%); }
+.jf-hudpanel::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+.jf-hudpanel::after { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
+
 /* Modo Fácil: letra maior, mais contraste e alvos de toque grandes (pensado para quem nao e tecnico) */
 html[data-easy="1"] { font-size: 118%; }
 html[data-easy="1"] body { color: #fff; }
@@ -241,3 +281,91 @@ html[data-easy="1"] .text-white\/65, html[data-easy="1"] .text-white\/70 { color
 }
 .jf-hud::before { top: 4px; left: 4px; border-right: 0; border-bottom: 0; }
 .jf-hud::after { bottom: 4px; right: 4px; border-left: 0; border-top: 0; }
+
+/* Interacao na tela principal: o avatar inclina com o mouse e os atalhos reagem ao toque */
+.jf-tilt { transition: transform 0.18s ease-out; transform-style: preserve-3d; }
+.jf-chip { transition: transform 0.12s ease, background-color 0.12s ease, box-shadow 0.12s ease; }
+.jf-chip:hover { transform: translateY(-2px); box-shadow: 0 4px 18px hsl(var(--hue) 90% 60% / 0.25); }
+.jf-chip:active { transform: translateY(0) scale(0.97); }
+@media (prefers-reduced-motion: reduce) { .jf-tilt, .jf-chip { transition: none; } .jf-chip:hover { transform: none; } }
+
+/* Pagina Hoje: movimento leve (desligado para quem pede menos movimento) */
+@keyframes jfRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes jfMarquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes jfFlashUp { 0% { background-color: hsl(150 80% 45% / .45); } 100% { background-color: transparent; } }
+@keyframes jfFlashDown { 0% { background-color: hsl(0 80% 55% / .45); } 100% { background-color: transparent; } }
+@keyframes jfFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes jfProgress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.jf-rise { animation: jfRise .5s ease both; }
+.jf-ticker { display: flex; width: max-content; animation: jfMarquee 38s linear infinite; }
+.jf-ticker:hover { animation-play-state: paused; }
+.jf-flash-up { animation: jfFlashUp 1.4s ease-out; }
+.jf-flash-down { animation: jfFlashDown 1.4s ease-out; }
+.jf-fade { animation: jfFade .45s ease both; }
+.jf-progress { transform-origin: left; animation: jfProgress 8s linear forwards; }
+@media (prefers-reduced-motion: reduce) {
+  .jf-rise, .jf-fade, .jf-flash-up, .jf-flash-down, .jf-progress { animation: none; }
+  .jf-ticker { animation: none; flex-wrap: wrap; width: auto; }
+}
+
+
+/* ===== Identidade do Jefrey: calma, calor e clareza =====
+ * Sem neon, sem molduras de HUD e sem linhas de varredura. Paleta quente (a cor principal continua escolhida em Aparencia),
+ * titulos em fonte com serifa (a que ja vem no Windows) e superficies solidas e suaves. Este bloco vem por ultimo e vence os anteriores. */
+:root {
+  --background: 24 14% 6%;
+  --foreground: 36 33% 93%;
+  --card: 24 12% 9%;
+  --card-foreground: 36 33% 93%;
+  --muted-foreground: 30 12% 66%;
+  --border: 24 10% 18%;
+  --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+}
+html { font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+body {
+  background:
+    radial-gradient(1000px 520px at 50% -8%, hsl(var(--hue) 45% 30% / 0.20), transparent 65%),
+    hsl(var(--background));
+}
+main h1, main h2, .jf-serif, .jf-brand { font-family: var(--font-display); letter-spacing: -0.01em; font-weight: 500; }
+
+.jf-panel {
+  background: hsl(24 12% 10% / 0.92);
+  border: 1px solid hsl(30 20% 80% / 0.09);
+  border-radius: 20px;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+  box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.03), 0 14px 30px -20px #000;
+}
+.jf-btn {
+  background: hsl(var(--hue) 70% 62%);
+  border: 0;
+  color: hsl(24 30% 8%);
+  font-weight: 600;
+  border-radius: 999px;
+}
+.jf-btn:hover:not(:disabled) { background: hsl(var(--hue) 75% 69%); }
+.jf-accent { color: hsl(var(--hue) 65% 72%); }
+.jf-glass {
+  background: hsl(24 12% 9% / 0.8);
+  border: 1px solid hsl(30 20% 80% / 0.09);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.jf-stage {
+  background: radial-gradient(ellipse at 50% 38%, hsl(var(--hue) 50% 20% / 0.55), transparent 66%), hsl(24 14% 5%);
+  border: 0; box-shadow: none; border-radius: 28px;
+}
+.jf-stage::after, .jf-corner, .jf-rings { display: none; }
+.jf-stage-core { filter: drop-shadow(0 0 calc(6px + var(--pulse) * 34px) hsl(var(--hue) 80% 60% / calc(0.08 + var(--pulse) * 0.45))); }
+.jf-hudpanel {
+  border: 0; border-radius: 16px; padding: 12px 14px;
+  background: hsl(24 12% 9% / 0.62);
+  font-family: inherit;
+}
+.jf-hudpanel::before, .jf-hudpanel::after { display: none; }
+.jf-chip:hover { box-shadow: 0 6px 20px -8px hsl(var(--hue) 70% 55% / 0.45); }
+.jf-bubble-user { background: hsl(var(--hue) 45% 30% / 0.35); border: 1px solid hsl(var(--hue) 40% 60% / 0.25); }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: hsl(30 15% 60% / 0.28); }
+::-webkit-scrollbar-thumb:hover { background: hsl(30 15% 60% / 0.45); }
+/* janela baixa ou estreita: os paineis do canto saem do caminho do cerebro (ele e a estrela) */
+@media (max-height: 780px), (max-width: 1180px) { .jf-hudpanel { display: none; } }

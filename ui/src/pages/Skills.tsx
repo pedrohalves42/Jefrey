@@ -13,12 +13,35 @@ const RISK: Record<string, { label: string; cls: string }> = {
 }
 
 const NICE: Record<string, string> = {
+  essentials: "Dia a dia (hora, conta, clima, arquivos)",
+  computer: "Controlar o computador",
+  alexa: "Alexa",
+  reminders: "Lembretes",
   notes: "Notas",
   automation: "Automação",
   calendar: "Agenda",
   email: "E-mail",
   web_search: "Busca na web",
   drive: "Arquivos (Drive)",
+}
+
+/** O que dizer para usar cada skill (a voz ou o teclado, na Conversa). */
+const EXAMPLES: Record<string, string[]> = {
+  essentials: ["Que horas são?", "Quanto é 15% de 240?", "Como está o tempo em São Paulo?"],
+  computer: ["Abre o Word", "Abre o YouTube", "Aumenta o volume", "Pausa a música", "Fecha o Chrome"],
+  alexa: ["Fala na Alexa que o jantar está pronto", "Aciona a rotina boa noite"],
+  reminders: ["Me lembra de beber água daqui a 30 minutos"],
+  notes: ["Anota que a senha do wifi está na geladeira", "O que eu anotei sobre o médico?"],
+  calendar: ["O que tenho amanhã na agenda?"],
+  email: ["Tenho e-mail novo?"],
+  web_search: ["Pesquisa o resultado do jogo de ontem"],
+  drive: ["Procura meu currículo no Drive"],
+}
+const NEEDS: Record<string, { text: string; to: string }> = {
+  alexa: { text: "Precisa ser conectada", to: "/conexoes?aba=alexa" },
+  calendar: { text: "Precisa entrar com o Google", to: "/conexoes?aba=google" },
+  email: { text: "Precisa entrar com o Google", to: "/conexoes?aba=google" },
+  drive: { text: "Precisa entrar com o Google", to: "/conexoes?aba=google" },
 }
 
 export default function Skills() {
@@ -98,6 +121,9 @@ export default function Skills() {
               <span className="text-xs text-white/40">{s.tools.length} ferramentas</span>
             </div>
             <p className="mt-1 text-sm text-white/65">{s.description}</p>
+            {EXAMPLES[s.name] && <p className="mt-1 text-sm text-white/55">Experimente dizer: {EXAMPLES[s.name].map(e => `“${e}”`).join(", ")}</p>}
+            {NEEDS[s.name] && s.enabled && <p className="mt-1 text-sm text-amber-200/90">{NEEDS[s.name].text}: <a className="underline" href={NEEDS[s.name].to}>abrir Conexões</a></p>}
+            {!s.enabled && <p className="mt-1 text-sm text-white/50">Desligada: o Jefrey não usa isso até você ligar.</p>}
             <button
               type="button"
               onClick={() => setOpen(open === s.name ? null : s.name)}

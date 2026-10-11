@@ -9,7 +9,6 @@
 
 1. **FAIL-CLOSED (Axiom #6, Security Eng ch.4):** se env var ausente/inválida → `raise RuntimeError/ValueError`, **nunca** `auto-key`, `fallback allow`, `default system/user`, `:-jefrey`, `0.1.0` warn. Reprodução C1a: `JEFREY_ENV=prod JEFREY_EVENTBUS__HMAC_KEY= python -c "from src.jefrey.eventbus.signing import _get_hmac_key; _get_hmac_key()"` → `RuntimeError` (não `UserWarning`).
 2. **ISOLAMENTO (Axiom #2, DDIA):** toda query/fila/cache/session **DEVE** filtrar `user_id` explícito. Default `user_id=None` (não `"system"`), `user_role="guest"` (não `"user"`). Tenant A nunca lê checkpoint/cache/evento de B.
-3. **SEM STUB EM PROD (Pragmatic Programmer):** `valid_`, `stub`, `placeholder`, `TODO` → se `JEFREY_ENV=prod` → `NotImplementedError` + `grep` 0 em `src/` + `docker-compose.yml`.
 4. **PERSISTÊNCIA REAL (DDIA):** nunca `dict`/`list` in-memory para revogação/token/broker. Use **Redis com TTL** + `pool_pre_ping=True` + `retry`. `_introspection_cache` e `_jwks_cache` sem bound → `TTLCache(maxsize=1024, ttl=60)` ou `redis.setex`.
 5. **CRIPTO CORRETA (Security Eng ch.8, MCP Spec, CIPHER-033/031):** HMAC inclui `kid + user_id + timestamp + canonical` com `json.dumps(..., sort_keys=True, separators=(",",":"))` + `hmac.compare_digest`; JWKS `urlsafe_b64encode(...).decode().rstrip("=")` sem padding + `alg:RS256` + `kid` versionado para rotação sem quebrar Redis Streams; JWT valida `aud/iss/exp/kid/alg` com `PyJWT` + `leeway`.
 6. **LEAST PRIVILEGE (Axiom #5, Security Eng):** `registry.register(overwrite=False)`, volume `.:/app:ro` + `read_only:true` + `tmpfs:/tmp`, CORS allowlist explícita (`allow_origins` de `JEFREY_API__CORS_ORIGINS`, `allow_methods`/`allow_headers` enumerados, `allow_credentials=False` salvo allowlist — Starlette>0.36 dá `ValueError` com `allow_credentials=True` + wildcard).
@@ -33,8 +32,6 @@ grep -rn "b64encode" src/jefrey/oauth2/ | grep -v "urlsafe_b64encode"  # 0
 grep -rn "overwrite=True" src/  # 0 (A4)
 grep -rn "valid_" src/jefrey/oauth2/  # 0 em prod (stub)
 grep -rn "In-memory" src/  # 0
-grep -rn ":-jefrey" docker-compose.yml  # 0 (usar ${VAR:?required})
-grep -rn ".:/app" docker-compose.yml | grep -v ":ro"  # 0 (volume :ro)
 ```
 
 **Checagens automáticas:** o CI (`.github/workflows/ci.yml`) e o `pre-commit` (`.pre-commit-config.yaml`) rodam compilação, a regra de métricas sem `user_id` e os testes. Rode `python -m pytest tests -q` e, em `ui/`, `npm test` e `npx tsc --noEmit -p .` antes de commitar.
@@ -48,9 +45,7 @@ grep -rn ".:/app" docker-compose.yml | grep -v ":ro"  # 0 (volume :ro)
 - [ ] **GREP-3** `grep -rn "except.*: pass" src/` = 0 — CIPHER-021
 - [ ] **GREP-4** `grep -rn -E "str\(.*dict|str\(.*canonical" src/jefrey/eventbus/ src/jefrey/core/audit.py | grep -v "default=str"` = 0 — C2 `json.dumps(..., sort_keys=True, separators=(",",":"))` + `kid.user_id.timestamp` no HMAC; `audit.py` com `redact_pii` antes de `json.dumps`
 - [ ] **GREP-5** `grep -rn "b64encode" src/jefrey/oauth2/ | grep -v "urlsafe_b64encode"` = 0 — A1 RFC7517 `urlsafe_b64encode(...).decode().rstrip("=")` + `alg:RS256` + `kid`
-- [ ] **GREP-6** `grep -rn "overwrite=True" src/; grep -rn "valid_" src/jefrey/oauth2/; grep -rn "In-memory" src/; grep -rn ":-jefrey" docker-compose.yml; grep -rn ".:/app" docker-compose.yml | grep -v ":ro"` = 0 — A4 + stub + persistência + env fallback + volume :ro
 - [ ] `grep -rn "user_id.*system" src/jefrey/core/` só em `Column server_default` comentado ou migration; `PolicyContext.user_id=None` + `user_role="guest"` (A3, least privilege)
-- [ ] `docker compose config` sem `:-jefrey` e sem `HMAC`/`OAUTH` faltante; volumes com `:ro` + `read_only:true` + `tmpfs:/tmp`
 - [ ] `JEFREY_ENV=prod python audit_pessimista.py` → 0 CRÍTICO (inclui GREP-5 e GREP-6 com `JEFREY_ENV=prod` fail-closed)
 - [ ] `JEFREY_ENV=prod python audit_v2_falsos_verdes.py` → 0 CRÍTICO/ALTO
 - [ ] `p3_validate.py` passa com tools **REAIS** (`save_note`, `calendar_create` — não `social_post_create` fake) sem `UNKNOWN`
@@ -106,11 +101,9 @@ Incluir `user_id` no HMAC quebra assinaturas antigas no Redis Stream. Use `kid` 
 bash scripts/guard_anti_patterns.sh
 grep -rn "dev-auto-generated-key\|return \"allow\" # fail-open\|str(.*dict\|b64encode" src/jefrey/ || echo "0 anti-patterns"
 grep -rn 'overwrite=True' src/ || echo "0 overwrite"
-grep -rn '.:/app' docker-compose.yml
 
 # Env
 grep -E "JEFREY_EVENTBUS__HMAC_KEY|JEFREY_OAUTH|JEFREY_REDIS__PASSWORD|JEFREY_ENV" .env.example
-docker compose config | grep -E "JEFREY_|GRAFANA_PASSWORD"
 
 # Prod audits (fail-closed)
 JEFREY_ENV=prod python audit_pessimista.py 2>&1 | grep CRITICO

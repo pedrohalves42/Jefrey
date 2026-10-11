@@ -12,6 +12,8 @@ import logging
 import os
 # CIPHER-313: chromadb tenta enviar telemetria (posthog) e loga ERROR a cada operacao
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
+from src.jefrey.core import logredact as _logredact
+_logredact.install()  # chaves e tokens nunca aparecem em registro
 import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -36,15 +38,24 @@ from src.jefrey.api.signing_routes import router as signing_router
 logger = logging.getLogger(__name__)
 
 # F3 LLM probe fail-closed visible (Axiom #1, DDIA cap12) - never crash, lazy (HPP)
-import httpx as _f3_httpx
+from src.jefrey.adapters.outbound import health_probes as _probes
+from src.jefrey.adapters.outbound import http_client as _http
 _f3_log2 = __import__("logging").getLogger(__name__)
 async def _f3_llm_probe():
+    try:
+        from src.jefrey.core.llm_provider import config_from_settings as _cfg_p
+
+        if _cfg_p().provider != "ollama":  # cerebro na nuvem: nao ha Ollama para testar
+            _f3_log2.info("cerebro na nuvem: sem teste do Ollama")
+            return
+    except Exception as _e:
+        _f3_log2.debug("ignorado (main.py): %s", type(_e).__name__)
     try:
         from src.jefrey.core.config import get_settings
         cfg = get_settings()
         base = (getattr(cfg.llm, 'base_url', None) or 'http://host.docker.internal:11434').rstrip('/')
         url = base + '/api/tags'
-        async with _f3_httpx.AsyncClient(timeout=2) as c:
+        async with _http.client(timeout=2) as c:
             r = await c.get(url)
             ok = r.status_code == 200
             has_qwen = 'qwen2' in r.text if ok else False
@@ -52,10 +63,7 @@ async def _f3_llm_probe():
             if not ok:
                 _f3_log2.warning('LLM offline - modo mock visivel na UI (Axiom #1 fail-closed)')
     except Exception as e:
-        try:
-            _f3_log2.warning(f'LLM probe falhou: {e} - modo mock')
-        except:
-            pass
+        _f3_log2.warning('LLM local indisponivel (%s): o Jefrey usa o cerebro da nuvem se houver', type(e).__name__)
 
 
 def create_app() -> FastAPI:
@@ -105,15 +113,22 @@ def create_app() -> FastAPI:
 
         async def _pull():
             try:
+                from src.jefrey.core.llm_provider import config_from_settings as _cfg_q
+
+                if _cfg_q().provider != "ollama":  # cerebro na nuvem: os embeddings usam a reserva da nuvem sozinhos
+                    return
+            except Exception as _e:
+                logger.debug("ignorado (%s): %s", 'main.py', type(_e).__name__)
+            try:
                 cfg2 = get_settings()
                 base = (os.getenv("JEFREY_EMBEDDINGS__BASE_URL") or getattr(cfg2.llm, "base_url", None) or "http://ollama:11434").rstrip("/")
                 model = getattr(getattr(cfg2, "embeddings", None), "model", None) or "nomic-embed-text"
-                async with _f3_httpx.AsyncClient(timeout=10) as c:
+                async with _http.client(timeout=10) as c:
                     tags = (await c.get(base + "/api/tags")).json().get("models", [])
                 if any(str(m.get("name", "")).split(":")[0] == model.split(":")[0] for m in tags):
                     return
                 logger.warning("modelo de embeddings %s ausente no Ollama - baixando em background", model)
-                async with _f3_httpx.AsyncClient(timeout=_f3_httpx.Timeout(3600.0, connect=10.0)) as c:
+                async with _http.client(timeout=_http.Timeout(3600.0, connect=10.0)) as c:
                     r = await c.post(base + "/api/pull", json={"model": model, "stream": False})
                     logger.info("pull %s -> HTTP %s", model, r.status_code)
             except Exception as e:
@@ -143,6 +158,10 @@ def create_app() -> FastAPI:
             scheduler.register("estudos", 600, studies.study_tick)
             scheduler.register("resumo-do-dia", 300, briefing.briefing_tick)
             scheduler.register("avisos-de-lembretes", 30, briefing.reminder_tick)
+            from src.jefrey import bootstrap
+            bootstrap.register_jobs(scheduler)
+            bootstrap.refresh_public_assets()
+            bootstrap.warm_up()
             scheduler.start()
         except Exception as e:
             logger.warning("agendador indisponivel: %s", e)
@@ -234,25 +253,38 @@ def create_app() -> FastAPI:
         cfg = get_settings()
         base = (getattr(cfg.llm, 'base_url', None) or 'http://host.docker.internal:11434').rstrip('/')
 
-        # Check Ollama/LLM availability
+        # Check Ollama/LLM availability (so quando o cerebro e o local: com a nuvem nao ha o que testar e a resposta nao demora)
         ollama_ok = False
         try:
-            async with _f3_httpx.AsyncClient(timeout=2) as c:
-                r = await c.get(base + '/api/tags')
-                ollama_ok = r.status_code == 200
+            from src.jefrey.core.llm_provider import config_from_settings as _cfg_o
+
+            probe_ollama = _cfg_o().provider == "ollama"
+        except Exception as _e:
+            logger.debug("ignorado (%s): %s", 'main.py', type(_e).__name__)
+            probe_ollama = True
+        try:
+            if probe_ollama:
+                async with _http.client(timeout=2) as c:
+                    r = await c.get(base + '/api/tags')
+                    ollama_ok = r.status_code == 200
         except Exception as _e:
             logger.debug("ignorado (%s): %s", 'main.py', type(_e).__name__)
 
         native = (os.getenv("JEFREY_MODE", "") or "").lower() == "native"  # sem Docker: SQLite + memoria local
+        try:
+            from src.jefrey.core.llm_provider import config_from_settings as _cfg_llm
+
+            local_brain = _cfg_llm().provider == "ollama"
+        except Exception as _e:
+            logger.debug("ignorado (%s): %s", 'main.py', type(_e).__name__)
+            local_brain = False
 
         # Check Redis
         redis_ok = False
         try:
             if native:
                 raise RuntimeError("modo nativo: sem Redis")
-            import redis as _redis
-            r = _redis.Redis.from_url(cfg.redis.dsn or 'redis://localhost:6379')
-            r.ping()
+            _probes.redis_ping(cfg.redis.dsn)
             redis_ok = True
         except Exception as _e:
             logger.debug("ignorado (%s): %s", 'main.py', type(_e).__name__)
@@ -260,30 +292,7 @@ def create_app() -> FastAPI:
         # Check Postgres (simple connectivity - Axiom #1 fail-closed)
         postgres_ok = False
         try:
-            if str(cfg.database.dsn or "").startswith("sqlite"):
-                from sqlalchemy import text as _sqltext
-                from src.jefrey.core.db import get_engine
-                with get_engine().connect() as _c:
-                    _c.execute(_sqltext("SELECT 1"))
-                postgres_ok = True
-                raise StopIteration  # banco local verificado
-            # Try asyncpg first (faster async), fallback to psycopg
-            try:
-                import asyncpg
-                # Convert postgresql+psycopg:// to postgresql:// for asyncpg
-                dsn = cfg.database.dsn.replace("postgresql+psycopg://", "postgresql://") if cfg.database.dsn else 'postgresql://localhost/jefrey'
-                conn = await asyncpg.connect(dsn)
-                await conn.close()
-                postgres_ok = True
-            except ImportError:
-                # Fallback to psycopg sync
-                import psycopg
-                dsn = cfg.database.dsn.replace("postgresql+psycopg://", "postgresql://") if cfg.database.dsn else 'postgresql://localhost/jefrey'
-                conn = psycopg.connect(dsn)
-                conn.close()
-                postgres_ok = True
-        except StopIteration:
-            pass
+            postgres_ok = await _probes.database_ping(cfg.database.dsn)
         except Exception as e:
             logger.warning("Postgres health check failed: %s", e)
 
@@ -293,7 +302,7 @@ def create_app() -> FastAPI:
             if native:
                 raise RuntimeError("modo nativo: sem servidor MCP")
             _mcp_url = os.getenv("JEFREY_MCP_HEALTH_URL") or f"http://mcp-server:{cfg.mcp.port}/health"
-            async with _f3_httpx.AsyncClient(timeout=2) as c:
+            async with _http.client(timeout=2) as c:
                 r = await c.get(_mcp_url)
                 mcp_status = "ok" if r.status_code == 200 else "degraded"
         except Exception as e:
@@ -307,11 +316,11 @@ def create_app() -> FastAPI:
             logger.debug("ignorado (%s): %s", 'main.py', type(_e).__name__)
 
         return {
-            "api": {"status": "ok" if ollama_ok else "degraded"},
+            "api": {"status": "ok"},  # se esta resposta chegou, o servidor esta de pe (antes caia para "degradado" so porque o Ollama faltava)
             "stt": {"status": "ok"},  # Already verified via /stt/health
             "tts": {"status": "ok"},  # Already verified via /tts/health
             "mcp": {"status": mcp_status},  # MCP service health (probe real)
-            "ollama": {"status": "ok" if ollama_ok else "degraded"},
+            "ollama": {"status": "ok" if ollama_ok else ("degraded" if local_brain else "off")},  # so importa se o cerebro for o local
             "redis": {"status": "off" if native else ("ok" if redis_ok else "degraded")},
             "postgres": {"status": "ok" if postgres_ok else "degraded"},
             "timestamp": __import__("datetime").datetime.utcnow().isoformat() + "Z"
@@ -356,7 +365,9 @@ def create_app() -> FastAPI:
 
         return {
             "status": overall,
-            "version": get_settings().version,
+            "version": __import__("src.jefrey", fromlist=["__version__"]).__version__,  # a mesma versao do instalador e das atualizacoes
+            "build": __import__("src.jefrey", fromlist=["BUILD"]).BUILD,
+            "mode": "native" if (os.getenv("JEFREY_MODE", "") or "").strip().lower() == "native" else "server",
             "security_components": components,
             "timestamp": __import__("datetime").datetime.utcnow().isoformat() + "Z"
         }
@@ -397,6 +408,22 @@ def create_app() -> FastAPI:
     app.include_router(privacy_router)
     from src.jefrey.api.update_routes import router as update_router
     app.include_router(update_router)
+    from src.jefrey.api.brains_routes import router as brains_router
+    app.include_router(brains_router)
+    from src.jefrey.api.alexa_routes import router as alexa_router
+    app.include_router(alexa_router)
+    from src.jefrey.api.cloudvoice_routes import router as cloudvoice_router
+    app.include_router(cloudvoice_router)
+    from src.jefrey.api.voice_routes import router as voice_router
+    app.include_router(voice_router)
+    from src.jefrey.api.halt_routes import router as halt_router
+    app.include_router(halt_router)
+    from src.jefrey.api.support_routes import router as support_router
+    app.include_router(support_router)
+    from src.jefrey.api.today_routes import router as today_router
+    app.include_router(today_router)
+    from src.jefrey.api.social_routes import router as social_router
+    app.include_router(social_router)
 
     # Monta a sub-aplicacao de aprovacoes Starlette (mantem CIPHER-019, 020, 024 intactos)
     # FIX: mount em /approvals (nao /) para evitar conflito com outros routers.

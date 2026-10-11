@@ -26,6 +26,8 @@ from typing import Mapping, Optional
 
 import httpx
 
+logger = logging.getLogger(__name__)
+
 DEFAULT_PORT = 8000
 OLLAMA_URL = "http://127.0.0.1:11434"
 REQUIRED_MODELS = ("qwen3:1.7b", "embeddinggemma")
@@ -34,6 +36,36 @@ REQUIRED_MODELS = ("qwen3:1.7b", "embeddinggemma")
 def default_home() -> Path:
     base = os.getenv("LOCALAPPDATA") or os.getenv("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
     return Path(base) / "Jefrey"
+
+
+SEED_FILES = ("google_oauth.json", "update_url.txt", "update_public_key.txt")
+
+
+def defaults_dir() -> Optional[Path]:
+    """Pasta `defaults` que acompanha o instalador (credenciais do app Google, endereco e chave das atualizacoes)."""
+    cands = []
+    if getattr(sys, "frozen", False):
+        cands.append(Path(sys.executable).resolve().parent / "defaults")
+    cands.append(Path(__file__).resolve().parents[3] / "packaging" / "defaults")
+    return next((c for c in cands if c.is_dir()), None)
+
+
+def seed_defaults(config_dir: Path, source: Optional[Path] = None) -> list[str]:
+    """Na primeira abertura copia os padroes do instalador para a pasta de dados. Nunca sobrescreve o que a pessoa ja tem."""
+    src = source if source is not None else defaults_dir()
+    copied: list[str] = []
+    if src is None:
+        return copied
+    config_dir.mkdir(parents=True, exist_ok=True)
+    for name in SEED_FILES:
+        s, d = src / name, config_dir / name
+        try:
+            if s.is_file() and not d.exists() and s.stat().st_size < 20_000:
+                d.write_bytes(s.read_bytes())
+                copied.append(name)
+        except OSError:
+            continue
+    return copied
 
 
 def ensure_secrets(config_dir: Path) -> dict[str, str]:
@@ -56,8 +88,8 @@ def ensure_secrets(config_dir: Path) -> dict[str, str]:
         os.replace(tmp, f)
         try:
             os.chmod(f, 0o600)
-        except OSError:
-            pass
+        except OSError as _e:
+            logger.debug("ignorado (launcher): %s", type(_e).__name__)
     return {"api_secret": data["api_secret"], "hmac_key": data["hmac_key"]}
 
 
@@ -65,6 +97,7 @@ def build_env(home: Path, base: Optional[Mapping[str, str]] = None, port: int = 
     """Variaveis de ambiente do modo nativo. O que o usuario ja definiu tem prioridade (exceto o modo)."""
     base = dict(base if base is not None else os.environ)
     sec = ensure_secrets(home / "config")
+    seed_defaults(home / "config")
     data = home / "data"
     for d in (data, data / "files", data / "chroma_db", home / "config"):
         d.mkdir(parents=True, exist_ok=True)
@@ -170,8 +203,8 @@ class _RedactFilter(logging.Filter):
         try:
             record.msg = redact(record.getMessage())
             record.args = ()
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("ignorado (launcher): %s", type(_e).__name__)
         return True
 
 
@@ -218,7 +251,7 @@ def find_free_port(start: int = DEFAULT_PORT, tries: int = 20) -> int:
     raise OSError(f"nenhuma porta livre entre {start} e {start + tries - 1}")
 
 
-def start_tray(url: str, logs_dir: Path, on_quit) -> "object | None":
+def start_tray(url: str, logs_dir: Path, on_quit, on_open=None, on_orb=None, on_restart=None, on_messages=None) -> "object | None":
     """Icone na bandeja com Abrir / Ver registros / Sair. Sem pystray ou sem bandeja, segue sem (nunca derruba)."""
     try:
         import pystray
@@ -230,20 +263,38 @@ def start_tray(url: str, logs_dir: Path, on_quit) -> "object | None":
         image = Image.open(icon_path) if icon_path.is_file() else Image.new("RGB", (64, 64), (6, 182, 212))
 
         def open_app(_icon=None, _item=None):
-            webbrowser.open(url)
+            if on_open is not None:
+                on_open()
+            else:
+                webbrowser.open(url)
+
+        def restart(_icon=None, _item=None):
+            if on_restart is not None:
+                on_restart()
+
+        def orb(_icon=None, _item=None):
+            if on_orb is not None:
+                on_orb()
+
+        def messages(_icon=None, _item=None):
+            if on_messages is not None:
+                on_messages()
 
         def open_logs(_icon=None, _item=None):
             try:
                 os.startfile(str(logs_dir))  # type: ignore[attr-defined]
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("ignorado (launcher): %s", type(_e).__name__)
 
         def quit_(icon=None, _item=None):
             on_quit()
 
         menu = pystray.Menu(
             pystray.MenuItem("Abrir o Jefrey", open_app, default=True),
+            *([pystray.MenuItem("Mensagens (WhatsApp dentro do Jefrey)", messages)] if on_messages is not None else []),
+            *([pystray.MenuItem("Mostrar o orbe (bolinha na tela)", orb)] if on_orb is not None else []),
             pystray.MenuItem("Ver registros (para suporte)", open_logs),
+            *([pystray.MenuItem("Reiniciar o Jefrey", restart)] if on_restart is not None else []),
             pystray.MenuItem("Sair", quit_),
         )
         icon = pystray.Icon("Jefrey", image, "Jefrey", menu)
@@ -252,8 +303,8 @@ def start_tray(url: str, logs_dir: Path, on_quit) -> "object | None":
             from src.jefrey.core import notify
 
             notify.set_sink(lambda title, text: icon.notify(text, title))
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("ignorado (launcher): %s", type(_e).__name__)
         return icon
     except Exception:
         return None
@@ -282,14 +333,30 @@ def start_tray_updates(icon, interval_s: float = 5.0) -> threading.Event:
                 if title != last:
                     icon.title = title[:120]
                     last = title
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("ignorado (launcher): %s", type(_e).__name__)
 
     threading.Thread(target=loop, daemon=True, name="jefrey-tray-title").start()
     return stop
 
 
-def start_global_hotkey(url: str, no_browser: bool):
+HALT_HOTKEY = "ctrl+alt+p"  # "Parar": interrompe qualquer acao do Jefrey no computador, de qualquer janela
+
+
+def start_halt_hotkey():
+    if os.getenv("JEFREY_NO_HOTKEY"):
+        return None
+    try:
+        from src.jefrey.core import halt
+        from src.jefrey.native import hotkey
+
+        return hotkey.start_hotkey(halt.request_halt, HALT_HOTKEY)
+    except Exception as e:
+        logger.info("atalho de parada indisponivel (%s)", type(e).__name__)
+        return None
+
+
+def start_global_hotkey(url: str, no_browser: bool, on_show=None):
     """Atalho global (Ctrl+Alt+J): traz o Jefrey para a frente (ou abre) e manda ele comecar a ouvir."""
     if os.getenv("JEFREY_NO_HOTKEY"):
         return None
@@ -299,7 +366,9 @@ def start_global_hotkey(url: str, no_browser: bool):
 
         def on_press() -> None:
             wake.request()
-            if wake.ui_alive():
+            if on_show is not None:
+                on_show()
+            elif wake.ui_alive():
                 hotkey.focus_window()
             elif not no_browser:
                 webbrowser.open(url)  # a tela nova pergunta pelo pedido ao abrir
@@ -327,6 +396,21 @@ def jefrey_running(port: int) -> bool:
         return False
 
 
+def native_running(port: int) -> bool:
+    """So conta como "ja aberto" a copia NATIVA desta mesma versao. Outra copia (Docker, versao antiga) na mesma porta nao serve:
+    antes o programa instalado desistia e abria o Jefrey velho do Docker, sem o Google e as skills novas."""
+    try:
+        r = httpx.get(f"http://127.0.0.1:{port}/health", timeout=2)
+        if r.status_code != 200:
+            return False
+        d = r.json()
+        from src.jefrey import __version__
+
+        return d.get("mode") == "native" and d.get("version") == __version__
+    except (httpx.HTTPError, ValueError):
+        return False
+
+
 def wait_ready(port: int, timeout: float = 120.0) -> bool:
     end = time.time() + timeout
     while time.time() < end:
@@ -341,11 +425,26 @@ def main(argv: Optional[list[str]] = None) -> int:
     args = argv if argv is not None else sys.argv[1:]
     no_browser = "--no-browser" in args or bool(os.getenv("JEFREY_NO_BROWSER"))
     no_tray = "--no-tray" in args or bool(os.getenv("JEFREY_NO_TRAY"))
+    minimized = "--minimized" in args  # iniciado junto com o Windows: fica so na bandeja
+    restart = "--restart" in args  # "Reiniciar o Jefrey": fecha a copia aberta (se houver) e abre de novo
     desired = int(os.getenv("JEFREY_API_PORT", str(DEFAULT_PORT)))
-    if jefrey_running(desired):
+    from src.jefrey.native import shell as shell_mod
+
+    home0 = Path(os.getenv("JEFREY_HOME") or default_home())
+    if restart and jefrey_running(desired):
+        shell_mod.ask_running_to_quit(home0)
+        end = time.time() + 30
+        while time.time() < end and jefrey_running(desired):
+            time.sleep(0.5)
+    shell_mod.clear_quit_signal(home0)  # sinal velho nunca fecha a copia nova
+
+    use_window = not no_browser and shell_mod.webview_available()
+    if native_running(desired):
         url = f"http://127.0.0.1:{desired}"
         print(f"O Jefrey ja esta aberto em {url}")
-        if not no_browser:
+        if use_window:
+            shell_mod.ask_running_to_show(Path(os.getenv("JEFREY_HOME") or default_home()))  # traz a janela que ja existe
+        elif not no_browser:
             webbrowser.open(url)
         return 0
     try:
@@ -381,7 +480,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         if wait_ready(port) and not no_browser:
             webbrowser.open(url)
 
-    threading.Thread(target=open_when_ready, daemon=True).start()
+    if not use_window:
+        threading.Thread(target=open_when_ready, daemon=True).start()
 
     import uvicorn
 
@@ -393,23 +493,76 @@ def main(argv: Optional[list[str]] = None) -> int:
         logging.getLogger("jefrey.launcher").info("pedido para sair")
         server.should_exit = True
 
-    control.set_quit_hook(quit_now)
-    tray = None if no_tray else start_tray(url, logs_dir, quit_now)
+    shell = shell_mod.DesktopShell(url, home, quit_now, start_hidden=minimized) if use_window else None
+
+    def quit_all() -> None:
+        quit_now()
+        if shell is not None:
+            shell.quit()
+
+    def restart_self() -> None:
+        """Abre uma copia nova (que espera esta fechar) e fecha esta."""
+        try:
+            cmd = shell_mod.restart_command(bool(getattr(sys, "frozen", False)), sys.executable)
+            flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            subprocess.Popen(cmd, cwd=str(root) if not getattr(sys, "frozen", False) else None, creationflags=flags, close_fds=True)
+        except OSError as e:
+            logging.getLogger("jefrey.launcher").warning("nao consegui reiniciar (%s)", type(e).__name__)
+            return
+        quit_all()
+
+    control.set_quit_hook(quit_all)
+    control.set_restart_hook(restart_self)
+    quit_watch_stop = threading.Event()
+    shell_mod.watch_quit_signal(home, quit_all, quit_watch_stop)  # "Reiniciar o Jefrey" de fora pede por arquivo
+    if shell is not None:
+        control.set_window_hooks(shell.show, shell.show_orb)
+        control.set_messages_hook(shell.show_messages)
+        control.set_site_hooks(shell.show_site, shell.site_counts)
+        control.set_publish_hook(shell.publish_site)
+        control.set_screen_hook(shell.grab_screen)
+    tray =None if no_tray else start_tray(url, logs_dir, quit_all, on_open=shell.show if shell else None, on_orb=shell.show_orb if shell else None, on_restart=restart_self,
+                     on_messages=(lambda: shell.show_messages()) if shell else None)
+    if shell is not None and tray is not None:
+        shell.set_tray_notice(lambda title, text: tray.notify(text, title))
     tray_updates = start_tray_updates(tray) if tray is not None else None
-    stop_hotkey = start_global_hotkey(url, no_browser)
+    stop_hotkey = start_global_hotkey(url, no_browser, on_show=shell.show if shell else None)
+    stop_halt = start_halt_hotkey()
     try:
-        server.run()
+        if shell is not None:
+            server_thread = threading.Thread(target=server.run, daemon=True, name="jefrey-server")
+            server_thread.start()
+            try:
+                shell.run(lambda: wait_ready(port))  # bloqueia ate a pessoa escolher Sair
+            except Exception:
+                logger.exception("a janela falhou; seguindo pelo navegador")
+                if wait_ready(port):
+                    webbrowser.open(url)
+                    server_thread.join()
+            server.should_exit = True
+            server_thread.join(timeout=15)
+        else:
+            server.run()
     finally:
         if stop_hotkey is not None:
             stop_hotkey()
+        if stop_halt is not None:
+            stop_halt()
         if tray_updates is not None:
             tray_updates.set()
         control.set_quit_hook(None)
+        control.set_window_hooks(None, None)
+        control.set_messages_hook(None)
+        control.set_site_hooks(None, None)
+        control.set_publish_hook(None)
+        control.set_screen_hook(None)
+        control.set_restart_hook(None)
+        quit_watch_stop.set()
         if tray is not None:
             try:
                 tray.stop()
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("ignorado (launcher): %s", type(_e).__name__)
     return 0
 
 
