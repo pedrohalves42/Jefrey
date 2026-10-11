@@ -9,6 +9,7 @@ import { useListener } from "@/hooks/useListener"
 import { useVoiceReady } from "@/hooks/useVoiceReady"
 import { useWakeSignal } from "@/hooks/useWakeSignal"
 import { addressed } from "@/lib/voiceGate"
+import { FEEDBACK_LABEL, sendFeedback, type FeedbackValue } from "@/lib/feedback"
 import { voiceView } from "@/lib/voiceMode"
 import { useEasy } from "@/lib/easy"
 import { useActivity } from "@/hooks/useActivity"
@@ -84,6 +85,7 @@ export default function Conversa() {
   const sendRef = useRef<(t?: string) => Promise<void>>(async () => {})
   // quando foi a ultima vez que a pessoa falou com o Jefrey (abre a janela para responder sem repetir o nome)
   const engagedRef = useRef(0)
+  const [votes, setVotes] = useState<Record<string, FeedbackValue>>({}) // 👍/👎 ja dados nesta sessao, por resposta
   const listener = useListener({
     onTranscript: t => {
       const g = addressed(t, Date.now(), engagedRef.current)
@@ -526,6 +528,26 @@ export default function Conversa() {
               )}
               {lastAi?.recall && lastAi.recall.length > 0 && <p className="mt-1 line-clamp-1 text-xs text-white/55"><span className="jf-accent">Lembrei:</span> {lastAi.recall.map(r => r.text).join(" · ")}</p>}
               {caption.length > 220 && <button type="button" onClick={() => setDrawer(true)} className="jf-focus mt-1 text-xs text-[hsl(var(--hue)_80%_75%)] underline">ver tudo</button>}
+              {lastAi && lastAi.content && !lastAi.error && !streaming && (
+                <div className="mt-1 flex items-center justify-center gap-2" role="group" aria-label="Avaliar a resposta">
+                  {(["up", "down"] as FeedbackValue[]).map(v => (
+                    <button
+                      key={v}
+                      type="button"
+                      aria-label={FEEDBACK_LABEL[v]}
+                      aria-pressed={votes[lastAi.id] === v}
+                      disabled={!!votes[lastAi.id]}
+                      onClick={() => {
+                        setVotes(prev => ({ ...prev, [lastAi.id]: v }))
+                        void sendFeedback(lastAi.id, v)
+                      }}
+                      className={`jf-focus rounded-md px-2 py-0.5 text-sm transition-opacity ${votes[lastAi.id] === v ? "bg-white/15 opacity-100" : votes[lastAi.id] ? "opacity-25" : "opacity-60 hover:opacity-100"}`}
+                    >
+                      {v === "up" ? "👍" : "👎"}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

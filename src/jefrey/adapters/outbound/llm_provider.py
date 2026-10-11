@@ -587,12 +587,13 @@ class RoutedLLM:
     """Mesma interface do LLMClient, com reserva. So troca de provedor ANTES de a resposta comecar."""
 
     def __init__(self, clients: list[LLMClient], clock=time.monotonic, roles: Optional[list] = None, team: tuple = (), timeout_s: float = FIRST_TOKEN_TIMEOUT_S, cool: Optional[dict] = None,
-                 slow_timeout_s: float = ROUTER_FIRST_TOKEN_TIMEOUT_S, hedge_s: float = HEDGE_AFTER_S):
+                 slow_timeout_s: float = ROUTER_FIRST_TOKEN_TIMEOUT_S, hedge_s: float = HEDGE_AFTER_S, metrics: Any = None):
         self.clients = clients
         self._clock = clock
         self.timeout_s = timeout_s  # sem primeiro token dentro deste tempo, o cerebro e trocado pelo proximo
         self.slow_timeout_s = slow_timeout_s  # o roteador local (9router) junta varios modelos e ganha mais tempo
         self.hedge_s = hedge_s  # sem primeiro token nesse tempo, o proximo cerebro comeca junto
+        self.metrics = metrics  # opcional: registra tempo/resultado de cada cerebro e ordena pelo desempenho real
         # quem esta em espera, por cerebro (chave = provedor+modelo+endereco). Pode ser compartilhado entre pedidos.
         self._cool: dict[str, float] = cool if cool is not None else {}
         self.last_label = ""
@@ -614,6 +615,30 @@ class RoutedLLM:
             return order_by_role(base, self.roles, role)
         return base
 
+    def _ranked(self, order: list[int], role: str) -> list[int]:
+        """Dentro de cada grupo de funcao, o cerebro mais rapido e confiavel (pelo uso real) vai primeiro."""
+        if self.metrics is None or len(order) < 2:
+            return order
+        try:
+            best = self.metrics.ranking(role, [self._key(i) for i in order])
+        except Exception:
+            logger.debug("ranking por uso indisponivel", exc_info=True)
+            return order
+        pos = {k: n for n, k in enumerate(best)}
+
+        def grupo(i: int) -> int:
+            r = self.roles[i]
+            return 0 if (r is not None and role in r) else 1 if r is None else 2
+        return sorted(order, key=lambda i: (grupo(i), pos.get(self._key(i), len(pos))))
+
+    def _record(self, i: int, role: str, seconds: float, ok: bool, reason: str = "") -> None:
+        if self.metrics is None:
+            return
+        try:
+            self.metrics.record(self._key(i), role, seconds, ok, reason)
+        except Exception:
+            logger.debug("registro de medida falhou", exc_info=True)  # medir nunca derruba a conversa
+
     def _timeout_for(self, i: int) -> float:
         return self.slow_timeout_s if ROUTER_LOCAL_MARK in self.clients[i].config.base_url else self.timeout_s
 
@@ -626,7 +651,9 @@ class RoutedLLM:
         Quem der o primeiro token primeiro vence e os outros sao cancelados. Depois do primeiro token nunca se troca."""
         from src.jefrey.domain.llm_roles import effective_role
 
-        order = self._order(effective_role(role, messages, tools))
+        papel = effective_role(role, messages, tools)
+        order = self._ranked(self._order(papel), papel)
+        iniciou: dict[int, float] = {}
         loop = asyncio.get_running_loop()
         streams: dict[int, Any] = {}
         pending: dict[asyncio.Task, int] = {}
@@ -643,6 +670,7 @@ class RoutedLLM:
             streams[i] = stream
             pending[loop.create_task(stream.__anext__())] = i
             deadline[i] = self._clock() + self._timeout_for(i)
+            iniciou[i] = time.perf_counter()
 
         def cool(i: int, seconds: float) -> None:
             self._cool[self._key(i)] = self._clock() + seconds
@@ -660,6 +688,7 @@ class RoutedLLM:
                         task.cancel()
                         last = asyncio.TimeoutError()
                         cool(i, COOLDOWN_S)
+                        self._record(i, papel, time.perf_counter() - iniciou[i], False, "tempo")
                         logger.warning("cerebro %s demorou mais de %ss para comecar: trocando", self.clients[i].config.model, self._timeout_for(i))
                 if not pending:
                     if nxt >= len(order):
@@ -682,8 +711,10 @@ class RoutedLLM:
                         last = e
                         status = e.response.status_code if isinstance(e, httpx.HTTPStatusError) else 0
                         cool(i, LONG_COOLDOWN_S if status in LONG_COOLDOWN_STATUS else RATE_LIMIT_COOLDOWN_S if status == 429 else COOLDOWN_S)
+                        self._record(i, papel, time.perf_counter() - iniciou[i], False, str(status) if status else type(e).__name__)
                         continue
                     winner = i
+                    self._record(i, papel, time.perf_counter() - iniciou[i], True)
                     break
         finally:
             for task in list(pending):
@@ -763,6 +794,19 @@ class RoutedLLM:
 
 # quem esta lento ou sem cota fica de fora por um tempo, mesmo entre pedidos diferentes
 SHARED_COOLDOWNS: dict[str, float] = {}
+_METRICS: Any = None  # medidor de uso (criado uma vez); se o banco falhar, o chat segue sem medir
+
+
+def _metrics() -> Any:
+    global _METRICS
+    if _METRICS is None:
+        try:
+            from src.jefrey.adapters.outbound.brain_metrics import BrainMetrics
+
+            _METRICS = BrainMetrics()
+        except Exception:
+            logger.debug("medidor de cerebros indisponivel", exc_info=True)
+    return _METRICS
 
 
 def get_llm_client() -> "LLMClient | RoutedLLM":
@@ -781,7 +825,7 @@ def get_llm_client() -> "LLMClient | RoutedLLM":
         return primary
     roles_map = load_roles()
     roles = [set(roles_map[i]) if i in roles_map else None for i in ids]
-    return RoutedLLM([primary, *extra], roles=roles, team=tuple(load_team()), cool=SHARED_COOLDOWNS)
+    return RoutedLLM([primary, *extra], roles=roles, team=tuple(load_team()), cool=SHARED_COOLDOWNS, metrics=_metrics())
 
 
 def _primary_id(cfg: LLMConfig) -> str:

@@ -130,3 +130,65 @@ def test_429_deixa_o_cerebro_de_fora_por_mais_tempo_que_45_segundos():
     b2 = client(lambda r: sse("ok"), "b")
     assert run(collect(RoutedLLM([a2, b2], clock=lambda: relogio[0], cool=memoria))) == "ok"
     assert chamadas_a == []
+
+
+class _Medidas:
+    """Medidor falso: devolve uma ordem fixa e guarda o que o roteador registrou."""
+
+    def __init__(self, ordem_preferida=()):
+        self.linhas = []
+        self.ordem = list(ordem_preferida)
+
+    def record(self, key, role, seconds, ok, reason=""):
+        self.linhas.append((key, role, ok, reason))
+
+    def ranking(self, role, keys):
+        return [k for k in self.ordem if k in keys] + [k for k in keys if k not in self.ordem]
+
+
+def test_ranking_aprendido_decide_quem_vai_primeiro():
+    chamadas = []
+    a = client(lambda r: chamadas.append("a") or sse("do a"), "a")
+    b = client(lambda r: chamadas.append("b") or sse("do b"), "b")
+    medidas = _Medidas([f"{b.config.provider}|{b.config.model}|{b.config.base_url}"])
+    assert run(collect(RoutedLLM([a, b], metrics=medidas))) == "do b"
+    assert chamadas == ["b"]
+
+
+def test_roteador_registra_sucesso_e_falha_com_motivo():
+    a = client(lambda r: httpx.Response(429), "a")
+    b = client(lambda r: sse("ok"), "b")
+    medidas = _Medidas()
+    run(collect(RoutedLLM([a, b], metrics=medidas)))
+    por_ok = {ok: (key, reason) for key, role, ok, reason in medidas.linhas}
+    assert por_ok[False][1] == "429" and "modelo-a" in por_ok[False][0]
+    assert "modelo-b" in por_ok[True][0]
+
+
+def test_defeito_no_medidor_nunca_derruba_o_chat():
+    class Quebrado:
+        def record(self, *a, **k):
+            raise RuntimeError("banco fora do ar")
+
+        def ranking(self, *a, **k):
+            raise RuntimeError("banco fora do ar")
+
+    a = client(lambda r: sse("segue"), "a")
+    b = client(lambda r: sse("reserva"), "b")
+    assert run(collect(RoutedLLM([a, b], metrics=Quebrado()))) == "segue"
+
+
+def test_get_llm_client_liga_o_medidor_ao_roteador(tmp_path, monkeypatch):
+    from sqlalchemy import create_engine
+
+    import src.jefrey.core.db as dbm
+    from src.jefrey.adapters.outbound import llm_provider as P
+
+    eng = create_engine(f"sqlite:///{tmp_path}/g.db")
+    monkeypatch.setattr(dbm, "get_engine", lambda: eng)
+    monkeypatch.setattr(P, "_METRICS", None)
+    monkeypatch.setenv("JEFREY_CONFIG_DIR", str(tmp_path / "cfg"))
+    P.save_override("openai", "modelo-x", "https://api.exemplo.com", None, "k")
+    P.save_fallbacks([{"id": "groq", "provider": "openai", "model": "modelo-y", "base_url": "https://api.groq.com/openai", "api_key": "k"}])
+    llm = P.get_llm_client()
+    assert isinstance(llm, P.RoutedLLM) and llm.metrics is not None
