@@ -36,6 +36,15 @@
 
 ### Task 1: Roteamento de cérebros por função e tempo limite
 
+> **Status (11/10/2026): validada com ressalvas** (limite acordado: 15 s por pergunta, voz ligada, app instalado `63a9347`).
+> 15 medições: 12 em até 15 s; medianas de 4 a 14 s; pontas de 22,0, 17,7 e 16,3 s quando o 9router ou o Groq oscilam.
+> Feito: tempo limite 12 s (25 s no 9router), pedido paralelo após 3 s, memória de cérebro lento/sem cota entre pedidos (429 = 120 s),
+> funções padrão (Groq rápido/ferramentas/resumo; Gemini conversa/escrita/estudo/visão), esquema de ferramentas leve, combo `gamehouse` enxugado,
+> voz masculina padrão, escuta filtrada (só entra no chat o que chama "Jefrey" ou resposta em até 25 s), medidas `[tempo]` no log.
+> Pendências herdadas: (1) app aberto manualmente não grava log/arranque.txt; (2) lembrete duplicado criado pelos testes;
+> (3) isolar a captura de voz do ambiente antes da transcrição; (4) "enrolar" por voz enquanto pensa (UI).
+
+
 **Files:**
 - Modify: `src/jefrey/adapters/outbound/llm_provider.py` (`RoutedLLM._order`, `stream_events`)
 - Modify: `src/jefrey/adapters/outbound/brains.py` (ordem por função padrão)
