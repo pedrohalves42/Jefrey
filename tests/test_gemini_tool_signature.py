@@ -28,3 +28,14 @@ def test_assinatura_do_gemini_e_guardada_e_devolvida():
 def test_sem_assinatura_nada_muda():
     c = T.ToolCall("c1", "x", {"a": 1})
     assert "extra_content" not in c.as_dict()
+
+
+def test_gemini_limita_o_raciocinio_para_responder_rapido():
+    from src.jefrey.adapters.outbound.llm_provider import LLMClient, LLMConfig
+
+    c = LLMClient(LLMConfig("openai", "gemini-flash-latest", "https://generativelanguage.googleapis.com/v1beta/openai", api_key="k"))
+    _, _, body = c._request([{"role": "user", "content": "oi"}], stream=True) if hasattr(c, "_request") else (None, None, None)
+    assert body is not None and body.get("reasoning_effort") == "low"
+    o = LLMClient(LLMConfig("openai", "gpt-x", "https://api.openai.com", api_key="k"))
+    _, _, body2 = o._request([{"role": "user", "content": "oi"}], stream=True)
+    assert "reasoning_effort" not in body2

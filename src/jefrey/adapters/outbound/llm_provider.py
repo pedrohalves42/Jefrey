@@ -279,6 +279,8 @@ class LLMClient:
             }
             if defs:
                 body["tools"] = defs
+            if "generativelanguage.googleapis.com" in base:
+                body["reasoning_effort"] = "low"  # os modelos novos do Gemini "pensam" por muito tempo: limite para responder em segundos
             return _chat_url(base), headers, body
         body = {
             "model": c.model,
