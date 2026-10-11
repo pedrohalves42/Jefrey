@@ -77,3 +77,38 @@ def test_9router_ganha_mais_tempo_que_os_outros():
     nuvem = LLMClient(LLMConfig("openai", "outro", "https://api.exemplo.com", api_key="k"), transport=httpx.MockTransport(mais_atrasado))
     texto = run(collect(RoutedLLM([router, nuvem], timeout_s=0.2, slow_timeout_s=0.5)))
     assert texto == "do 9router"  # 0,25 s passa no prazo do 9router (0,5 s), mas nao no da nuvem (0,2 s)
+
+
+def test_cerebro_que_nao_responde_em_3_segundos_deixa_outro_correr_junto():
+    # pedido paralelo: se o primeiro demora, o proximo comeca junto; quem der o primeiro token primeiro vence
+    async def lento(r):
+        await asyncio.sleep(1.5)
+        return sse("tarde")
+
+    rapido_chamadas = []
+
+    async def rapido(r):
+        rapido_chamadas.append(1)
+        return sse("rapido")
+
+    a = client(lento, "a")
+    b = client(rapido, "b")
+    inicio = time.monotonic()
+    texto = run(collect(RoutedLLM([a, b], timeout_s=5, hedge_s=0.1)))
+    assert texto == "rapido"
+    assert time.monotonic() - inicio < 1.0
+    assert rapido_chamadas == [1]
+
+
+def test_sem_demora_nao_chama_o_segundo_cerebro():
+    chamadas = []
+
+    async def bom(r):
+        chamadas.append("a")
+        return sse("ok")
+
+    b_chamadas = []
+    a = client(bom, "a")
+    b = client(lambda r: b_chamadas.append(1) or sse("reserva"), "b")
+    assert run(collect(RoutedLLM([a, b], timeout_s=5, hedge_s=2))) == "ok"
+    assert b_chamadas == []

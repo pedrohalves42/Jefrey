@@ -466,6 +466,7 @@ def friendly_error(e: Exception) -> str:
 MAX_FALLBACKS = 9  # 1 principal + 9 = ate 10 cerebros conectados
 FIRST_TOKEN_TIMEOUT_S = 12.0  # sem primeiro token em 12 s, a resposta vem do proximo cerebro
 ROUTER_FIRST_TOKEN_TIMEOUT_S = 25.0  # o 9router (combo com varios modelos) pode demorar mais para o primeiro token
+HEDGE_AFTER_S = 3.0  # sem primeiro token em 3 s, o proximo cerebro da fila comeca junto (pedido paralelo)
 ROUTER_LOCAL_MARK = "127.0.0.1:20128"  # endereco do 9router neste computador
 COOLDOWN_S = 45.0
 _RETRY_STATUS = {400, 401, 402, 403, 404, 408, 409, 422, 425, 429}  # 400/422: cada servico aceita um formato; o proximo cerebro pode aceitar  # 402 = sem credito: troca de cerebro em vez de falhar
@@ -585,11 +586,12 @@ class RoutedLLM:
     """Mesma interface do LLMClient, com reserva. So troca de provedor ANTES de a resposta comecar."""
 
     def __init__(self, clients: list[LLMClient], clock=time.monotonic, roles: Optional[list] = None, team: tuple = (), timeout_s: float = FIRST_TOKEN_TIMEOUT_S, cool: Optional[dict] = None,
-                 slow_timeout_s: float = ROUTER_FIRST_TOKEN_TIMEOUT_S):
+                 slow_timeout_s: float = ROUTER_FIRST_TOKEN_TIMEOUT_S, hedge_s: float = HEDGE_AFTER_S):
         self.clients = clients
         self._clock = clock
         self.timeout_s = timeout_s  # sem primeiro token dentro deste tempo, o cerebro e trocado pelo proximo
         self.slow_timeout_s = slow_timeout_s  # o roteador local (9router) junta varios modelos e ganha mais tempo
+        self.hedge_s = hedge_s  # sem primeiro token nesse tempo, o proximo cerebro comeca junto
         # quem esta em espera, por cerebro (chave = provedor+modelo+endereco). Pode ser compartilhado entre pedidos.
         self._cool: dict[str, float] = cool if cool is not None else {}
         self.last_label = ""
@@ -619,42 +621,98 @@ class RoutedLLM:
         return f"{c.provider}|{c.model}|{c.base_url}"
 
     async def stream_events(self, messages: list[Message], tools: Optional[list[dict]] = None, role: Optional[str] = None) -> AsyncIterator[StreamItem]:
+        """Pedido paralelo: o primeiro cerebro da fila comeca; se nao der o primeiro token em `hedge_s`, o proximo comeca junto.
+        Quem der o primeiro token primeiro vence e os outros sao cancelados. Depois do primeiro token nunca se troca."""
         from src.jefrey.domain.llm_roles import effective_role
 
+        order = self._order(effective_role(role, messages, tools))
+        loop = asyncio.get_running_loop()
+        streams: dict[int, Any] = {}
+        pending: dict[asyncio.Task, int] = {}
+        deadline: dict[int, float] = {}
         last: Optional[Exception] = None
-        for i in self._order(effective_role(role, messages, tools)):
-            client, started = self.clients[i], False
-            stream = client.stream_events(messages, tools=tools).__aiter__()
+        nxt, hedge_at = 0, 0.0
+        winner: Optional[int] = None
+        first_item: Any = None
+        vazio = False
+
+        def start(k: int) -> None:
+            i = order[k]
+            stream = self.clients[i].stream_events(messages, tools=tools).__aiter__()
+            streams[i] = stream
+            pending[loop.create_task(stream.__anext__())] = i
+            deadline[i] = self._clock() + self._timeout_for(i)
+
+        def cool(i: int, seconds: float) -> None:
+            self._cool[self._key(i)] = self._clock() + seconds
+
+        try:
+            while winner is None:
+                now = self._clock()
+                if nxt < len(order) and (not pending or now >= hedge_at):
+                    start(nxt)
+                    nxt += 1
+                    hedge_at = now + self.hedge_s
+                for task, i in list(pending.items()):
+                    if now >= deadline[i]:
+                        pending.pop(task)
+                        task.cancel()
+                        last = asyncio.TimeoutError()
+                        cool(i, COOLDOWN_S)
+                        logger.warning("cerebro %s demorou mais de %ss para comecar: trocando", self.clients[i].config.model, self._timeout_for(i))
+                if not pending:
+                    if nxt >= len(order):
+                        break
+                    continue
+                horizon = [deadline[i] for i in pending.values()]
+                if nxt < len(order):
+                    horizon.append(hedge_at)
+                done, _ = await asyncio.wait(list(pending), timeout=max(0.0, min(horizon) - self._clock()), return_when=asyncio.FIRST_COMPLETED)
+                for task in done:
+                    i = pending.pop(task)
+                    try:
+                        first_item = task.result()
+                    except StopAsyncIteration:
+                        winner, vazio = i, True
+                        break
+                    except Exception as e:
+                        if not is_retryable(e):
+                            raise  # erro que outro provedor nao resolve
+                        last = e
+                        status = e.response.status_code if isinstance(e, httpx.HTTPStatusError) else 0
+                        cool(i, LONG_COOLDOWN_S if status in LONG_COOLDOWN_STATUS else COOLDOWN_S)
+                        continue
+                    winner = i
+                    break
+        finally:
+            for task in list(pending):
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)  # so fecha o fluxo depois de cancelado
+            for i, stream in streams.items():
+                if i != winner:  # o vencedor continua aberto: o resto da resposta vem dele
+                    try:
+                        await stream.aclose()
+                    except Exception:
+                        logger.debug("fechar cerebro paralelo falhou", exc_info=True)
+
+        if winner is None:
+            if last is not None:
+                raise last
+            return
+        self.last_index = winner
+        self.last_label = f"{self.clients[winner].config.provider}:{self.clients[winner].config.model}"
+        if vazio:
+            return
+        try:
+            yield first_item
+            async for item in streams[winner]:
+                yield item
+        finally:
             try:
-                # o primeiro item tem prazo (cerebro lento vira falha e sai da frente); depois, o fluxo segue sem limite
-                first = await asyncio.wait_for(stream.__anext__(), self._timeout_for(i))
-                started = True
-                self.last_index = i
-                self.last_label = f"{client.config.provider}:{client.config.model}"
-                yield first
-                async for item in stream:
-                    yield item
-                return
-            except StopAsyncIteration:
-                self.last_index = i
-                self.last_label = f"{client.config.provider}:{client.config.model}"
-                return
-            except asyncio.TimeoutError as e:
-                if started:
-                    raise
-                last = e
-                self._cool[self._key(i)] = self._clock() + COOLDOWN_S
-                logger.warning("cerebro %s demorou mais de %ss para comecar: trocando", client.config.model, self.timeout_s)
-            except Exception as e:
-                if started or not is_retryable(e):
-                    raise  # ja respondeu algo (nao da para trocar) ou erro que outro provedor nao resolve
-                last = e
-                status = e.response.status_code if isinstance(e, httpx.HTTPStatusError) else 0
-                self._cool[self._key(i)] = self._clock() + (LONG_COOLDOWN_S if status in LONG_COOLDOWN_STATUS else COOLDOWN_S)
-            finally:
-                await stream.aclose()
-        if last is not None:
-            raise last
+                await streams[winner].aclose()
+            except Exception:
+                logger.debug("fechar cerebro vencedor falhou", exc_info=True)
 
     async def stream(self, messages: list[Message], role: Optional[str] = None) -> AsyncIterator[str]:
         async for item in self.stream_events(messages, role=role):
