@@ -22,10 +22,37 @@ def build_event_alerts() -> EventAlertService:
     return EventAlertService(GoogleCalendarAdapter(), WindowsNotifier(), DbUserDirectory(), SystemClock())
 
 
+def build_interest_alerts():
+    """Um aviso por dia com o que ha de novo nos assuntos que a pessoa escolheu em Hoje > Para voce."""
+    import os
+    from datetime import datetime
+    from pathlib import Path
+
+    from src.jefrey.adapters.outbound import today_sources as ts
+    from src.jefrey.application import notify
+    from src.jefrey.application.interest_alerts import InterestAlerts
+    from src.jefrey.domain.reminders import local_tz
+    from src.jefrey.domain.today import INTERESTS
+
+    sources = ts.HttpPanelSources(None)
+
+    async def headlines(topic: str) -> list:
+        return await sources.feed(INTERESTS[topic][1])
+
+    return InterestAlerts(
+        interests=lambda uid: ts.load_prefs()["interests"], headlines=headlines,
+        notify=lambda uid, title, text: notify.notify(uid, title, text),
+        users=lambda: DbUserDirectory().known_users(), now=lambda: datetime.now(local_tz()),
+        labels={k: v[0] for k, v in INTERESTS.items()},
+        state_path=Path(os.getenv("JEFREY_CONFIG_DIR", "config")) / "interest_alerts.json",
+    )
+
+
 def register_jobs(scheduler) -> None:
     """Tarefas periodicas dos casos de uso novos (as antigas continuam registradas em api/main.py ate migrarem)."""
     alerts = build_event_alerts()
     scheduler.register("avisos-de-compromissos", 120, alerts.tick)
+    scheduler.register("alerta-de-assuntos", 1800, build_interest_alerts().tick)
 
 
 def warm_up() -> None:

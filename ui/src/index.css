@@ -369,3 +369,8 @@ main h1, main h2, .jf-serif, .jf-brand { font-family: var(--font-display); lette
 ::-webkit-scrollbar-thumb:hover { background: hsl(30 15% 60% / 0.45); }
 /* janela baixa ou estreita: os paineis do canto saem do caminho do cerebro (ele e a estrela) */
 @media (max-height: 780px), (max-width: 1180px) { .jf-hudpanel { display: none; } }
+
+/* vida no avatar: respira devagar quando as animacoes estao ligadas */
+@keyframes jfAlive { 0%,100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-5px) scale(1.012); } }
+:root[data-motion="on"] .jf-alive { animation: jfAlive 7s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .jf-alive { animation: none !important; } }

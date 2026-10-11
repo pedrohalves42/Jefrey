@@ -73,6 +73,7 @@ CATALOG: dict[str, ToolPolicy] = {
     # essenciais locais
     "current_time": _p("low", "Ver data e hora"),
     "daily_summary": _p("low", "Resumo do dia"),
+    "undo_last": _p("medium", "Desfazer a ultima acao"),
     "calculator": _p("low", "Calcular"),
     "weather": _p("low", "Ver o clima"),
     "files_list": _p("low", "Listar arquivos locais"),

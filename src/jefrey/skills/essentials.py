@@ -201,7 +201,14 @@ class EssentialsSkill(SkillBase):
                 return "Conteudo grande demais (maximo 200 KB)."
             p = safe_path(user_id, path)
             p.parent.mkdir(parents=True, exist_ok=True)
+            anterior = p.read_text(encoding="utf-8") if p.is_file() else None  # para poder desfazer
             p.write_text(content, encoding="utf-8")
+            try:
+                from src.jefrey.application import undo as _undo
+
+                _undo.shared_journal().record(user_id or "system", f"arquivo gravado: {path}", "restore_file", {"path": str(p), "previous": anterior})
+            except Exception:
+                logging.getLogger(__name__).debug("diario de desfazer indisponivel", exc_info=True)
             return f"Arquivo '{path}' gravado ({len(content)} caracteres)."
         except PermissionError as e:
             return f"Nao permitido: {e}."

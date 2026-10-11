@@ -2,7 +2,7 @@ import { useState } from "react"
 import { useAppearance } from "@/lib/appearance"
 import { clearAvatarImage, PRESETS, processImageFile, saveAvatarImage } from "@/lib/avatarImage"
 
-/** Escolha rapida do avatar, na propria Conversa: cerebro 3D, uma armadura/robo prontos, ou a imagem da pessoa (fica so neste computador). */
+/** Escolha rapida do avatar, na propria Conversa: cerebro 3D, um escudo ou um robo prontos, ou a imagem da pessoa (fica so neste computador). */
 export default function AvatarPicker() {
   const { appearance, set } = useAppearance()
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)

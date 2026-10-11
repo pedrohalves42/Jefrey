@@ -44,6 +44,12 @@ class RemindersSkill(SkillBase):
             r = ReminderStore().add(user_id, text, w.due, w.repeat)
         except ValueError as e:
             return f"Não consegui criar o lembrete: {e}."
+        try:
+            from src.jefrey.application import undo as _undo
+
+            _undo.shared_journal().record(user_id, f"lembrete: {text}", "delete_reminder", {"user_id": user_id, "id": r["id"]})
+        except Exception:
+            logging.getLogger(__name__).debug("diario de desfazer indisponivel", exc_info=True)  # nunca atrapalha criar o lembrete
         extra = " Assumi 9h; se quiser outro horário, é só me dizer." if w.assumed_time else ""
         return f"Pronto! Vou te lembrar de “{text}” {describe_due(w.due)}{REPEAT_LABEL[r['repeat']]}.{extra}"
 

@@ -232,6 +232,7 @@ def load_skills() -> int:
         "src.jefrey.skills.social",
         "src.jefrey.skills.vision",
         "src.jefrey.skills.daily_summary",
+        "src.jefrey.skills.undo",
         "src.jefrey.skills.risk_assessment",
     ]
     loaded = 0

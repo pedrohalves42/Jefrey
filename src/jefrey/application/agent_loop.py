@@ -157,6 +157,9 @@ def _save_request(orig: str, msg: str) -> Optional[str]:
     return None
 
 
+_UNDO = re.compile(r"^(?:desfaz(?:er)?(?: isso| tudo| a ultima acao| o que voce fez)?|volt(?:a|ar) atras)$")
+
+
 def route_intent(message: str) -> Optional[tuple[str, dict]]:
     """Pedidos triviais que NAO precisam do modelo. None = deixa o modelo decidir."""
     orig = message.strip().rstrip("?!. ")
@@ -178,6 +181,8 @@ def route_intent(message: str) -> Optional[tuple[str, dict]]:
         return None
     if _TIME.match(msg):
         return "current_time", {}
+    if _UNDO.match(msg):  # "desfaz isso": volta atras na ultima acao reversivel
+        return "undo_last", {}
     if asks_daily_summary(msg):  # "bom dia, o que eu tenho pra hoje?": agenda + lembretes + clima montados direto (sem rodadas do modelo)
         return "daily_summary", {}
     if asks_whatsapp_inbox(message):  # "tenho mensagem no zap?": le a caixa de entrada direto
