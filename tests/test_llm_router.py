@@ -108,7 +108,7 @@ def test_provedor_que_falhou_fica_em_espera_e_depois_volta():
     assert run(collect(llm)) == "b" and len(a_calls) == 1
     assert run(collect(llm)) == "b" and len(a_calls) == 1  # em espera: nem tenta
     state["ok"] = True
-    t[0] += lp.COOLDOWN_S + 1
+    t[0] += lp.RATE_LIMIT_COOLDOWN_S + 1  # cota (429) tem espera propria, maior que a de erro comum
     assert run(collect(llm)) == "a"  # voltou ao principal
 
 

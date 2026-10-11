@@ -469,6 +469,7 @@ ROUTER_FIRST_TOKEN_TIMEOUT_S = 25.0  # o 9router (combo com varios modelos) pode
 HEDGE_AFTER_S = 3.0  # sem primeiro token em 3 s, o proximo cerebro da fila comeca junto (pedido paralelo)
 ROUTER_LOCAL_MARK = "127.0.0.1:20128"  # endereco do 9router neste computador
 COOLDOWN_S = 45.0
+RATE_LIMIT_COOLDOWN_S = 120.0  # cota estourada (429): nao volta em 45 s; fica de fora mais tempo
 _RETRY_STATUS = {400, 401, 402, 403, 404, 408, 409, 422, 425, 429}  # 400/422: cada servico aceita um formato; o proximo cerebro pode aceitar  # 402 = sem credito: troca de cerebro em vez de falhar
 LONG_COOLDOWN_S = 600.0  # sem credito ou chave recusada: nao adianta tentar de novo daqui a 45 s
 LONG_COOLDOWN_STATUS = {401, 402, 403}
@@ -680,7 +681,7 @@ class RoutedLLM:
                             raise  # erro que outro provedor nao resolve
                         last = e
                         status = e.response.status_code if isinstance(e, httpx.HTTPStatusError) else 0
-                        cool(i, LONG_COOLDOWN_S if status in LONG_COOLDOWN_STATUS else COOLDOWN_S)
+                        cool(i, LONG_COOLDOWN_S if status in LONG_COOLDOWN_STATUS else RATE_LIMIT_COOLDOWN_S if status == 429 else COOLDOWN_S)
                         continue
                     winner = i
                     break

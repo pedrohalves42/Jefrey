@@ -112,3 +112,21 @@ def test_sem_demora_nao_chama_o_segundo_cerebro():
     b = client(lambda r: b_chamadas.append(1) or sse("reserva"), "b")
     assert run(collect(RoutedLLM([a, b], timeout_s=5, hedge_s=2))) == "ok"
     assert b_chamadas == []
+
+
+def test_429_deixa_o_cerebro_de_fora_por_mais_tempo_que_45_segundos():
+    # cota estourada (Gemini/OpenAI) nao volta em 45 s: sem isso, cada pergunta gasta um pedido perdido nele
+    from src.jefrey.adapters.outbound import llm_provider as P
+
+    assert P.RATE_LIMIT_COOLDOWN_S >= 120
+    relogio = [1000.0]
+    memoria = {}
+    a = client(lambda r: httpx.Response(429), "a")
+    b = client(lambda r: sse("ok"), "b")
+    run(collect(RoutedLLM([a, b], clock=lambda: relogio[0], cool=memoria)))
+    relogio[0] += 60  # 60 s depois, o que estourou a cota ainda esta de fora
+    chamadas_a = []
+    a2 = client(lambda r: chamadas_a.append(1) or httpx.Response(429), "a")
+    b2 = client(lambda r: sse("ok"), "b")
+    assert run(collect(RoutedLLM([a2, b2], clock=lambda: relogio[0], cool=memoria))) == "ok"
+    assert chamadas_a == []
