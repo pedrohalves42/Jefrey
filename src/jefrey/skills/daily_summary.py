@@ -23,15 +23,19 @@ class DailySummarySkill(SkillBase):
     async def daily_summary(self, user_id: str | None = None) -> str:
         if not user_id or user_id in ("system", "anonymous"):
             return "Preciso saber quem você é."
+        from src.jefrey.application.daily_summary import light_panel
         from src.jefrey.core import today as T
         from src.jefrey.domain.reminders import local_tz
         from src.jefrey.ports.registry import use
 
         name = use("briefing_env").person_name(user_id)
-        return await build_daily_summary(
-            user_id=user_id, name=name, now=datetime.now(local_tz()),
-            panel_loader=lambda uid: T.build(user_id=uid),
-        )
+        city = T.load_prefs().get("city") or ""
+        sources = T.HttpPanelSources(None)
+
+        async def painel(uid: str) -> dict:
+            return await light_panel(uid, agenda=T._agenda, reminders=T._reminders, weather=sources.weather, city=city)
+
+        return await build_daily_summary(user_id=user_id, name=name, now=datetime.now(local_tz()), panel_loader=painel)
 
 
 @skill("daily_summary", "Resumo do dia", tags=["agenda", "hoje"])

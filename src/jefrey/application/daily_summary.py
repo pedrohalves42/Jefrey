@@ -18,6 +18,21 @@ def _items(sections: dict, name: str) -> Optional[list]:
     return list(sec.get("items") or []) if sec.get("status") in _USABLE else None
 
 
+async def light_panel(user_id: str, *, agenda: Callable[[str], Awaitable[list]], reminders: Callable[[str], Awaitable[list]],
+                      weather: Callable[[str], Awaitable[dict]], city: str) -> dict:
+    """So o que o resumo precisa (agenda, lembretes e clima): sem noticias, bolsa e cambio, que atrasam. Cada fonte falha sozinha."""
+    import asyncio
+
+    from src.jefrey.application.today import _section
+
+    nomes = ["agenda", "reminders"]
+    jobs = [_section("agenda", agenda(user_id), empty_ok=True), _section("reminders", reminders(user_id), empty_ok=True)]
+    if city:
+        nomes.append("weather")
+        jobs.append(_section("weather", weather(city)))
+    return {"sections": dict(zip(nomes, await asyncio.gather(*jobs)))}
+
+
 async def build_daily_summary(*, user_id: str, name: Optional[str], now: datetime,
                               panel_loader: Callable[[str], Awaitable[dict]]) -> str:
     try:

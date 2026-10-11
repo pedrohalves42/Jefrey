@@ -121,3 +121,56 @@ def test_ferramenta_e_carregada_pelo_app_de_verdade():
     tools = enabled_tools([sk for sk in skills if sk], CATALOG, set())
     tools = tools[0] if isinstance(tools, tuple) else tools
     assert "daily_summary" in tools
+
+
+def test_lembretes_repetidos_aparecem_uma_vez_so():
+    texto = compose(name="Pedro", now=AGORA, agenda=[], weather=None, reminders=[
+        {"text": "ligar pro dentista", "due_label": "amanhã às 10:00"},
+        {"text": "Ligar pro dentista", "due_label": "amanhã às 10:00"},
+        {"text": "ligar pro dentista ", "due_label": "amanhã às 10:00"},
+    ])
+    assert texto.lower().count("ligar pro dentista") == 1
+
+
+def test_agenda_vazia_com_lembretes_e_dita():
+    texto = compose(name="Pedro", now=AGORA, agenda=[], weather=None, reminders=[{"text": "tomar remédio", "due_label": "hoje às 12:00"}])
+    assert "sem compromissos na agenda" in texto.lower()
+    assert "tomar remédio" in texto
+
+
+def test_painel_leve_busca_so_agenda_lembretes_e_clima():
+    import asyncio
+    from src.jefrey.application.daily_summary import light_panel
+
+    chamadas = []
+
+    async def agenda(uid):
+        chamadas.append("agenda")
+        return [{"title": "Reunião", "time": "09:00"}]
+
+    async def lembretes(uid):
+        chamadas.append("lembretes")
+        return []
+
+    async def clima(city):
+        chamadas.append(f"clima:{city}")
+        return {"summary": "Agora 20 °C."}
+
+    painel = asyncio.run(light_panel("demo", agenda=agenda, reminders=lembretes, weather=clima, city="Uberlândia"))
+    assert sorted(chamadas) == ["agenda", "clima:Uberlândia", "lembretes"]
+    assert painel["sections"]["agenda"]["status"] == "ok"
+    assert painel["sections"]["weather"]["summary"] == "Agora 20 °C."
+
+
+def test_painel_leve_sem_cidade_nao_busca_clima():
+    import asyncio
+    from src.jefrey.application.daily_summary import light_panel
+
+    async def vazio(uid):
+        return []
+
+    async def clima(city):
+        raise AssertionError("nao devia buscar o clima sem cidade")
+
+    painel = asyncio.run(light_panel("demo", agenda=vazio, reminders=vazio, weather=clima, city=""))
+    assert "weather" not in painel["sections"] or painel["sections"]["weather"].get("status") != "ok"

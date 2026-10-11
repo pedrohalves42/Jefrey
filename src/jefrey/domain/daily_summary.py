@@ -73,9 +73,17 @@ def compose(*, name: Optional[str], now: datetime, agenda: Optional[list[dict]],
         partes.append("Não consegui ver a sua agenda agora.")
     elif agenda:
         partes.append(_agenda_line(agenda))
+    if agenda == [] and reminders:
+        partes.append("Sem compromissos na agenda hoje.")
     if reminders:
-        itens = [f"{r['text']} ({r['due_label']})" if r.get("due_label") else str(r["text"]) for r in reminders[:MAX_ITEMS]]
-        partes.append("Lembretes: " + "; ".join(itens) + ".")
+        itens, vistos = [], set()
+        for r in reminders:
+            chave = (_plain(str(r.get("text"))), _plain(str(r.get("due_label") or "")))
+            if chave in vistos:
+                continue  # o mesmo lembrete gravado mais de uma vez aparece uma vez so
+            vistos.add(chave)
+            itens.append(f"{r['text']} ({r['due_label']})" if r.get("due_label") else str(r["text"]))
+        partes.append("Lembretes: " + "; ".join(itens[:MAX_ITEMS]) + ".")
     elif reminders is None:
         partes.append("Não consegui ver os seus lembretes agora.")
     if weather and weather.get("summary"):
