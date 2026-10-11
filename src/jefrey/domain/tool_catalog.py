@@ -72,6 +72,7 @@ CATALOG: dict[str, ToolPolicy] = {
     "delete_file": _p("high", "Apagar arquivo do Drive"),
     # essenciais locais
     "current_time": _p("low", "Ver data e hora"),
+    "daily_summary": _p("low", "Resumo do dia"),
     "calculator": _p("low", "Calcular"),
     "weather": _p("low", "Ver o clima"),
     "files_list": _p("low", "Listar arquivos locais"),
