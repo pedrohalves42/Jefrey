@@ -6,6 +6,7 @@ em linguagem simples, a conexao guiada (validar o codigo, testar, guardar), troc
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from typing import Any, Optional
@@ -13,6 +14,8 @@ from urllib.parse import urlsplit
 
 from src.jefrey.core import llm_provider as P
 from src.jefrey.core.secret_store import read_secret, valid_id, write_secret
+
+logger = logging.getLogger(__name__)
 
 
 class BrainError(Exception):
@@ -25,7 +28,7 @@ CATALOG: list[dict[str, Any]] = [
      "provider": "openai", "base_url": "http://127.0.0.1:20128", "model": "gamehouse", "prefix": "",
      "key_url": "http://127.0.0.1:20128/dashboard"},
     {"id": "gemini", "name": "Gemini", "tagline": "Do Google. Tem plano gratuito.", "kind": "key", "recommended": True,
-     "provider": "openai", "base_url": "https://generativelanguage.googleapis.com/v1beta/openai", "model": "gemini-2.5-flash", "prefix": "",  # as chaves novas do AI Studio nem sempre comecam com AIza
+     "provider": "openai", "base_url": "https://generativelanguage.googleapis.com/v1beta/openai", "model": "gemini-flash-latest", "prefix": "",  # as chaves novas do AI Studio nem sempre comecam com AIza
      "key_url": "https://aistudio.google.com/apikey"},
     {"id": "openrouter", "name": "OpenRouter", "tagline": "Um login só dá acesso a vários cérebros.", "kind": "oneclick",
      "provider": "openai", "base_url": "https://openrouter.ai/api", "model": "openai/gpt-6-luna", "prefix": "sk-or-",
@@ -254,11 +257,53 @@ def explain_failure(e: Exception) -> str:
     return "não respondeu agora"
 
 
+# Modelos que mudam de nome ou saem do ar: se o escolhido some (erro 404), o programa tenta estes, em ordem, e guarda o que funcionar.
+MODEL_ALTERNATES = {"gemini": ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-lite-latest"]}
+
+
+async def heal_models(timeout: float = 20.0) -> list[str]:
+    """Troca o modelo de um cerebro que respondeu 404 (modelo some) por um alternativo que funcione. Devolve o que mudou."""
+    import asyncio
+    import httpx
+
+    items = _entries()
+    changed: list[str] = []
+    for e in items:
+        alts = MODEL_ALTERNATES.get(str(e.get("id")), [])
+        if not alts or not e.get("api_key"):
+            continue
+        base = P._normalize_base(e["provider"], e.get("base_url") or "")
+        probe = [{"role": "user", "content": "Responda só com a palavra: ok"}]
+        try:
+            await asyncio.wait_for(P.LLMClient(P.LLMConfig(e["provider"], e["model"], base, api_key=e["api_key"])).chat(probe), timeout=timeout)
+            continue
+        except httpx.HTTPStatusError as err:
+            if err.response.status_code != 404:
+                continue
+        except Exception:
+            continue
+        for alt in [m for m in alts if m != e["model"]]:
+            try:
+                await asyncio.wait_for(P.LLMClient(P.LLMConfig(e["provider"], alt, base, api_key=e["api_key"])).chat(probe), timeout=timeout)
+            except Exception:
+                continue
+            e["model"] = alt
+            changed.append(f'{e["id"]}: {alt}')
+            break
+    if changed:
+        _apply(items)
+    return changed
+
+
 async def check_all(timeout: float = 25.0) -> list[dict]:
     """Pergunta algo bem curto a cada cerebro (principal e reservas) ao mesmo tempo e conta quanto cada um demorou."""
     import asyncio
     import time
 
+    try:
+        await heal_models()
+    except Exception:
+        logger.debug("heal_models falhou", exc_info=True)
     ov = P.load_override()
     jobs: list[tuple[str, str, P.LLMConfig]] = []
     if ov.get("provider"):
