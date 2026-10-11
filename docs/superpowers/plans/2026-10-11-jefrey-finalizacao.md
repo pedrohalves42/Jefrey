@@ -63,6 +63,10 @@
 
 ### Task 2: Resumo do dia (o que o vídeo mostra)
 
+> **Status (11/10/2026): validada** no app instalado `a2c55dd`: as quatro frases ("bom dia, o que eu tenho pra hoje", "como esta o meu dia", "bom dia", "resumo do dia")
+> usam a ferramenta `daily_summary` sem chamar modelo, em 2,1 a 2,5 s (antes 7 a 22 s); agenda vazia dita; lembretes repetidos aparecem uma vez; sem vazamento de `[Agora]`.
+> Aprendizado: a skill nova precisa entrar na lista fixa de `load_skills`; teste cobre o carregamento real.
+
 **Files:**
 - Create: `src/jefrey/application/daily_summary.py`
 - Modify: `src/jefrey/skills/essentials.py` (ferramenta `daily_summary`)
