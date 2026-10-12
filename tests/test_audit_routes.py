@@ -47,3 +47,12 @@ def test_so_acoes_da_propria_pessoa(tmp_path, monkeypatch):
                            risk="medium", decision=dec, source="agent"))
     r = asyncio.run(AR.today(Req("pedro")))
     assert r["feitos"] == 1 and r["barrados"] == 1 and len(r["itens"]) == 2
+
+
+def test_hora_no_fuso_local(monkeypatch):
+    from datetime import datetime
+
+    monkeypatch.setenv("JEFREY_TIMEZONE", "America/Sao_Paulo")
+    monkeypatch.setattr(AR, "_rows", lambda uid, since: [{"tool_name": "cancel_reminder", "decision": "allow", "approval_decision": None,
+                                                           "risk": "medium", "at": datetime(2026, 10, 12, 10, 6)}])
+    assert asyncio.run(AR.today(Req()))["itens"][0]["hora"] == "07:06"

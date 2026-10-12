@@ -27,4 +27,11 @@ def _rows(uid: str, since: datetime) -> list[dict]:
 async def today(request: Request):
     uid = _user(request)
     since = datetime.now(timezone.utc) - timedelta(hours=24)
-    return summarize(_rows(uid, since))
+    from src.jefrey.core.reminders import local_tz
+
+    rows = _rows(uid, since)
+    for r in rows:  # o banco guarda em UTC; a pessoa le a hora do relogio dela
+        at = r.get("at")
+        if isinstance(at, datetime):
+            r["at"] = (at if at.tzinfo else at.replace(tzinfo=timezone.utc)).astimezone(local_tz())
+    return summarize(rows)
