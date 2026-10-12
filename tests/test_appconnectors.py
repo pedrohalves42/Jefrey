@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from src.jefrey.core.appconnectors import ConnectorError, run_command
-from src.jefrey.core.appconnectors import blender as B
+from src.jefrey.adapters.outbound.appconnectors import ConnectorError, run_command
+from src.jefrey.adapters.outbound.appconnectors import blender as B
 
 ROOT = Path(__file__).resolve().parents[1]
 

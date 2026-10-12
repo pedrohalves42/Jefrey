@@ -100,7 +100,7 @@ def test_modelo_de_nuvem_recebe_o_controle_quando_a_pessoa_pede():
 
 
 def test_app_command_traduz_erros_e_chama_o_conector(b, monkeypatch):
-    from src.jefrey.core import appconnectors as AC
+    from src.jefrey.adapters.outbound import appconnectors as AC
     chamado = {}
 
     async def falso(app, command, args=None):

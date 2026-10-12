@@ -67,7 +67,7 @@ class ComputerUISkill(SkillBase):
 
     @tool(description="Manda um comando para um programa com conector (hoje: blender). Comandos: add_cube, add_sphere (x,y,z,size,name), move_object (name,x,y,z), delete_object (name), set_color (name,r,g,b com 0 a 1). Pede aprovacao")
     async def app_command(self, app: str, command: str, args: dict | None = None, user_id: str | None = None) -> str:
-        from src.jefrey.core.appconnectors import ConnectorError, run_command
+        from src.jefrey.adapters.outbound.appconnectors import ConnectorError, run_command
 
         try:
             return await run_command(app, command, args or {})

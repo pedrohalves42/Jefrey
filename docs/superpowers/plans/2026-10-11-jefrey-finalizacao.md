@@ -172,6 +172,8 @@
 
 ### Task 10: Controle pelo celular (QR)
 
+> **Status:** ADIADA — abre o app para a rede local (mexe em Host/Origin e no guarda local). Precisa da sua decisão e de um celular real para validar; não é feita às cegas.
+
 **Files:**
 - Create: `src/jefrey/api/pairing_routes.py` (código de pareamento de uso único, validade de 5 min)
 - Test: `tests/test_pairing.py`
@@ -183,6 +185,8 @@
 
 ### Task 11: Plugins (arquivo .py vira habilidade)
 
+> **Status:** FEITA no código (`application/plugins.py`, `plugin_env.py`, rotas `/plugins`; 14 testes). Aprovação pelo hash, alterado = bloqueado, ferramenta de plugin = risco alto. Falta validar no app instalado.
+
 **Files:**
 - Create: `src/jefrey/application/plugins.py` (carrega `config/plugins/*.py` só se a pessoa aprovou aquele arquivo pelo hash)
 - Test: `tests/test_plugins.py`
@@ -192,6 +196,8 @@
 - [ ] **Validação:** colocar um plugin de exemplo e aprovar pela tela.
 
 ### Task 12: Segurança fechada
+
+> **Status:** Injeção: 36 testes. Registro legível `/audit/today` (7 testes). bandit: 0 achados de severidade alta. Ruling: as chaves já ficam protegidas pelo DPAPI do Windows (só o mesmo usuário abre); migrar para o Cofre de Credenciais não acrescenta proteção, então não foi feito.
 
 **Files:**
 - Modify: `src/jefrey/core/secret_store.py` (chaves no Cofre de Credenciais do Windows)
@@ -205,6 +211,8 @@
 - [ ] **Validação:** `bandit` e `trivy` sem achado alto; verificação de chaves no cofre no app instalado.
 
 ### Task 13: Limpeza do legado (Etapa B)
+
+> **Status:** FEITA: cli, mcp, publicador/assinante do barramento, doctor, telemetry e o atalho core/appconnectors (causa do aviso do build). Suíte 1731 passou.
 
 **Files:**
 - Delete: `src/jefrey/cli/`, `src/jefrey/mcp/`, `src/jefrey/eventbus/`, `src/jefrey/adapters/outbound/doctor.py`, `telemetry.py`, `src/jefrey/core/doctor.py`, `core/telemetry.py`, `core/framing.py`, `core/persona.py`, `core/recall.py` (se sem uso), e os testes que dependem deles
