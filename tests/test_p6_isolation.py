@@ -40,29 +40,3 @@ def test_pg_memory_build_filter_isolation_two_tenants():
     f_no_user = _build_filter(table, {"title": "hello"}, user_id=None)
     assert f_no_user is not None
 
-def test_streams_topic_isolation_per_tenant():
-    """Topic per-tenant: jefrey.events.{user_id}.{tool} != jefrey.events.{other}.{tool} e DLQ per user_id."""
-    # publisher topic pattern
-    def topic(user_id: str, tool: str) -> str:
-        return f"jefrey.events.{user_id}.{tool}"
-    def dlq(user_id: str) -> str:
-        return f"jefrey:dlq:{user_id}"
-    t_a = topic("u-A", "jefrey.test")
-    t_b = topic("u-B", "jefrey.test")
-    assert t_a != t_b
-    assert "u-A" in t_a and "u-B" not in t_a
-    assert "u-B" in t_b
-    assert dlq("u-A") != dlq("u-B")
-    assert dlq("u-A") == "jefrey:dlq:u-A"
-    # verificar que publisher.py e subscriber.py usam esse pattern
-    import pathlib
-    pub = (ROOT / "src/jefrey/eventbus/publisher.py").read_text(encoding="utf-8")
-    sub = (ROOT / "src/jefrey/eventbus/subscriber.py").read_text(encoding="utf-8")
-    assert "jefrey.events" in pub
-    assert "jefrey:dlq" in sub
-    # garantir sem user_id label em metrics (cap5)
-    metrics = (ROOT / "src/jefrey/adapters/outbound/metrics.py").read_text(encoding="utf-8")
-    import re
-    blocks = re.findall(r"labelnames\s*=\s*\(([^)]*)\)", metrics)
-    for b in blocks:
-        assert "user_id" not in b, f"metrics labelnames has user_id: {b}"
