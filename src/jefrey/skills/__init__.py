@@ -242,6 +242,12 @@ def load_skills() -> int:
             loaded += 1
         except Exception as e:
             logger.debug(f"load_skills {mod} skip: {e}")
+    try:
+        from src.jefrey.adapters.outbound.plugin_env import shared_store
+
+        loaded += len(shared_store().load_approved())  # so plugins que a pessoa aprovou (pelo hash)
+    except Exception as e:
+        logger.debug(f"load_skills plugins skip: {e}")
     return loaded
 
 

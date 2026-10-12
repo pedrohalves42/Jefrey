@@ -146,6 +146,22 @@ class AuditLogger:
             logger.error("CIPHER-015: CRITICO - Postgres e fallback falharam - audit log perdido para thread=%s tool=%s", thread_id, tool_name)
 
 
+def recent_for_user(user_id: str, since: "datetime.datetime", limit: int = 200) -> list[dict]:
+    """Acoes registradas para UMA pessoa desde `since` (mais recentes primeiro), so os campos que o registro legivel usa."""
+    from sqlalchemy import select
+
+    from src.jefrey.core.db import get_db
+    from src.jefrey.core.models import AuditLog
+
+    with get_db() as s:
+        found = s.execute(
+            select(AuditLog).where(AuditLog.user_id == user_id, AuditLog.created_at >= since)
+            .order_by(AuditLog.created_at.desc()).limit(limit)
+        ).scalars().all()
+        return [{"tool_name": a.tool_name, "decision": a.decision, "approval_decision": a.approval_decision,
+                 "risk": a.risk, "at": a.created_at} for a in found]
+
+
 _logger = AuditLogger()
 
 def get_audit_logger() -> AuditLogger:
