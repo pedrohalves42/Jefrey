@@ -250,6 +250,8 @@ Antes de cada item: `grep -rn` do módulo nos testes e no app. Um commit por ite
 
 ### Task 16: Instalador e atualização
 
+> **Status:** Build limpo `exit=0`, ~164 MB, 0 ERROR (validado em 4 builds). Instalar por cima com o app aberto falhava (código 5): corrigido com pedido de fechamento no `[Code]` do instalador; validação final na próxima instalação.
+
 **Files:** `packaging/build_exe.bat`, `packaging/jefrey.iss`
 
 - [ ] **Step 1:** build limpo: `exit=0`, tamanho ≈ 164 MB, sem ERROR de import oculto.
@@ -257,6 +259,8 @@ Antes de cada item: `grep -rn` do módulo nos testes e no app. Um commit por ite
 - [ ] **Validação:** `verify_installed` 22/22 e a checagem de versão no `/health`.
 
 ### Task 17: Documentação e CI
+
+> **Status:** CHANGELOG atualizado com o que está validado e o que não está. CI: ver PR.
 
 **Files:** `README.md`, `CHANGELOG.md`, `docs/COMO_O_JEFREY_FUNCIONA.md`, `.github/workflows/ci.yml`
 

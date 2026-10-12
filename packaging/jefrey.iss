@@ -48,6 +48,36 @@ Filename: "{app}\Jefrey.exe"; Description: "Abrir o Jefrey agora"; Flags: nowait
 ; Os dados da pessoa (conversas, memorias, notas) ficam em %LOCALAPPDATA%\Jefrey e NAO sao apagados ao desinstalar.
 
 [Code]
+// Atualizar com o Jefrey aberto: pede para ele fechar (arquivo-sinal que o proprio programa observa) e espera ate 20 s.
+// Sem isto o Inno nao consegue fechar a janela do app e a instalacao por cima falha.
+function JefreyRodando(): Boolean;
+var
+  Code: Integer;
+  Tmp: String;
+  Txt: AnsiString;
+begin
+  Tmp := ExpandConstant('{tmp}\jf_run.txt');
+  DeleteFile(Tmp);
+  Exec(ExpandConstant('{cmd}'), '/C tasklist /FI "IMAGENAME eq Jefrey.exe" /NH > "' + Tmp + '"', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  Result := LoadStringFromFile(Tmp, Txt) and (Pos('Jefrey.exe', String(Txt)) > 0);
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  I: Integer;
+  Sig: String;
+begin
+  Result := '';
+  Sig := ExpandConstant('{localappdata}\Jefrey\config\quit.signal');
+  ForceDirectories(ExtractFileDir(Sig));
+  SaveStringToFile(Sig, '1', False);
+  for I := 1 to 40 do
+  begin
+    if not JefreyRodando() then Break;
+    Sleep(500);
+  end;
+end;
+
 // Ao desinstalar, pergunta se a pessoa quer MANTER o que o Jefrey aprendeu. O padrao e manter (e no modo silencioso tambem).
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
