@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { getAutostart, isDesktop, restartApp, setAutostart, showOrb, type Autostart } from "@/lib/shell"
 import { getClipboard, setClipboardEnabled } from "@/lib/clipboard"
+import PhoneCard from "@/components/PhoneCard"
 
 /** O Jefrey como programa do computador: iniciar com o Windows e a bolinha (orbe) na tela. So aparece no programa instalado. */
 export default function AppSettings() {
@@ -56,6 +57,7 @@ export default function AppSettings() {
           </span>
         </label>
       )}
+      {desktop && <PhoneCard />}
       {desktop && (
         <div className="mt-3">
           <button type="button" onClick={() => void showOrb()} className="jf-btn jf-focus px-5 py-3 text-base">

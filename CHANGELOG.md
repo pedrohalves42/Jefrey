@@ -24,5 +24,6 @@ O histórico anterior (fases de servidor, Docker/Kubernetes e "Stark 1.6") está
 - **Interface:** avatares Robô e Escudo redesenhados, avatar que respira, ações rápidas por momento do dia.
 - **Voz:** voz masculina (Antônio) como padrão; reserva local (Faber) quando a voz da nuvem falha; só responde quando é chamado pelo nome.
 - **Instalador:** ao atualizar com o Jefrey aberto, pede para ele fechar sozinho e continua.
-- **Não validado ainda:** celular por QR (adiado), voz em tempo real (precisa de chave Gemini com acesso ao Live), publicação nas redes e visão em conta real.
+- **Celular por QR (desligado por padrão):** servidor separado, só na rede local e só por IP; código de uso único de 5 min, bloqueio após 5 erros, sessão por aparelho revogável; ações de risco continuam pedindo aprovação no computador.
+- **Não validado ainda:** celular por QR com um celular de verdade, voz em tempo real (precisa de chave Gemini com acesso ao Live), publicação nas redes e visão em conta real.
 - **Limpeza (10/10/2026):** removidos Docker, Kubernetes, Grafana, Prometheus, scripts de servidor e documentos históricos.

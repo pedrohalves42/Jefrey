@@ -172,7 +172,7 @@
 
 ### Task 10: Controle pelo celular (QR)
 
-> **Status:** ADIADA — abre o app para a rede local (mexe em Host/Origin e no guarda local). Precisa da sua decisão e de um celular real para validar; não é feita às cegas.
+> **Status:** FEITA no código e testada contra o servidor real na rede local desta máquina (pareamento, uso único, host por nome recusado, loopback fechado, desligar derruba). Falta parear um celular de verdade.
 
 **Files:**
 - Create: `src/jefrey/api/pairing_routes.py` (código de pareamento de uso único, validade de 5 min)
