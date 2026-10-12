@@ -155,7 +155,7 @@ def recent_for_user(user_id: str, since: "datetime.datetime", limit: int = 200) 
 
     with get_db() as s:
         found = s.execute(
-            select(AuditLog).where(AuditLog.user_id == user_id, AuditLog.created_at >= since)
+            select(AuditLog).where(AuditLog.user_id == user_id, AuditLog.created_at >= since, AuditLog.source != "stt")
             .order_by(AuditLog.created_at.desc()).limit(limit)
         ).scalars().all()
         return [{"tool_name": a.tool_name, "decision": a.decision, "approval_decision": a.approval_decision,

@@ -32,3 +32,8 @@ def test_resumo_conta_e_nao_traz_detalhes():
 
 def test_dia_vazio():
     assert summarize([])["texto"] == "Hoje eu ainda não fiz nada por você."
+
+
+def test_registro_interno_fica_de_fora_mas_barrado_aparece():
+    r = summarize([row("stt_transcribe"), row("rm_rf_tudo", decision="deny"), row("cancel_reminder")])
+    assert r["feitos"] == 1 and r["barrados"] == 1 and len(r["itens"]) == 2

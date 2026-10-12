@@ -44,7 +44,9 @@ def describe(row: Mapping) -> dict:
 
 def summarize(rows: Iterable[Mapping]) -> dict:
     """{'itens': [...mais recentes primeiro], 'feitos': n, 'barrados': n, 'texto': frase para falar}."""
-    itens = [describe(r) for r in list(rows)[:MAX_ITEMS]]
+    # registros internos (transcricao de voz etc.) nao sao "o que o Jefrey fez": ficam de fora, menos o que foi barrado
+    rows = [r for r in rows if policy_for(str(r.get("tool_name") or "")) or str(r.get("decision")) == "deny"]
+    itens = [describe(r) for r in rows[:MAX_ITEMS]]
     feitos = sum(1 for i in itens if i["desfecho"].startswith("feito"))
     barrados = sum(1 for i in itens if i["desfecho"] == "barrado")
     if not itens:
