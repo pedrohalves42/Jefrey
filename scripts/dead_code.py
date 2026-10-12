@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "jefrey"
-ENTRY = {"src.jefrey.api.main", "src.jefrey.native.launcher", "src.jefrey.native.__main__", "src.jefrey.cli.__main__", "src.jefrey.mcp.__main__", "src.jefrey.api.__main__"}
+ENTRY = {"src.jefrey.api.main", "src.jefrey.native.launcher", "src.jefrey.native.__main__", "src.jefrey.mcp.__main__", "src.jefrey.api.__main__"}
 
 
 def modname(p: Path) -> str:
