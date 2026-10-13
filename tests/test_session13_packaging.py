@@ -35,7 +35,7 @@ def test_instalador_por_usuario_sem_administrador_e_sem_apagar_dados():
 def test_versao_unica_nos_tres_lugares():
     init = re.search(r'__version__ = "([^"]+)"', _read("src/jefrey/__init__.py")).group(1)
     toml = re.search(r'^version = "([^"]+)"', _read("pyproject.toml"), re.M).group(1)
-    cfg = re.search(r'version: str = "([^"]+)"', _read("src/jefrey/core/config.py")).group(1)
+    cfg = re.search(r'version: str = "([^"]+)"', _read("src/jefrey/adapters/outbound/config.py")).group(1)
     assert init == toml == cfg
     from src.jefrey.core.updater import parse_version
     assert parse_version(init) >= (0, 9, 0)
@@ -69,5 +69,5 @@ def test_nenhuma_chave_privada_no_repositorio_e_ela_esta_no_gitignore():
     for padrao in ("update_private_key*", "*.pfx", "*.p12"):
         assert padrao in ignore
     assert not list(ROOT.glob("update_private_key*")) and not list(ROOT.glob("*.pfx"))
-    updater = _read("src/jefrey/core/updater.py")
+    updater = _read("src/jefrey/adapters/outbound/updater.py")
     assert "private_bytes" not in updater and "Ed25519PrivateKey" not in updater  # o programa so VERIFICA; nunca assina

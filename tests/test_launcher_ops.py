@@ -89,7 +89,7 @@ def test_bandeja_sem_pystray_segue_sem_derrubar(monkeypatch, tmp_path):
 
 
 def test_bandeja_com_falha_ao_criar_icone_tambem_nao_derruba(monkeypatch, tmp_path):
-    import pystray
+    pystray = pytest.importorskip("pystray")  # so existe no Windows (a bandeja)
 
     class Boom:
         def __init__(self, *a, **k):
@@ -99,7 +99,7 @@ def test_bandeja_com_falha_ao_criar_icone_tambem_nao_derruba(monkeypatch, tmp_pa
 
 
 def test_bandeja_monta_menu_abrir_registros_sair(monkeypatch, tmp_path):
-    import pystray
+    pystray = pytest.importorskip("pystray")
     seen = {}
 
     class FakeIcon:

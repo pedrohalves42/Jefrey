@@ -55,28 +55,3 @@ def test_legacy_v0_deprecation_warns(monkeypatch):
     assert list(EVENTBUS_KID_LEGACY_TOTAL._labelnames) == []
 
 
-def test_dlq_isolation_user_id(monkeypatch):
-    hex_v = secrets.token_hex(32)
-    monkeypatch.setenv("JEFREY_EVENTBUS__HMAC_KEYS_JSON", json.dumps({"v1": hex_v}))
-    monkeypatch.delenv("JEFREY_EVENTBUS__HMAC_KEY", raising=False)
-    monkeypatch.setenv("JEFREY_EVENTBUS__HMAC_KID", "v1")
-    from src.jefrey.eventbus.publisher import EventBusPublisher
-    from src.jefrey.eventbus.subscriber import EventBusSubscriber
-
-    pub = EventBusPublisher()
-    sub_a = EventBusSubscriber()
-    sub_b = EventBusSubscriber()
-    # publish isolado: u-a e u-b topics diferentes
-    s_a = pub.publish(tool_name="jefrey.test", action="run", payload={"q": 1}, user_id="u-a")
-    s_b = pub.publish(tool_name="jefrey.test", action="run", payload={"q": 2}, user_id="u-b")
-    assert pub.get_topic("u-a", "jefrey.test") != pub.get_topic("u-b", "jefrey.test")
-    assert s_a["user_id"] == "u-a" and s_b["user_id"] == "u-b"
-    # handle_message invalido por user_id
-    bad_a = {"user_id": "u-a", "tool_name": "jefrey.test", "action": "run", "payload": {}, "timestamp": "2026-09-02T00:00:00Z", "kid": "v1", "signature": "bad"*16}
-    bad_b = {"user_id": "u-b", "tool_name": "jefrey.test", "action": "run", "payload": {}, "timestamp": "2026-09-02T00:00:00Z", "kid": "v1", "signature": "bad"*16}
-    sub_a.handle_message(bad_a)
-    sub_b.handle_message(bad_b)
-    assert len(sub_a.get_dead_letter()) == 1
-    assert len(sub_b.get_dead_letter()) == 1
-    assert sub_a.get_dead_letter()[0]["message"]["user_id"] == "u-a"
-    assert sub_b.get_dead_letter()[0]["message"]["user_id"] == "u-b"

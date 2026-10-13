@@ -12,6 +12,14 @@ router = APIRouter(prefix="/skills", tags=["skills"])
 
 def _risk_of(tool_name: str) -> str | None:
     try:
+        from src.jefrey.core.tool_catalog import policy_for
+
+        pol = policy_for(tool_name)  # a tabela de riscos que o agente realmente usa
+        if pol is not None:
+            return str(pol.risk).lower()
+    except Exception as e:
+        logger.debug("skills: risco pelo catalogo falhou (%s)", type(e).__name__)
+    try:
         from src.jefrey.core.registry import get_tool_risk
         r = get_tool_risk(tool_name)
         return str(r).lower() if r else None

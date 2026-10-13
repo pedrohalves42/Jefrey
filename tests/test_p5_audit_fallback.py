@@ -11,7 +11,7 @@ import pathlib
 
 def test_audit_redact_before_json():
     """Redact antes de json + segunda camada redact_pii(raw) — DDIA cap3."""
-    txt = pathlib.Path("src/jefrey/core/audit.py").read_text(encoding="utf-8")
+    txt = pathlib.Path("src/jefrey/adapters/outbound/audit.py").read_text(encoding="utf-8")
     assert "_redact_detail" in txt and "detail_redacted" in txt, "sem _redact_detail"
     assert txt.find("_redact_detail") < txt.find("detail_json"), "redact ordem errada: deve vir antes de detail_json"
     assert "redact_pii(raw)" in txt, "segunda camada redact_pii(raw) ausente no fallback"

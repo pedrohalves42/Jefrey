@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from urllib.parse import urlencode
 from typing import Optional
 
-import httpx
+from src.jefrey.adapters.outbound import http_client as http
 from fastapi import APIRouter, Request, HTTPException, status
 
 from src.jefrey.core.config import get_settings
@@ -46,11 +46,15 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 # ── Credenciais Google (carregadas via get_settings) ──────────────────────────────
 def _get_oauth_credentials():
-    """Get OAuth credentials from settings."""
+    """Credenciais do app Google: a fonte unica e core.google_oauth.credentials() (variavel de ambiente ou arquivo salvo na tela);
+    a configuracao do programa e so o ultimo recurso."""
+    from src.jefrey.core.google_oauth import credentials as _saved
+
     cfg = get_settings()
+    found = _saved() or {}
     return {
-        "client_id": getattr(cfg.oauth, "google_client_id", None) if hasattr(cfg, 'oauth') else os.getenv("JEFREY_OAUTH__CLIENT_ID"),
-        "client_secret": getattr(cfg.oauth, "google_client_secret", None) if hasattr(cfg, 'oauth') else os.getenv("JEFREY_OAUTH__CLIENT_SECRET"),
+        "client_id": found.get("client_id") or getattr(getattr(cfg, "oauth", None), "google_client_id", None),
+        "client_secret": found.get("client_secret") or getattr(getattr(cfg, "oauth", None), "google_client_secret", None),
         "redirect_uri": os.getenv("JEFREY_OAUTH__REDIRECT_URIS", "http://localhost:8000/auth/google/callback"),
         "aud": os.getenv("JEFREY_OAUTH__AUD", "jefrey"),
         "iss": os.getenv("JEFREY_OAUTH__ISS", "https://accounts.google.com"),
@@ -73,7 +77,7 @@ async def dev_token(request: Request):
     if not secret or len(secret) < 16 or "CHANGE_ME" in secret:
         raise HTTPException(
             status_code=500,
-            detail="secret_key nao configurado para dev-token (configure JEFREY_API__SECRET_KEY >=32)",
+            detail="O Jefrey ainda não está preparado para abrir sessão. Reinstale ou fale com quem te entregou o Jefrey.",
         )
 
     # CIPHER-302: antes devolvia a propria JEFREY_API__SECRET_KEY como token (master key exposta
@@ -109,7 +113,7 @@ async def google_login(request: Request = None):
     if not creds["client_id"] or not creds["client_secret"]:
         raise HTTPException(
             status_code=503,
-            detail="OAuth2 não configurado. Configure JEFREY_OAUTH__CLIENT_ID e JEFREY_OAUTH__CLIENT_SECRET no .env"
+            detail="O login com o Google ainda não foi liberado nesta cópia. Em Conexões > Google, cole o ID e a chave, ou fale com quem te entregou o Jefrey."
         )
     
     # state CSRF + PKCE (S256): guardados no servidor, de uso unico, e conferidos no retorno
@@ -155,7 +159,7 @@ async def google_callback(request: Request):
     if not creds["client_id"] or not creds["client_secret"]:
         raise HTTPException(
             status_code=503,
-            detail="OAuth2 não configurado. Configure JEFREY_OAUTH__CLIENT_ID e JEFREY_OAUTH__CLIENT_SECRET no .env"
+            detail="O login com o Google ainda não foi liberado nesta cópia. Em Conexões > Google, cole o ID e a chave, ou fale com quem te entregou o Jefrey."
         )
     
     # state CSRF: obrigatorio e de uso unico (antes era so registrado em log)
@@ -170,7 +174,7 @@ async def google_callback(request: Request):
         )
 
     # D1.2 FIX: manter AsyncClient aberto para token exchange + userinfo (antes fechava early)
-    async with httpx.AsyncClient() as client:
+    async with http.client() as client:
         # 1) Trocar code por tokens no Google
         token_resp = await client.post(
             "https://oauth2.googleapis.com/token",
@@ -367,7 +371,7 @@ async def get_oauth_token(request: Request, provider: str):
             if token_record.refresh_token:
                 # Implementar refresh token
                 try:
-                    async with httpx.AsyncClient() as client:
+                    async with http.client() as client:
                         refresh_resp = await client.post(
                             "https://oauth2.googleapis.com/token",
                             data={

@@ -129,3 +129,63 @@ async def run_now(topic_id: str, request: Request):
     finally:
         _running.discard(uid)
     return g
+
+
+# ---------------- aprender por pedido (sem chat) e fontes indicadas pela pessoa ----------------
+class LearnBody(BaseModel):
+    topic: str = Field(default="", max_length=80)
+    url: str = Field(default="", max_length=600)
+    text: str = Field(default="", max_length=6000)
+    run: bool = False  # estudar agora (leva cerca de um minuto)
+
+
+class SourceBody(BaseModel):
+    url: str = Field(min_length=4, max_length=600)
+    title: str = Field(default="", max_length=160)
+
+
+@router.post("/learn")
+async def learn(body: LearnBody, request: Request):
+    """"Aprenda isto": um assunto, um link ou um texto. O pedido fica guardado mesmo se estudar agora nao for possivel."""
+    uid = _user(request)
+    try:
+        out = await S.learn_request(uid, topic=body.topic, url=body.url, text=body.text)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    topic = out.get("topic")
+    if body.run and topic:
+        if uid in _running:
+            out["run_error"] = "Já estou estudando. Espere terminar."
+        else:
+            from src.jefrey.core.llm_provider import get_llm_client
+            from src.jefrey.core.reminders import local_tz
+
+            _running.add(uid)
+            try:
+                out["guide"] = await S.study_topic(uid, topic["id"], get_llm_client(), tz=local_tz())
+            except S.StudyError as e:
+                out["run_error"] = str(e)
+            finally:
+                _running.discard(uid)
+    return out
+
+
+@router.get("/sources")
+async def list_sources(request: Request):
+    return {"sources": S.StudyStore().list_sources(_user(request))}
+
+
+@router.post("/{topic_id}/sources")
+async def add_source(topic_id: str, body: SourceBody, request: Request):
+    uid = _user(request)
+    try:
+        return S.StudyStore().add_source(uid, body.url, None if topic_id == "any" else topic_id, body.title)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@router.delete("/sources/{source_id}")
+async def delete_source(source_id: str, request: Request):
+    if not S.StudyStore().delete_source(_user(request), source_id):
+        raise HTTPException(status_code=404, detail="Não encontrei essa fonte.")
+    return {"ok": True}

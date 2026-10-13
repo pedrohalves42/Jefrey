@@ -1,12 +1,17 @@
 import { useReminders } from "@/hooks/useReminders"
 
+/** No maximo 2 avisos por vez: uma pilha de lembretes nao pode cobrir a tela. */
+export const MAX_SHOWN = 2
+
 /** Avisos de lembrete no canto da tela. Fica invisivel quando nao ha nada vencido. */
 export function ReminderBanner() {
   const { items, dismiss, canNotify, enableNotifications } = useReminders()
   if (!items.length) return null
+  const shown = items.slice(0, MAX_SHOWN)
+  const extra = items.length - shown.length
   return (
     <div className="pointer-events-none fixed right-3 top-3 z-50 flex w-[min(92vw,22rem)] flex-col gap-2" role="region" aria-label="Lembretes">
-      {items.map(i => (
+      {shown.map(i => (
         <div key={i.id} role="alert" className="jf-panel pointer-events-auto border border-amber-300/40 p-3 shadow-lg">
           <p className="text-xs uppercase tracking-wide text-amber-200/80">Lembrete{i.repeat !== "none" ? " (repete)" : ""}</p>
           <p className="mt-1 break-words text-sm text-white">{i.text}</p>
@@ -24,6 +29,14 @@ export function ReminderBanner() {
           </div>
         </div>
       ))}
+      {extra > 0 && (
+        <div className="jf-panel pointer-events-auto flex items-center justify-between gap-2 border border-amber-300/40 p-3 text-sm text-white">
+          <span>+ {extra} {extra === 1 ? "lembrete" : "lembretes"}</span>
+          <button type="button" onClick={() => items.forEach(i => void dismiss(i.id))} className="jf-btn jf-focus px-3 py-1 text-sm">
+            Ok em todos
+          </button>
+        </div>
+      )}
     </div>
   )
 }

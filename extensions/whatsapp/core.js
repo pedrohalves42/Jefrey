@@ -35,16 +35,56 @@
     return "";
   }
 
+  /* O WhatsApp muda a pagina de tempos em tempos. Formato de hoje: cada mensagem e um elemento data-testid="conv-msg-<ID>" (com data-id).
+   * Formato antigo: data-id="true_..."/"false_...". Os dois sao aceitos. */
+  var LEGACY_ID = /^(true|false)_/;
+
   function rowNodes(doc) {
-    return Array.prototype.slice.call(doc.querySelectorAll("#main [data-id]")).filter(function (el) {
-      return /^(true|false)_/.test(el.getAttribute("data-id") || "");
+    var out = [];
+    var seen = [];
+    function add(el) {
+      if (seen.indexOf(el) === -1) {
+        seen.push(el);
+        out.push(el);
+      }
+    }
+    Array.prototype.forEach.call(doc.querySelectorAll("#main [data-testid^='conv-msg-']"), add);
+    Array.prototype.forEach.call(doc.querySelectorAll("#main [data-id]"), function (el) {
+      if (LEGACY_ID.test(el.getAttribute("data-id") || "")) add(el);
     });
+    return out;
   }
 
-  /* Grupo: o identificador das mensagens termina em @g.us. Grupos nunca sao atendidos. */
+  /* Identificador estavel da mensagem (nunca vazio). */
+  function rowId(el) {
+    var d = el.getAttribute("data-id") || "";
+    if (d) return d;
+    var t = el.getAttribute("data-testid") || "";
+    return t.indexOf("conv-msg-") === 0 ? t.slice("conv-msg-".length) : t;
+  }
+
+  /* Foi a propria pessoa que enviou? Antigo: prefixo true_. Novo: o rotulo "Voce:" (leitor de tela) ou a "cauda" de mensagem enviada. */
+  function rowFromMe(el) {
+    var d = el.getAttribute("data-id") || "";
+    if (LEGACY_ID.test(d)) return d.indexOf("true_") === 0;
+    var lab = el.querySelector('span[aria-label$=":"]');
+    if (lab && /^(voc[eê]|you)\s*:$/i.test((lab.getAttribute("aria-label") || "").trim())) return true;
+    return !!el.querySelector('[data-icon="tail-out"]');
+  }
+
+  /* Grupo: no formato antigo o identificador termina em @g.us; no novo, o subtitulo do cabecalho lista os participantes ("Ana, Beto, Voce"). */
   function isGroup(doc) {
-    return rowNodes(doc).some(function (el) {
+    var legacy = Array.prototype.slice.call(doc.querySelectorAll("#main [data-id]")).some(function (el) {
       return (el.getAttribute("data-id") || "").indexOf("@g.us") !== -1;
+    });
+    if (legacy) return true;
+    var head = doc.querySelector("#main header");
+    if (!head) return false;
+    var sub = Array.prototype.slice.call(head.querySelectorAll("span[dir], span[title]")).map(function (n) {
+      return (n.getAttribute("title") || n.textContent || "").trim();
+    });
+    return sub.some(function (t) {
+      return /,/.test(t) && /(^|,\s*)(voc[eê]|you)(\s*,|\s*$)/i.test(t);
     });
   }
 
@@ -68,10 +108,10 @@
   /* [{id, text, from_me, kind}] na ordem da tela. kind: "text" ou "other" (audio, imagem, figurinha...). */
   function parseRows(doc) {
     return rowNodes(doc).map(function (el) {
-      var id = el.getAttribute("data-id") || "";
+      var id = rowId(el);
       var text = rowText(el);
       // sem texto = audio, imagem, figurinha ou outro tipo: o Jefrey nunca responde sozinho a isso (pede aprovacao)
-      return { id: id, text: text.slice(0, 2000), from_me: id.indexOf("true_") === 0, kind: text ? "text" : "other" };
+      return { id: id, text: text.slice(0, 2000), from_me: rowFromMe(el), kind: text ? "text" : "other" };
     });
   }
 
@@ -98,28 +138,134 @@
     return icon ? icon.closest("button") || icon : null;
   }
 
-  function composerText(doc) {
-    var c = composer(doc);
-    return c ? (c.textContent || "").trim() : "";
+  /* O editor do WhatsApp (Lexical) guarda o texto em spans proprios e o atualiza um instante DEPOIS do comando de digitar:
+   * le-se so o que a pessoa de fato ve (nunca o texto de dica) e confere-se depois de esperar o editor. */
+  function readText(el) {
+    if (!el) return "";
+    var spans = el.querySelectorAll('[data-lexical-text="true"]');
+    if (spans.length) {
+      return Array.prototype.map
+        .call(spans, function (n) {
+          return n.textContent || "";
+        })
+        .join("")
+        .trim();
+    }
+    return (el.textContent || "").trim();
   }
 
-  /* Digita no campo de mensagem como uma pessoa (o editor do WhatsApp ignora simples troca de texto). */
-  function typeText(doc, text) {
-    var c = composer(doc);
-    if (!c) return false;
-    c.focus();
+  function composerText(doc) {
+    return readText(composer(doc));
+  }
+
+  /* Apaga o que ha no campo (como selecionar tudo e apagar). Usado para nao deixar rascunho solto quando algo da errado. */
+  function clearField(doc, el) {
+    if (!el) return;
+    el.focus();
+    try {
+      var view = doc.defaultView || g;
+      var range = doc.createRange();
+      range.selectNodeContents(el);
+      var sel = view.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      doc.execCommand("delete");
+    } catch (e) {
+      /* sem selecao: tenta o jeito simples */
+    }
+    if (readText(el) !== "") {
+      el.textContent = "";
+      var v2 = doc.defaultView || g;
+      el.dispatchEvent(new v2.InputEvent("input", { bubbles: true, data: "", inputType: "deleteContentBackward" }));
+    }
+  }
+
+  function wait(ms) {
+    return new Promise(function (r) {
+      setTimeout(r, ms);
+    });
+  }
+
+  /* Digita em um campo editavel como uma pessoa. Devolve uma promessa: o editor demora um instante para mostrar o texto,
+   * e conferir antes disso fazia o Jefrey digitar de novo (texto duplicado) e desistir de enviar. */
+  async function insertInto(doc, el, text, sleep) {
+    if (!el) return false;
+    var pause = sleep || wait;
+    el.focus();
     var done = false;
     try {
       done = !!(doc.execCommand && doc.execCommand("insertText", false, text));
     } catch (e) {
       done = false;
     }
-    if (!done || composerText(doc) !== text.trim()) {
-      c.textContent = text;
-      var view = doc.defaultView || g;
-      c.dispatchEvent(new view.InputEvent("input", { bubbles: true, data: text, inputType: "insertText" }));
+    for (var i = 0; i < 6; i++) {
+      await pause(done ? 250 : 100);
+      if (readText(el) === text.trim()) return true;
     }
-    return composerText(doc) === text.trim();
+    // nao apareceu (ou apareceu errado): limpa e tenta UMA vez pelo jeito alternativo
+    clearField(doc, el);
+    el.textContent = text;
+    var view = doc.defaultView || g;
+    el.dispatchEvent(new view.InputEvent("input", { bubbles: true, data: text, inputType: "insertText" }));
+    await pause(300);
+    if (readText(el) === text.trim()) return true;
+    clearField(doc, el); // nunca deixa texto pela metade
+    return false;
+  }
+
+  function typeText(doc, text, sleep) {
+    return insertInto(doc, composer(doc), text, sleep);
+  }
+
+  /* ---- abrir a conversa certa (so para enviar o que a pessoa aprovou) ---- */
+  var CELL_SELECTORS = ['#pane-side [data-testid="cell-frame-container"]', '#pane-side [role="listitem"]', '#pane-side [role="row"]'];
+
+  function cellTitle(el) {
+    var t = el.querySelector("span[title]");
+    var s = t ? t.getAttribute("title") : "";
+    if (!s) {
+      var d = el.querySelector("span[dir='auto']");
+      s = d ? d.textContent : "";
+    }
+    return (s || "").trim().slice(0, 100);
+  }
+
+  function findChatCell(doc, chat) {
+    for (var i = 0; i < CELL_SELECTORS.length; i++) {
+      var cells = Array.prototype.slice.call(doc.querySelectorAll(CELL_SELECTORS[i]));
+      for (var j = 0; j < cells.length; j++) {
+        if (sameChat(cellTitle(cells[j]), chat)) return cells[j];
+      }
+    }
+    return null;
+  }
+
+  /* Clica na conversa da lista lateral. Nunca clica em grupo (o nome so e comparado por igualdade exata, sem acento/maiuscula). */
+  function openChat(doc, chat) {
+    var cell = findChatCell(doc, chat);
+    if (!cell) return { ok: false, why: "nao-achei" };
+    var view = doc.defaultView || g;
+    ["mousedown", "mouseup", "click"].forEach(function (type) {
+      cell.dispatchEvent(new view.MouseEvent(type, { bubbles: true, cancelable: true }));
+    });
+    return { ok: true, why: "" };
+  }
+
+  function searchBox(doc) {
+    return doc.querySelector('#side div[contenteditable="true"][data-tab="3"]') || doc.querySelector('#side div[contenteditable="true"]');
+  }
+
+  function typeInSearch(doc, text, sleep) {
+    return insertInto(doc, searchBox(doc), text, sleep);
+  }
+
+  function clearSearch(doc) {
+    var b = searchBox(doc);
+    if (b) {
+      b.textContent = "";
+      var view = doc.defaultView || g;
+      b.dispatchEvent(new view.InputEvent("input", { bubbles: true, data: "", inputType: "deleteContentBackward" }));
+    }
   }
 
   /* Seguranca antes de enviar: so no chat certo, so com o campo vazio (nunca apaga o que a pessoa esta digitando). */
@@ -136,10 +282,89 @@
     return 5000 + Math.floor(r * 9000);
   }
 
+  /* ---- lista de conversas: quem escreveu, previa e nao lidas (sem abrir nenhuma conversa) ---- */
+  var TIME_RX = /^(\d{1,2}[:h]\d{2}|ontem|hoje|yesterday|today|\d{1,2}\/\d{1,2}(\/\d{2,4})?|seg|ter|qua|qui|sex|s[aá]b|dom)\.?$/i;
+
+  function cellUnread(el) {
+    var found = 0;
+    Array.prototype.forEach.call(el.querySelectorAll("[aria-label]"), function (n) {
+      var label = n.getAttribute("aria-label") || "";
+      var m = label.match(/(\d+)\s*(mensagens?\s*)?(n[aã]o\s*lidas?|unread)/i);
+      if (m) found = Math.max(found, parseInt(m[1], 10));
+      else if (/(n[aã]o\s*lida|unread)/i.test(label) && !found) found = 1;
+    });
+    return found;
+  }
+
+  /* Previa de grupo: "Fulano: texto". "Voce: texto" e conversa individual onde a ultima mensagem foi da pessoa. */
+  function looksLikeGroupPreview(prev) {
+    var m = /^([^:]{1,40}):\s/.exec(String(prev || ""));
+    return !!m && !/^(voc[eê]|you)$/i.test(m[1].trim());
+  }
+
+  function cellPreview(el, title, unread) {
+    var st = el.querySelector('[data-testid="last-msg-status"]'); // o WhatsApp de hoje: a previa tem um marcador proprio
+    if (st) {
+      var tt = (st.textContent || "").trim();
+      if (tt) return tt.slice(0, 120);
+    }
+    var best = "";
+    Array.prototype.forEach.call(el.querySelectorAll("span[dir], span[title]"), function (n) {
+      var t = (n.getAttribute("title") || n.textContent || "").trim();
+      if (!t || sameChat(t, title) || TIME_RX.test(t) || (unread && t === String(unread))) return;
+      if (t.length > best.length) best = t;
+    });
+    return best.slice(0, 120);
+  }
+
+  function parseSidebar(doc) {
+    var seen = {};
+    var out = [];
+    for (var i = 0; i < CELL_SELECTORS.length && !out.length; i++) {
+      Array.prototype.forEach.call(doc.querySelectorAll(CELL_SELECTORS[i]), function (cell) {
+        var title = cellTitle(cell);
+        var key = norm(title);
+        if (!key || seen[key]) return;
+        seen[key] = true;
+        var unread = cellUnread(cell);
+        var preview = cellPreview(cell, title, unread);
+        out.push({
+          title: title,
+          preview: preview,
+          unread: unread,
+          // grupo: icone de grupo OU previa "Fulano: texto" (na duvida, trata como grupo: o Jefrey nunca mostra nem guarda grupos)
+          group: !!cell.querySelector('[data-icon*="group"]') || looksLikeGroupPreview(preview),
+        });
+      });
+    }
+    return out.slice(0, 40);
+  }
+
+  /* A conversa da pessoa com ela mesma ("Nome (Você)"): e por ali que ela escreve para o Jefrey. */
+  var SELF_RX = /\((voc[eê]|you|tu|eu)\)\s*$/i;
+  var BOT_MARK = "🤖";
+
+  function isSelfChat(title) {
+    return SELF_RX.test(String(title || "").trim());
+  }
+
+  function isBotText(text) {
+    return String(text || "").trim().indexOf(BOT_MARK) === 0;
+  }
+
+  /* Mensagens que a pessoa escreveu para si mesma e o Jefrey ainda nao viu (as respostas do proprio Jefrey comecam com o robozinho). */
+  function newCommands(rows, seen) {
+    return rows.filter(function (r) {
+      return r.from_me && r.kind === "text" && r.text && !isBotText(r.text) && !seen.has(r.id);
+    });
+  }
+
   var api = {
+    parseSidebar: parseSidebar, looksLikeGroupPreview: looksLikeGroupPreview, isSelfChat: isSelfChat, isBotText: isBotText, newCommands: newCommands,
     norm: norm, sameChat: sameChat, chatTitle: chatTitle, isGroup: isGroup, parseRows: parseRows, newIncoming: newIncoming,
     context: context, composer: composer, sendButton: sendButton, composerText: composerText, typeText: typeText,
-    canSendNow: canSendNow, humanDelayMs: humanDelayMs,
+    canSendNow: canSendNow, readText: readText, clearField: clearField, humanDelayMs: humanDelayMs,
+    findChatCell: findChatCell, openChat: openChat, typeInSearch: typeInSearch, clearSearch: clearSearch, searchBox: searchBox,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   g.JefreyWACore = api;

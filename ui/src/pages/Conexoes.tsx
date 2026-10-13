@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react"
+import { isDesktop, openMessages } from "@/lib/shell"
 import { useSearchParams } from "react-router-dom"
-import { useQueryClient } from "@tanstack/react-query"
 import ListenButton from "@/components/ListenButton"
-import { disconnectGoogle, getGoogle, googleReturnMessage, SERVICE_LABEL, startGoogle, type GoogleService, type GoogleStatus } from "@/lib/connections"
-import { cleanKey, guideFor, KEY_COST_NOTE, KEY_GUIDES, keyProblem, type KeyProviderId } from "@/lib/keyGuide"
-import { getConfig, getPresets, saveConfig, startOpenRouter, testConfig, testMessage, type LlmConfig, type Preset } from "@/lib/llm"
+import { disconnectGoogle, getGoogle, saveGoogleCredentials, googleReturnMessage, SERVICE_LABEL, SERVICE_HINT, ALL_SERVICES, startGoogle, type GoogleService, type GoogleStatus } from "@/lib/connections"
+import AlexaTab from "@/components/AlexaTab"
+import WaCompose from "@/components/WaCompose"
+import Cerebros from "@/components/Cerebros"
+import Redes from "@/components/Redes"
 import {
-  MODE_LABEL, minutesLeft, sortChats, waForgetAll, waOpenFolder, waPairing, waRevoke, waSetMode, waSetPaused, waStatus, WA_PRIVACY_NOTE, WA_RISK_NOTE,
-  type WaChat, type WaMode, type WaStatus,
+  MODE_LABEL, minutesLeft, sortChats, waForgetAll, waInbox, waOpenFolder, waPairing, waRevoke, waSetMode, waSetPaused, waStatus, WA_PRIVACY_NOTE, WA_RISK_NOTE,
+  type WaChat, type WaInboxItem, type WaMode, type WaStatus,
 } from "@/lib/wa"
 
 const card = "jf-panel p-5"
@@ -31,169 +33,42 @@ function Badge({ on, yes, no }: { on: boolean; yes: string; no: string }) {
   )
 }
 
-/** Passo a passo para colar a chave do Claude ou do ChatGPT, sem termos tecnicos. */
-function KeySteps({ presets, onDone }: { presets: Preset[]; onDone: () => void }) {
-  const [who, setWho] = useState<KeyProviderId | null>(null)
-  const [key, setKey] = useState("")
+/** Configuracao unica do app Google: cola o ID e a chave do Google Cloud (quem entrega o Jefrey pode deixar isso pronto). */
+function GoogleSetup({ onDone }: { onDone: () => void }) {
+  const [id, setId] = useState("")
+  const [secret, setSecret] = useState("")
   const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState<Msg>(null)
-  const guide = who ? guideFor(who) : undefined
-
-  async function connect() {
-    if (!who) return
-    const problem = keyProblem(who, key)
-    if (problem) {
-      setMsg({ ok: false, text: problem })
-      return
-    }
-    const preset = presets.find(p => p.id === who)
-    if (!preset || !preset.models.length) {
-      setMsg({ ok: false, text: "Não consegui preparar esse serviço agora. Tente de novo." })
-      return
-    }
+  const [err, setErr] = useState("")
+  async function save() {
     setBusy(true)
-    setMsg(null)
-    const saved = await saveConfig({ provider: preset.provider, model: preset.models[0], base_url: preset.base_url, api_key: cleanKey(key) })
-    if (!saved.ok) {
-      setMsg({ ok: false, text: "Não consegui guardar o código. Confira se copiou inteiro." })
-      setBusy(false)
-      return
-    }
-    setKey("")
-    const t = testMessage(await testConfig())
-    setMsg(t)
+    setErr("")
+    const r = await saveGoogleCredentials(id, secret)
     setBusy(false)
-    if (t.ok) onDone()
+    if (r.ok) {
+      setSecret("")
+      onDone()
+    } else setErr(((r.data as { detail?: unknown } | null)?.detail as string) || "Não consegui guardar agora. Tente de novo.")
   }
-
+  const field = "w-full rounded-lg border border-white/15 bg-black/30 px-3 py-3 text-base text-white placeholder:text-white/30"
   return (
-    <div className="mt-4 rounded-xl border border-white/10 p-4">
-      <p className="text-base text-white/85">Qual serviço você usa?</p>
-      <div className="mt-2 flex flex-wrap gap-3">
-        {KEY_GUIDES.map(g => (
-          <button
-            key={g.id}
-            type="button"
-            aria-pressed={who === g.id}
-            onClick={() => {
-              setWho(g.id)
-              setMsg(null)
-            }}
-            className={`jf-focus rounded-lg border px-5 py-3 text-base ${who === g.id ? "border-cyan-300 bg-cyan-400/10 text-white" : "border-white/20 text-white/80 hover:bg-white/5"}`}
-          >
-            {g.name}
-          </button>
-        ))}
-      </div>
-
-      {guide && (
-        <div className="mt-4">
-          <ol className="list-decimal space-y-2 pl-6 text-base text-white/80">
-            {guide.steps.map(s => (
-              <li key={s}>{s}</li>
-            ))}
-          </ol>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <a href={guide.url} target="_blank" rel="noopener noreferrer" className={`${big} inline-block`}>
-              Abrir o site do {guide.name}
-            </a>
-            <ListenButton text={`${guide.steps.join(" ")} ${KEY_COST_NOTE}`} />
-          </div>
-          <p className="mt-3 text-sm text-white/60">{KEY_COST_NOTE}</p>
-          <label className="mt-4 block text-base text-white/85">
-            Cole aqui o código que você copiou
-            <input
-              className={`${field} mt-1`}
-              type="password"
-              autoComplete="off"
-              spellCheck={false}
-              value={key}
-              onChange={e => {
-                setKey(e.target.value)
-                setMsg(null)
-              }}
-              placeholder="começa com sk-"
-            />
-          </label>
-          <button type="button" onClick={() => void connect()} disabled={busy} className={`${big} mt-3`}>
-            {busy ? "Testando…" : "Conectar"}
-          </button>
-        </div>
-      )}
-      <Note msg={msg} />
+    <div className="mt-4 rounded-xl border border-amber-300/30 p-4">
+      <p className="text-base text-amber-100">Falta uma configuração, feita uma vez só. Quem te entregou o Jefrey pode deixar pronta; se for você, siga o guia <b>docs/GOOGLE.md</b>, crie o acesso no Google Cloud (tipo “Aplicativo para computador”) e cole abaixo.</p>
+      <label className="mt-3 block text-base text-white/85">ID do cliente
+        <input className={`${field} mt-1`} value={id} onChange={e => setId(e.target.value)} placeholder="123456-abc.apps.googleusercontent.com" autoComplete="off" spellCheck={false} />
+      </label>
+      <label className="mt-3 block text-base text-white/85">Chave secreta
+        <input className={`${field} mt-1`} type="password" value={secret} onChange={e => setSecret(e.target.value)} autoComplete="off" spellCheck={false} />
+      </label>
+      {err && <p role="alert" className="mt-2 text-base text-red-200">{err}</p>}
+      <button type="button" onClick={() => void save()} disabled={busy || !id.trim() || !secret.trim()} className={`${big} mt-3`}>{busy ? "Guardando…" : "Guardar"}</button>
     </div>
-  )
-}
-
-function Assistente() {
-  const qc = useQueryClient()
-  const [cfg, setCfg] = useState<LlmConfig | null>(null)
-  const [presets, setPresets] = useState<Preset[]>([])
-  const [open, setOpen] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState<Msg>(null)
-
-  async function load() {
-    const [c, p] = await Promise.all([getConfig(), getPresets()])
-    setCfg(c.data)
-    setPresets(p.data?.presets ?? [])
-  }
-  useEffect(() => {
-    void load()
-  }, [])
-
-  async function oneClick() {
-    setBusy(true)
-    setMsg(null)
-    const err = await startOpenRouter()
-    if (err) {
-      setMsg({ ok: false, text: err })
-      setBusy(false)
-    }
-  }
-
-  const connected = !!cfg?.configured && !!cfg?.is_cloud && cfg.has_key
-  const text =
-    "A inteligência do Jefrey. Aperte o botão, o site abre, você entra na sua conta e volta. O Jefrey nunca vê a sua senha. " +
-    "Você paga direto ao serviço, só pelo que usar."
-  return (
-    <section className={card} aria-labelledby="c-ia">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="c-ia" className="text-xl font-medium text-white">Inteligência do Jefrey</h2>
-        <Badge on={connected} yes="Conectada" no="Ainda não conectada" />
-      </div>
-      <p className="mt-2 text-base text-white/70">
-        É o que faz o Jefrey pensar e responder. Aperte o botão: o site abre, você entra na sua conta e volta sozinho. O Jefrey nunca vê a sua senha.
-      </p>
-      <div className="mt-3 flex flex-wrap items-center gap-3">
-        <button type="button" onClick={() => void oneClick()} disabled={busy} className={big}>
-          {busy ? "Abrindo o site…" : connected ? "Conectar de novo" : "Conectar com 1 clique"}
-        </button>
-        <ListenButton text={text} />
-      </div>
-      <p className="mt-3 text-sm text-white/55">Você paga direto ao serviço, só pelo que usar, e acompanha o gasto lá.</p>
-      <Note msg={msg} />
-
-      <button type="button" onClick={() => setOpen(v => !v)} aria-expanded={open} className="jf-focus mt-4 text-base text-white/70 underline hover:text-white">
-        {open ? "Fechar" : "Prefiro usar minha conta do Claude ou do ChatGPT"}
-      </button>
-      {open && (
-        <KeySteps
-          presets={presets}
-          onDone={() => {
-            void qc.invalidateQueries({ queryKey: ["llm-config"] })
-            void load()
-          }}
-        />
-      )}
-    </section>
   )
 }
 
 function Google() {
   const [params, setParams] = useSearchParams()
   const [st, setSt] = useState<GoogleStatus | null>(null)
-  const [pick, setPick] = useState<Record<GoogleService, boolean>>({ calendar: true, email: true, drive: false })
+  const [pick, setPick] = useState<Record<GoogleService, boolean>>({ calendar: true, email: true, drive: true, tasks: true, contacts: true })
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<Msg>(googleReturnMessage(params.get("google")))
 
@@ -208,18 +83,38 @@ function Google() {
 
   const chosen = (Object.keys(pick) as GoogleService[]).filter(k => pick[k])
 
-  async function go() {
-    if (!chosen.length) {
-      setMsg({ ok: false, text: "Marque pelo menos uma coisa: Agenda ou E-mail." })
+  async function go(services?: GoogleService[]) {
+    const wanted = services ?? chosen
+    if (!wanted.length) {
+      setMsg({ ok: false, text: "Marque pelo menos uma coisa." })
       return
     }
     setBusy(true)
     setMsg(null)
-    const err = await startGoogle(chosen)
+    const err = await startGoogle(wanted)
     if (err) {
       setMsg({ ok: false, text: err })
       setBusy(false)
+    } else if (isDesktop()) {
+      setMsg({ ok: true, text: "Abri o Google no seu navegador. Entre na sua conta, aceite e volte aqui: eu aviso quando conectar." })
+      void waitConnected()
     }
+  }
+
+  /** No app o login acontece no navegador; aqui a tela espera (ate 4 min) o Google ficar conectado. */
+  async function waitConnected() {
+    for (let i = 0; i < 80; i++) {
+      await new Promise(r => setTimeout(r, 3000))
+      const s = (await getGoogle()).data
+      if (s?.connected) {
+        setSt(s)
+        setBusy(false)
+        setMsg({ ok: true, text: "Pronto! O Google foi conectado. Agora o Jefrey pode ver a sua agenda e ajudar com o seu e-mail." })
+        return
+      }
+    }
+    setBusy(false)
+    setMsg({ ok: false, text: "Não vi a conexão terminar. Se o Google mostrou algum erro no navegador, me conte; senão, aperte o botão de novo." })
   }
 
   async function leave() {
@@ -242,39 +137,95 @@ function Google() {
       {st?.connected ? (
         <>
           <p className="mt-3 text-base text-white/85">
-            Conectado{st.email ? ` como ${st.email}` : ""}: {st.services.map(s => SERVICE_LABEL[s]).join(" e ")}.
+            Conectado{st.email ? ` como ${st.email}` : ""}: {st.services.map(s => SERVICE_LABEL[s]).join(", ")}.
           </p>
+          {st.health === "chave" && (
+            <div role="alert" className="mt-3 rounded-xl border border-amber-300/40 bg-amber-400/10 p-3">
+              <p className="text-base text-amber-100">O Google parou de aceitar a chave secreta que o Jefrey guardou (ela pode ter sido apagada ou trocada no Google Cloud). Por isso a agenda não atualiza.</p>
+              <p className="mt-1 text-base text-white/80">Cole a chave atual abaixo. Você <b>não</b> precisa entrar de novo.</p>
+              <GoogleSetup onDone={() => void load()} />
+            </div>
+          )}
+          {st.health === "entrar" && (
+            <div role="alert" className="mt-3 rounded-xl border border-amber-300/40 bg-amber-400/10 p-3">
+              <p className="text-base text-amber-100">A permissão do Google venceu. É só entrar de novo.</p>
+              <button type="button" disabled={busy} onClick={() => void go(st.services)} className={`${big} mt-2`}>Entrar de novo</button>
+            </div>
+          )}
+          {ALL_SERVICES.some(k => !st.services.includes(k)) && (
+            <fieldset className="mt-4 rounded-xl border border-white/10 p-3">
+              <legend className="px-1 text-base text-white/80">Liberar mais coisas</legend>
+              <div className="mt-1 space-y-2">
+                {ALL_SERVICES.filter(k => !st.services.includes(k)).map(k => (
+                  <label key={k} className="flex items-start gap-3 text-base text-white/85">
+                    <input type="checkbox" className="mt-1 h-5 w-5" checked={pick[k]} onChange={e => setPick(p => ({ ...p, [k]: e.target.checked }))} />
+                    <span>{SERVICE_LABEL[k]}<span className="block text-sm text-white/50">{SERVICE_HINT[k]}</span></span>
+                  </label>
+                ))}
+              </div>
+              <button
+                type="button"
+                disabled={busy || !ALL_SERVICES.some(k => !st.services.includes(k) && pick[k])}
+                onClick={() => {
+                  const more = ALL_SERVICES.filter(k => !st.services.includes(k) && pick[k])
+                  void go([...st.services, ...more])
+                }}
+                className={`${big} mt-3`}
+              >
+                {busy ? "Abrindo o Google…" : "Liberar o que marquei"}
+              </button>
+              <p className="mt-2 text-sm text-white/50">O Google vai pedir sua confirmação de novo. O que já estava liberado continua.</p>
+            </fieldset>
+          )}
           <button type="button" onClick={() => void leave()} disabled={busy} className="jf-focus mt-3 rounded-lg border border-white/25 px-5 py-3 text-base text-white/85 hover:bg-white/5">
             Desconectar
           </button>
         </>
       ) : (
         <>
-          <fieldset className="mt-3">
-            <legend className="text-base text-white/80">O que o Jefrey pode usar?</legend>
+          <p className="mt-3 text-base text-white/80">Um clique só: o Jefrey pede ao Google, de uma vez, para ver sua agenda, seu e-mail, suas tarefas, seus contatos e seus arquivos.</p>
+          <details className="mt-2 rounded-xl border border-white/10 p-3">
+            <summary className="cursor-pointer text-base text-white/80">Quero escolher só algumas coisas</summary>
             <div className="mt-2 flex flex-wrap gap-4">
-              {(["calendar", "email"] as GoogleService[]).map(k => (
-                <label key={k} className="flex items-center gap-3 text-base text-white/85">
+              {ALL_SERVICES.map(k => (
+                <label key={k} className="flex items-center gap-3 text-base text-white/85" title={SERVICE_HINT[k]}>
                   <input type="checkbox" className="h-5 w-5" checked={pick[k]} onChange={e => setPick(p => ({ ...p, [k]: e.target.checked }))} />
                   {SERVICE_LABEL[k]}
                 </label>
               ))}
             </div>
-          </fieldset>
+          </details>
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <button type="button" onClick={() => void go()} disabled={busy} className={big}>
-              {busy ? "Abrindo o Google…" : "Entrar com o Google"}
+              {busy ? "Abrindo o Google…" : "Conectar com o Google"}
             </button>
             <ListenButton text={listen} />
           </div>
+          {st?.diagnosis && !st.diagnosis.ok && st.configured && (
+            <p role="alert" className="mt-3 break-words text-base text-amber-200">{st.diagnosis.advice}</p>
+          )}
+          {st?.configured && st.redirect_uri && (
+            <p className="mt-3 break-all text-sm text-white/50">Se o Google disser “redirect_uri_mismatch”, cadastre este endereço no Google Cloud: <code className="text-white/80">{st.redirect_uri}</code></p>
+          )}
+          <Note msg={msg} />
           {st && !st.configured && (
-            <p className="mt-3 text-sm text-amber-200/90">
-              Esta cópia do Jefrey ainda não foi liberada para o Google. Quando for, o botão acima funciona sozinho.
-            </p>
+            <div className="mt-4 rounded-xl border border-amber-300/30 p-4">
+              <p className="text-base text-amber-100">Este Jefrey ainda não veio com o acesso do Google pronto. Peça a versão completa a quem te entregou o programa.</p>
+              <details className="mt-2">
+                <summary className="cursor-pointer text-sm text-white/60">Avançado: configurar o acesso do Google (quem instala o Jefrey)</summary>
+                <GoogleSetup onDone={() => void load()} />
+              </details>
+            </div>
+          )}
+          {st?.configured && (
+            <details key={msg && !msg.ok ? "aberto" : "fechado"} open={!!msg && !msg.ok} className="mt-3 rounded-xl border border-white/10 p-3">
+              <summary className="cursor-pointer text-sm text-white/55">Avançado: trocar o acesso do Google (quem instala o Jefrey)</summary>
+              <GoogleSetup onDone={() => void load()} />
+            </details>
           )}
         </>
       )}
-      <Note msg={msg} />
+      {st?.connected && <Note msg={msg} />}
     </section>
   )
 }
@@ -287,10 +238,13 @@ function WhatsApp() {
   const [now, setNow] = useState(() => Date.now())
   const [msg, setMsg] = useState<Msg>(null)
   const [confirmWipe, setConfirmWipe] = useState(false)
+  const [inbox, setInbox] = useState<WaInboxItem[]>([])
 
   async function load() {
     const r = await waStatus()
     if (r.data) setSt(r.data)
+    const i = await waInbox()
+    if (i.data) setInbox(i.data.items.filter(x => x.unread > 0))
   }
   useEffect(() => {
     void load()
@@ -316,7 +270,7 @@ function WhatsApp() {
   }
   async function openFolder() {
     const r = await waOpenFolder()
-    setMsg(r.ok ? { ok: true, text: "Abri a pasta da extensão. Siga os passos abaixo." } : { ok: false, text: "Não consegui abrir a pasta. Peça ajuda a quem instalou o Jefrey." })
+    setMsg(r.ok ? { ok: true, text: `Abri a pasta da extensão${r.data?.path ? ` (${r.data.path})` : ""}. Se não abrir, procure por ela em Documentos > Jefrey. Siga os passos abaixo.` } : { ok: false, text: "Não consegui abrir a pasta. Peça ajuda a quem instalou o Jefrey." })
   }
   async function mode(c: WaChat, m: WaMode) {
     const r = await waSetMode(c.id, m)
@@ -350,6 +304,23 @@ function WhatsApp() {
       <p className="mt-2 text-sm text-amber-100/90">{WA_RISK_NOTE}</p>
       <p className="mt-2 text-sm text-white/60">{WA_PRIVACY_NOTE}</p>
 
+      {isDesktop() && (
+        <div className="mt-4 rounded-xl border border-cyan-300/30 bg-cyan-400/5 p-4">
+          <h3 className="text-lg font-medium text-white">WhatsApp aqui dentro do Jefrey</h3>
+          <p className="mt-1 text-base text-white/75">
+            Sem Chrome e sem extensão: o Jefrey abre o WhatsApp numa janela dele. Você lê o QR code uma vez e ele fica conectado.
+            Pode fechar a janela: o Jefrey continua atento por trás.
+          </p>
+          <button
+            type="button"
+            className={`${big} mt-3`}
+            onClick={async () => setMsg((await openMessages()) ? { ok: true, text: "Abri a janela de Mensagens. Se pedir, leia o QR code com o celular." } : { ok: false, text: "Não consegui abrir agora. Tente de novo." })}
+          >
+            Abrir o WhatsApp no Jefrey
+          </button>
+        </div>
+      )}
+
       {!paired && (
         <div className="mt-4 rounded-xl border border-white/10 p-4">
           <ol className="list-decimal space-y-2 pl-6 text-base text-white/85">
@@ -378,6 +349,23 @@ function WhatsApp() {
             </button>
           </div>
 
+          <h3 className="mt-5 text-lg font-medium text-white">Mensagens novas</h3>
+          {inbox.length === 0 ? (
+            <p className="mt-1 text-base text-white/70">Nenhuma mensagem nova agora.</p>
+          ) : (
+            <ul className="mt-2 space-y-2" aria-live="polite">
+              {inbox.slice(0, 6).map(i => (
+                <li key={i.title} className="rounded-lg border border-white/10 p-3 text-base text-white/90">
+                  <b>{i.title}</b> <span className="text-sm text-white/55">({i.unread})</span>
+                  {i.preview && <span className="block text-white/70">{i.preview}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-3 text-sm text-white/60">
+            Dica: escreva para você mesmo no WhatsApp (a conversa com o seu nome) e o Jefrey responde ali. Pergunte, por exemplo, "que horas são?" ou "o que tenho na agenda hoje?".
+          </p>
+
           <h3 className="mt-5 text-lg font-medium text-white">Conversas</h3>
           {st.chats.length === 0 && <p className="mt-1 text-base text-white/70">Ainda não vi nenhuma conversa. Abra o WhatsApp Web no Chrome e clique em uma conversa.</p>}
           <ul className="mt-2 space-y-3">
@@ -397,6 +385,7 @@ function WhatsApp() {
                     </button>
                   ))}
                 </div>
+                {c.mode !== "off" && <WaCompose chat={c} onQueued={() => void load()} />}
               </li>
             ))}
           </ul>
@@ -440,16 +429,56 @@ function WhatsApp() {
   )
 }
 
+const TABS = [
+  { id: "cerebros", label: "Cérebros" },
+  { id: "google", label: "Google" },
+  { id: "whatsapp", label: "WhatsApp" },
+  { id: "redes", label: "Redes" },
+  { id: "alexa", label: "Alexa" },
+] as const
+type TabId = (typeof TABS)[number]["id"]
+
+function pickTab(params: URLSearchParams): TabId {
+  const a = params.get("aba") ?? (params.get("google") ? "google" : "")
+  return (TABS.find(t => t.id === a)?.id ?? "cerebros") as TabId
+}
+
 export default function Conexoes() {
+  const [params, setParams] = useSearchParams()
+  const [tab, setTab] = useState<TabId>(() => pickTab(params))
+  function choose(id: TabId) {
+    setTab(id)
+    if (params.get("aba")) setParams({ aba: id }, { replace: true })
+  }
   return (
-    <div className="mx-auto h-full max-w-2xl space-y-4 overflow-y-auto pb-8">
+    <div className="mx-auto h-full max-w-2xl overflow-y-auto pb-8">
       <header>
         <h1 className="text-3xl font-semibold text-white">Conexões</h1>
         <p className="mt-1 text-base text-white/65">Ligue o Jefrey às suas contas. É só apertar o botão, entrar na sua conta e voltar.</p>
       </header>
-      <Assistente />
-      <Google />
-      <WhatsApp />
+      <div role="tablist" aria-label="Conexões" className="mt-4 flex flex-wrap gap-2 border-b border-white/10 pb-3">
+        {TABS.map(t => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            id={`tab-${t.id}`}
+            aria-selected={tab === t.id}
+            aria-controls={`painel-${t.id}`}
+            onClick={() => choose(t.id)}
+            className={`jf-focus rounded-lg border px-5 py-2.5 text-base ${tab === t.id ? "border-cyan-300 bg-cyan-400/10 text-white" : "border-white/20 text-white/75 hover:bg-white/5"}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div role="tabpanel" id={`painel-${tab}`} aria-labelledby={`tab-${tab}`} className="mt-4">
+        {tab === "cerebros" && <Cerebros />}
+        {tab === "google" && <Google />}
+        {tab === "whatsapp" && <WhatsApp />}
+        {tab === "redes" && <Redes />}
+        {tab === "alexa" && <AlexaTab />}
+      </div>
     </div>
   )
 }

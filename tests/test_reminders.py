@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 
+from src.jefrey.adapters.outbound import sql_reminders as SR
 from src.jefrey.core import reminders as R
 from src.jefrey.core.agent_loop import route_intent, select_tools
 
@@ -133,6 +134,8 @@ def store(tmp_path, monkeypatch):
     eng = create_engine(f"sqlite:///{tmp_path}/r.db")
     import src.jefrey.core.db as db
     monkeypatch.setattr(db, "get_engine", lambda: eng)
+    orig = R.describe_due
+    monkeypatch.setattr(SR, "describe_due", lambda due, now=None: orig(due, now or NOW))  # "hoje" = NOW do teste, nao o relogio real
     return R.ReminderStore()
 
 
@@ -183,7 +186,7 @@ def test_validacoes(store):
 
 
 def test_limite_de_pendentes(store, monkeypatch):
-    monkeypatch.setattr(R, "MAX_PENDING", 3)
+    monkeypatch.setattr(SR, "MAX_PENDING", 3)
     for i in range(3):
         store.add("ana", f"t{i}", NOW)
     with pytest.raises(ValueError, match="limite"):
@@ -232,3 +235,13 @@ def test_rotas_fluxo_completo_e_isolamento(client):
     assert c.post(f"/reminders/{r['id']}/ack", headers=ha).status_code == 200
     assert c.get("/reminders/due", headers=ha).json()["count"] == 0
     assert c.post(f"/reminders/{r['id']}/ack", headers=ha).status_code == 404
+
+
+def test_mesmo_lembrete_pedido_duas_vezes_nao_duplica(store):
+    due = at(2026, 10, 5, 10)
+    a = store.add("pedro", "ligar pro dentista", due)
+    b = store.add("pedro", "Ligar pro dentista", due)
+    assert a["id"] == b["id"] and len(store.pending("pedro")) == 1
+    store.add("pedro", "ligar pro dentista", at(2026, 10, 5, 11))  # outro horario: lembrete diferente
+    store.add("outra", "ligar pro dentista", due)  # outra pessoa: nao mistura
+    assert len(store.pending("pedro")) == 2 and len(store.pending("outra")) == 1

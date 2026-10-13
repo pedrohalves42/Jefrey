@@ -219,3 +219,53 @@ def test_api_ciclo_completo(client):
     assert c.delete(f"/learning/{fid}", headers=h).status_code == 404
     assert c.delete("/learning", headers=h).json()["removed"] == 1
     assert c.get("/learning", headers=h).json() == {"enabled": False, "facts": []}
+
+
+# ---------------- a pessoa ensina e o Jefrey sugere assuntos ----------------
+def test_pessoa_ensina_algo_novo_e_pode_corrigir(db):
+    s = L.FactStore()
+    assert s.teach("ana", "Meu time é o Flamengo", "gosto") == "new"
+    assert s.teach("ana", "Meu time é o Flamengo", "gosto") == "same"
+    fatos = s.active("ana")
+    assert len(fatos) == 1 and fatos[0]["kind"] == "gosto" and "Flamengo" in fatos[0]["text"]
+    assert s.correct("ana", fatos[0]["id"], "Meu time é o Fluminense")["text"].startswith("Meu time é o Fluminense")
+
+
+def test_ensinar_nao_guarda_senha_nem_cartao_nem_texto_curto(db):
+    s = L.FactStore()
+    for ruim in ("minha senha é abc12345 do banco", "cartão 4111 1111 1111 1111", "oi"):
+        with pytest.raises(ValueError):
+            s.teach("ana", ruim, "outro")
+    assert s.active("ana") == []
+    assert s.teach("ana", "Tenho diabetes", "inexistente") == "new"  # tipo desconhecido vira "outro"
+    assert s.active("ana")[0]["kind"] == "outro"
+
+
+def test_rota_de_ensinar_exige_login_e_valida(db):
+    from src.jefrey.api import learning_routes as R
+    from fastapi import HTTPException
+
+    class Req:
+        def __init__(self, uid):
+            class S:
+                pass
+            self.state = S()
+            self.state.user_id = uid
+
+    assert run(R.teach(R.TeachBody(text="Gosto de pescar", kind="gosto"), Req("ana"))) == {"status": "new"}
+    with pytest.raises(HTTPException) as e:
+        run(R.teach(R.TeachBody(text="senha é abc12345 ok", kind="outro"), Req("ana")))
+    assert e.value.status_code == 422
+    with pytest.raises(HTTPException) as e2:
+        run(R.teach(R.TeachBody(text="Gosto de pescar", kind="gosto"), Req(None)))
+    assert e2.value.status_code == 401
+
+
+def test_assuntos_sugeridos_pelo_que_foi_aprendido():
+    from src.jefrey.domain.interests import suggest
+
+    textos = ["Torce pelo Flamengo e vai ao campeonato", "Gosta de pescar e de plantas no jardim", "Trabalha com programação e computador", "Adora futebol"]
+    s = suggest(textos)
+    assert {"esportes", "natureza", "tecnologia"} <= set(s)
+    assert "esportes" not in suggest(textos, exclude=["esportes"])
+    assert suggest(["Mora em Curitiba"]) == []

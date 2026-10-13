@@ -135,7 +135,7 @@ def mock_exchange(monkeypatch, handler):
     class Fake(real):
         def __init__(self, *a, **kw):
             super().__init__(*a, transport=httpx.MockTransport(handler), **kw)
-    monkeypatch.setattr(api.httpx, "AsyncClient", Fake)
+    monkeypatch.setattr(__import__("httpx"), "AsyncClient", Fake)
 
 
 def test_callback_troca_o_codigo_e_salva_a_chave_do_usuario(c, monkeypatch):

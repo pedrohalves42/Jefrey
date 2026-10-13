@@ -24,6 +24,22 @@ class TextBody(BaseModel):
     text: str = Field(min_length=3, max_length=200)
 
 
+class TeachBody(BaseModel):
+    text: str = Field(min_length=3, max_length=200)
+    kind: str = Field(default="outro", max_length=20)
+
+
+@router.post("")
+async def teach(body: TeachBody, request: Request):
+    """A pessoa ensina algo novo ao Jefrey (editar e apagar ja existem)."""
+    uid = _user(request)
+    try:
+        status = FactStore().teach(uid, body.text, body.kind)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return {"status": status}
+
+
 @router.get("")
 async def list_facts(request: Request):
     uid = _user(request)

@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 import logging
 
-import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel
 
@@ -65,10 +64,5 @@ async def privacy_erase(body: EraseBody, request: Request):
         raise HTTPException(status_code=422, detail="Digite APAGAR para confirmar.")
     res = P.erase_all(uid)
     tokens = res.pop("_google_tokens", []) or []
-    async with httpx.AsyncClient(timeout=10) as c:  # o Google e avisado para revogar (melhor esforco)
-        for t in tokens:
-            try:
-                await c.post(G.REVOKE_URL, data={"token": t})
-            except httpx.HTTPError as _e:
-                logger.debug("revogacao do Google nao concluida (%s)", type(_e).__name__)
+    await G.revoke_tokens(tokens)  # o Google e avisado para revogar (melhor esforco)
     return {"ok": True, "apagado": res}
