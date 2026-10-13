@@ -60,6 +60,11 @@ class ReminderStore:
                 self.t.c.user_id == user_id, self.t.c.status == "pending")).scalar() or 0
             if n >= MAX_PENDING:
                 raise ValueError(f"limite de {MAX_PENDING} lembretes pendentes")
+            same = c.execute(self.t.select().where(
+                self.t.c.user_id == user_id, self.t.c.status == "pending", func.lower(self.t.c.text) == text.lower(),
+                self.t.c.due_at == _utc_naive(due), self.t.c.repeat == repeat)).first()
+            if same is not None:  # pedir de novo o mesmo lembrete (mesmo texto e horario) nao cria outro
+                return _from_row(same)
             rid = str(uuid.uuid4())
             c.execute(self.t.insert().values(id=rid, user_id=user_id, text=text, due_at=_utc_naive(due),
                                              repeat=repeat, status="pending", created_at=_utc_naive(datetime.now(timezone.utc))))

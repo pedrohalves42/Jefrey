@@ -197,8 +197,9 @@ export default function HologramAvatar({ state, level, appearance }: { state: Br
       onPointerMove={tilt}
       onPointerLeave={() => wrapRef.current && (wrapRef.current.style.transform = "")}
     >
-      <div ref={wrapRef} className="h-full max-h-full transition-transform duration-200 ease-out" style={{ aspectRatio: "1 / 1" }}>
-        <canvas ref={canvasRef} width={S} height={S} className="h-full w-full" aria-hidden="true" />
+      <div ref={wrapRef} className="h-full max-h-full w-full max-w-full transition-transform duration-200 ease-out">
+        {/* object-contain: o desenho e quadrado e cabe na caixa sem passar da largura da tela (antes passava em celular) */}
+        <canvas ref={canvasRef} width={S} height={S} className="h-full w-full object-contain" aria-hidden="true" />
       </div>
     </div>
   )

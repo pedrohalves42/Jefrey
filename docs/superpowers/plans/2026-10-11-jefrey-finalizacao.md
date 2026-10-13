@@ -228,6 +228,8 @@ Antes de cada item: `grep -rn` do módulo nos testes e no app. Um commit por ite
 
 ### Task 14: Interface premium e layout
 
+> **Status:** bug reproduzido e corrigido: na forma Holograma, em tela estreita (celular), o desenho quadrado passava da largura da tela (528 px em 375 px). Corrigido com `max-w-full` + `object-contain`. Também: pilha de lembretes cobria a tela (agora no máximo 2 + "Ok em todos") e pedir o mesmo lembrete duas vezes não duplica mais. Falta a sua conferência visual.
+
 **Files:**
 - Modify: `ui/src/pages/Conversa.tsx`, `ui/src/index.css`, `ui/src/components/AppShell.tsx`
 - Test: `ui/src/pages/__tests__/layout.test.tsx`
