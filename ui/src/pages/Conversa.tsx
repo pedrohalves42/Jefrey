@@ -11,6 +11,7 @@ import { useWakeSignal } from "@/hooks/useWakeSignal"
 import { addressed } from "@/lib/voiceGate"
 import { FEEDBACK_LABEL, sendFeedback, type FeedbackValue } from "@/lib/feedback"
 import ClipboardCard from "@/components/ClipboardCard"
+import { liveStatus } from "@/lib/liveStatus"
 import { voiceView } from "@/lib/voiceMode"
 import { useEasy } from "@/lib/easy"
 import { useActivity } from "@/hooks/useActivity"
@@ -52,6 +53,9 @@ const SUGGESTIONS = [
 
 /** Ferramentas que respondem na hora: nao precisam do "um instante". */
 const FAST_TOOLS = new Set(["current_time", "calculator", "list_reminders"])
+
+/** Segundos de espera, sem ferramenta e sem texto, ate o Jefrey avisar por voz que ainda esta pensando. */
+const SLOW_FILLER_S = 6
 
 export default function Conversa() {
   const init = useMemo(initThreads, [])
@@ -169,6 +173,31 @@ export default function Conversa() {
     : streaming
       ? gotToken ? "responding" : "thinking"
       : listeningNow ? "listening" : note ? "thinking" : "idle"
+
+  // o que o Jefrey esta fazendo agora, em palavras (embaixo do avatar): ferramenta em andamento, escrevendo ou espera longa
+  const [elapsedS, setElapsedS] = useState(0)
+  useEffect(() => {
+    if (!streaming) {
+      setElapsedS(0)
+      return
+    }
+    const t0 = Date.now()
+    const id = setInterval(() => setElapsedS((Date.now() - t0) / 1000), 1000)
+    return () => clearInterval(id)
+  }, [streaming])
+  // espera longa sem nenhuma ferramenta: uma unica frase falada (so se a resposta e por voz), para a pessoa nao achar que travou
+  const fillerSpokenRef = useRef(false)
+  const longWait = elapsedS >= SLOW_FILLER_S
+  useEffect(() => {
+    if (!streaming) fillerSpokenRef.current = false
+    else if (longWait && !gotToken && !fillerSpokenRef.current && voiceReplyRef.current) {
+      fillerSpokenRef.current = true
+      speaker.say("Ainda estou pensando, só mais um instante.")
+    }
+  }, [streaming, longWait, gotToken, speaker])
+  const lastAiMsg = [...active.messages].reverse().find(m => m.role === "assistant")
+  const runningTool = [...(lastAiMsg?.tools ?? [])].reverse().find(x => x.state === "running")
+  const liveNote = liveStatus({ streaming, gotToken, approval: pendingApproval !== undefined, tool: runningTool ? { tool: runningTool.tool, label: runningTool.label } : null, elapsedS })
 
   // o orbe (outra janela do app) copia o estado do cerebro; so quando muda, e com o nivel arredondado
   const orbLevel = Math.round((speaker.speaking ? Math.max(micLevel, voiceLvl, 0.25) : micLevel) * 10) / 10
@@ -476,7 +505,7 @@ export default function Conversa() {
         <div className="relative min-h-0 basis-[80%] grow-0 shrink" onPointerMove={onTilt} onPointerLeave={offTilt}>
         <div ref={stageRef} className="jf-stage-core absolute inset-0 will-change-transform">
           <div ref={tiltRef} className="jf-tilt h-full w-full cursor-pointer" role="button" tabIndex={0} aria-label="Toque no avatar para falar com o Jefrey" onClick={() => void toggleVoiceMode()} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); void toggleVoiceMode() } }}>
-          <BrainStage state={brainState} level={speaker.speaking ? Math.max(micLevel, voiceLvl, 0.25) : micLevel} note={streaming || listeningNow ? null : note} className="jf-alive h-full w-full" />
+          <BrainStage state={brainState} level={speaker.speaking ? Math.max(micLevel, voiceLvl, 0.25) : micLevel} note={streaming ? liveNote : listeningNow ? null : note} className="jf-alive h-full w-full" />
         </div>
         </div>
 
