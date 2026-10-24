@@ -8,7 +8,7 @@ import { getProfile } from "@/lib/llm"
 import { useListener } from "@/hooks/useListener"
 import { useVoiceReady } from "@/hooks/useVoiceReady"
 import { useWakeSignal } from "@/hooks/useWakeSignal"
-import { addressed } from "@/lib/voiceGate"
+import { addressed, worthTranscribing } from "@/lib/voiceGate"
 import { FEEDBACK_LABEL, sendFeedback, type FeedbackValue } from "@/lib/feedback"
 import ClipboardCard from "@/components/ClipboardCard"
 import { liveStatus } from "@/lib/liveStatus"
@@ -92,6 +92,7 @@ export default function Conversa() {
   const engagedRef = useRef(0)
   const [votes, setVotes] = useState<Record<string, FeedbackValue>>({}) // 👍/👎 ja dados nesta sessao, por resposta
   const listener = useListener({
+    gate: seg => worthTranscribing(seg, Date.now(), engagedRef.current),
     onTranscript: t => {
       const g = addressed(t, Date.now(), engagedRef.current)
       if (!g.ok) {

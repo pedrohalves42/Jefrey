@@ -22,3 +22,17 @@ export function addressed(text: string, now: number, engagedAt: number): { ok: b
   if (engagedAt > 0 && now - engagedAt <= WINDOW_MS) return { ok: true, text: original }
   return { ok: false, text: "" }
 }
+
+/** Antes de gastar o Whisper: so transcreve o trecho que PODE ser para o Jefrey. Fora de uma conversa aberta, descarta o que e fraco
+ *  (longe do microfone, como uma TV) ou longo demais (um programa falando). Nada do que foi descartado e enviado nem guardado. */
+export const NEAR_FIELD_PEAK = 0.04
+export const MAX_UNADDRESSED_MS = 12_000
+export const MIN_SEGMENT_MS = 250
+
+export type Segment = { peak: number; durationMs: number }
+
+export function worthTranscribing(seg: Segment, now: number, engagedAt: number): boolean {
+  if (seg.durationMs < MIN_SEGMENT_MS) return false
+  if (engagedAt > 0 && now - engagedAt <= WINDOW_MS) return true
+  return seg.peak >= NEAR_FIELD_PEAK && seg.durationMs <= MAX_UNADDRESSED_MS
+}
