@@ -21,9 +21,11 @@ class Req:
 def limpo(monkeypatch):
     VR._download.update(state="idle", pct=0, error="")
     monkeypatch.setattr(VR.EV, "available", lambda *a, **k: False)  # nunca chama a internet de verdade nos testes
+    monkeypatch.setattr(VR.GVO, "available", lambda *a, **k: False)
 
 
-def _engines(monkeypatch, cloud=False, local=False, edge=False):
+def _engines(monkeypatch, cloud=False, local=False, edge=False, gemini=False):
+    monkeypatch.setattr(VR.GVO, "available", lambda *a, **k: gemini)
     monkeypatch.setattr(CV, "available", lambda: cloud)
     monkeypatch.setattr(LV, "available", lambda: local)
     monkeypatch.setattr(VR.EV, "available", lambda *a, **k: edge)
@@ -38,7 +40,7 @@ def test_padrao_prefere_gratuita_depois_local_depois_conta_depois_navegador(monk
     assert run(VR.engines(Req()))["default"] == "cloud"
     _engines(monkeypatch)
     out = run(VR.engines(Req()))
-    assert out["default"] == "browser" and {e["id"] for e in out["engines"]} == {"edge", "edge-francisca", "edge-antonio", "cloud", "local", "browser"}
+    assert out["default"] == "browser" and {e["id"] for e in out["engines"]} == {"gemini", "edge", "edge-francisca", "edge-antonio", "cloud", "local", "browser"}
     assert [e for e in out["engines"] if e["id"] == "browser"][0]["available"] is True
 
 
@@ -152,3 +154,19 @@ def test_motor_local_e_aquecido_ao_listar_para_a_primeira_fala_nao_demorar(monke
         await asyncio.sleep(0.2)
     run(fluxo())
     assert carregou == [1]
+
+
+def test_gemini_e_o_padrao_quando_conectado_e_cai_para_a_microsoft_se_falhar(monkeypatch):
+    _engines(monkeypatch, edge=True, gemini=True)
+    assert run(VR.engines(Req()))["default"] == "gemini"
+
+    async def gemini_fora(text, **k):
+        raise VR.GVO.GeminiVoiceError("limite")
+
+    async def edge_ok(text, engine="edge", **k):
+        return b"mp3"
+
+    monkeypatch.setattr(VR.GVO, "synth", gemini_fora)
+    monkeypatch.setattr(VR.EV, "synth", edge_ok)
+    r = run(VR.speak(Req(), VR.SpeakBody(text="oi")))
+    assert r.headers["x-voice-engine"] == "edge-antonio"
