@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import BrainStats from "@/components/BrainStats"
 import { Link } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query"
 import ListenButton from "@/components/ListenButton"
@@ -175,6 +176,7 @@ export default function Cerebros() {
         <ListenButton text={intro} />
         <button type="button" onClick={() => void testAll()} disabled={testing} className={soft}>{testing ? "Testando…" : "Testar todos os cérebros"}</button>
       </div>
+      <BrainStats />
       {checks && (
         <ul className="mt-3 space-y-1.5 rounded-xl border border-white/10 p-3" aria-label="Resultado do teste">
           {checks.map(c => (
