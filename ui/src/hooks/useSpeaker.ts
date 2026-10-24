@@ -126,9 +126,11 @@ export function useSpeaker() {
       const explicit = !!voiceUri.current && voiceUri.current !== "browser" && !!enginesRef.current?.engines.some(x => x.id === voiceUri.current)
       const r = await authedFetch("/voice/speak", { method: "POST", body: JSON.stringify({ text: piece, engine: explicit ? engine : undefined }) })
       if (!r.ok) {
+        if (r.status === 409) window.dispatchEvent(new Event("jefrey:voice-cloud-failed")) // a tela pode oferecer a voz que roda neste computador
         if (r.status === 409 && enginesRef.current) enginesRef.current = { ...enginesRef.current, default: "browser" } // sem conta/voz: o computador fala nas proximas
         return null
       }
+      window.dispatchEvent(new Event("jefrey:voice-cloud-failed-ok"))
       return await r.blob()
     } catch {
       return null

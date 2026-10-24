@@ -7,6 +7,7 @@ import { getLegalStatus } from "@/lib/legal"
 import { StatusPill } from "@/components/StatusPill"
 import VersionLabel from "@/components/VersionLabel"
 import { ReminderBanner } from "@/components/ReminderBanner"
+import VoiceFallbackOffer from "@/components/VoiceFallbackOffer"
 import WaApprovals from "@/components/WaApprovals"
 import WindowControls from "@/components/WindowControls"
 import WaLinkBanner from "@/components/WaLinkBanner"
@@ -62,6 +63,7 @@ export function AppShell() {
     <div className="flex h-dvh flex-col md:flex-row">
       <WindowControls />
       <ReminderBanner />
+      <VoiceFallbackOffer />
       <WaApprovals />
       <WaLinkBanner />
       <UpdateBanner />
