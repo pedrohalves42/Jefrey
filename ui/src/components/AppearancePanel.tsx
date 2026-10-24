@@ -7,6 +7,7 @@ const SHAPES: { id: BrainShape; label: string; hint: string }[] = [
   { id: "brain", label: "Cérebro", hint: "dois hemisférios com neurônios e sinapses" },
   { id: "orb", label: "Orbe", hint: "esfera de neurônios" },
   { id: "reactor", label: "Reator", hint: "anéis concêntricos estilo Homem de Ferro" },
+  { id: "head", label: "Humano", hint: "cabeça humana real em holograma 3D, que respira e mexe a boca quando fala" },
   { id: "hologram", label: "Holograma", hint: "qualquer imagem sua, em estilo holograma animado" },
 ]
 
@@ -119,7 +120,7 @@ export function AppearancePanel() {
 
           <fieldset>
             <legend className="mb-1 text-sm text-white/80">Forma</legend>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
               {SHAPES.map(s => (
                 <label
                   key={s.id}

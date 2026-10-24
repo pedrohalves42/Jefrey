@@ -6,7 +6,8 @@ import { clearAvatarImage, PRESETS, processImageFile, saveAvatarImage } from "@/
 export default function AvatarPicker() {
   const { appearance, set } = useAppearance()
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
-  const brain = appearance.shape !== "hologram"
+  const brain = appearance.shape !== "hologram" && appearance.shape !== "head"
+  const head = appearance.shape === "head"
   const btn = (on: boolean) => `jf-focus rounded-lg border px-2.5 py-1.5 text-xs ${on ? "border-white/45 bg-white/10 text-white" : "border-white/15 text-white/70 hover:bg-white/5"}`
 
   function usePreset(id: string) {
@@ -22,6 +23,7 @@ export default function AvatarPicker() {
       <legend className="text-xs text-white/60">Avatar</legend>
       <div className="flex flex-wrap gap-1.5">
         <button type="button" className={btn(brain)} aria-pressed={brain} onClick={() => { clearAvatarImage(); set({ shape: "brain" }) }}>Cérebro</button>
+        <button type="button" className={btn(head)} aria-pressed={head} onClick={() => { clearAvatarImage(); set({ shape: "head" }) }}>Humano (holograma 3D)</button>
         {PRESETS.map(p => (
           <button key={p.id} type="button" className={btn(false)} onClick={() => usePreset(p.id)}>{p.label}</button>
         ))}

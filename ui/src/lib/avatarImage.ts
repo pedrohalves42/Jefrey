@@ -1,4 +1,3 @@
-import { ROBOT_SVG, SHIELD_SVG } from "@/lib/avatarArt"
 import { fitSize, MAX_STORED_CHARS, validateImageFile } from "@/lib/holo"
 
 const KEY = "jefrey_avatar_image_v1"
@@ -79,9 +78,4 @@ export async function processImageFile(file: File, maxPx = 640): Promise<string>
 }
 
 
-const toUrl = (svg: string) => "data:image/svg+xml;utf8," + encodeURIComponent(svg)
-
-export const PRESETS: { id: string; label: string; url: string }[] = [
-  { id: "escudo", label: "Escudo", url: toUrl(SHIELD_SVG) },
-  { id: "robo", label: "Robô", url: toUrl(ROBOT_SVG) },
-]
+export const PRESETS: { id: string; label: string; url: string }[] = [] // sem desenhos prontos: o avatar bonito e o holograma humano 3D (forma "Humano")

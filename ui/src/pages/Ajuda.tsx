@@ -141,6 +141,13 @@ export default function Ajuda() {
           </p>
         )}
       </section>
+
+      <section className="jf-panel p-5" aria-label="Créditos">
+        <h2 className="text-xl font-medium text-white">Créditos</h2>
+        <p className="mt-2 text-sm text-white/65">
+          A cabeça do holograma “Humano” vem de “Infinite, 3D Head Scan”, de Lee Perry-Smith (triplegangers.com), usada sob a licença Creative Commons Atribuição 3.0 (CC BY 3.0).
+        </p>
+      </section>
     </div>
   )
 }

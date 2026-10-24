@@ -22,3 +22,10 @@ def test_build_mantem_so_esses_tres():
     bat = (ROOT / "packaging" / "build_exe.bat").read_text(encoding="utf-8")
     assert all(name in bat for name in KEPT)
     assert "discovery_cache" in bat
+
+
+def test_modelo_3d_do_avatar_e_servido_sem_login():
+    """A tela busca o .glb sem cabecalho de login: se /models/ nao for publico, o avatar nao aparece (401)."""
+    src = (ROOT / "src" / "jefrey" / "api" / "auth_middleware.py").read_text(encoding="utf-8")
+    assert '"/models/"' in src
+    assert (ROOT / "ui" / "public" / "models" / "LeePerrySmith.glb").is_file()

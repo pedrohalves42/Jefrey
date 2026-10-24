@@ -4,6 +4,7 @@ import type { BrainState } from "./BrainScene"
 
 const BrainScene = lazy(() => import("./BrainScene"))
 const HologramAvatar = lazy(() => import("./HologramAvatar"))
+const HeadHologram = lazy(() => import("./HeadHologram"))
 
 export type { BrainState }
 
@@ -34,11 +35,16 @@ export function BrainStage({ state, level = 0, className = "", note = null }: { 
   const [slow, setSlow] = useState(false)
 
   const holo = appearance.visual && appearance.shape === "hologram"
-  const show3d = appearance.visual && !noGl && !holo
+  const head = appearance.visual && !noGl && appearance.shape === "head"
+  const show3d = appearance.visual && !noGl && !holo && !head
 
   return (
     <div className={`relative ${className}`} role="img" aria-label={`Jefrey: ${note ?? LABEL[state]}`}>
-      {holo ? (
+      {head ? (
+        <Suspense fallback={<SimpleOrb state={state} />}>
+          <HeadHologram state={state} level={level} appearance={appearance} onUnavailable={() => setNoGl(true)} />
+        </Suspense>
+      ) : holo ? (
         <Suspense fallback={<SimpleOrb state={state} />}>
           <HologramAvatar state={state} level={level} appearance={appearance} />
         </Suspense>
