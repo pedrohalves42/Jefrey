@@ -6,6 +6,7 @@ export type LiveInput = { streaming: boolean; gotToken: boolean; approval: boole
 const DOING: Record<string, string> = {
   search: "Buscando na web…",
   search_news: "Procurando notícias…",
+  news_brief: "Procurando notícias…",
   daily_summary: "Montando o resumo do seu dia…",
   list_events: "Olhando a sua agenda…",
   create_event: "Marcando na sua agenda…",

@@ -21,6 +21,7 @@ from src.jefrey.domain import halt
 from src.jefrey.domain.reminders import local_tz, parse_request
 from src.jefrey.domain.agenda import agenda_day, day_bounds, format_agenda
 from src.jefrey.domain.daily_summary import asks_daily_summary
+from src.jefrey.domain.news_brief import news_topic
 from src.jefrey.domain.whatsapp import asks_whatsapp_chat, asks_whatsapp_inbox
 from src.jefrey.domain.email_ask import QUERY as UNREAD_QUERY, asks_unread_email, format_unread
 from src.jefrey.domain.weather_ask import weather_ask
@@ -185,6 +186,9 @@ def route_intent(message: str) -> Optional[tuple[str, dict]]:
         return "undo_last", {}
     if asks_daily_summary(msg):  # "bom dia, o que eu tenho pra hoje?": agenda + lembretes + clima montados direto (sem rodadas do modelo)
         return "daily_summary", {}
+    topic = news_topic(message)
+    if topic:  # "ultimas noticias sobre X": so a busca, sem rodadas do modelo
+        return "news_brief", {"topic": topic}
     if asks_whatsapp_inbox(message):  # "tenho mensagem no zap?": le a caixa de entrada direto
         return "wa_inbox", {}
     who = asks_whatsapp_chat(message)
