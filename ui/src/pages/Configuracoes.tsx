@@ -4,6 +4,7 @@ import FallbackSettings from "@/components/FallbackSettings"
 import NameField from "@/components/NameField"
 import VoiceDownload from "@/components/VoiceDownload"
 import AppSettings from "@/components/AppSettings"
+import AccessibilityPanel from "@/components/AccessibilityPanel"
 
 export default function Configuracoes() {
   return (
@@ -17,6 +18,7 @@ export default function Configuracoes() {
         <p className="text-sm text-white/55">É assim que o Jefrey vai te chamar.</p>
         <NameField compact />
       </section>
+      <AccessibilityPanel />
       <AppSettings />
       <VoiceDownload />
       <ModelSettings />

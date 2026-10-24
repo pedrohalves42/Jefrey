@@ -19,6 +19,7 @@ import Estudos from "@/pages/Estudos"
 import Aprender from "@/pages/Aprender"
 import Termos from "@/pages/Termos"
 import Privacidade from "@/pages/Privacidade"
+import { applyAccess, getAccess } from "@/lib/access"
 import { applyEasy, getEasy } from "@/lib/easy"
 import { isDesktop } from "@/lib/shell"
 
@@ -29,6 +30,7 @@ const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWin
 export default function App() {
   useEffect(() => {
     applyEasy(getEasy())
+    applyAccess(getAccess())
     isDesktop() // guarda ?app=1 (janela propria do programa) antes de a rota mudar a URL
     void ensureSession()
   }, [])

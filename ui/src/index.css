@@ -374,3 +374,14 @@ main h1, main h2, .jf-serif, .jf-brand { font-family: var(--font-display); lette
 @keyframes jfAlive { 0%,100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-5px) scale(1.012); } }
 :root[data-motion="on"] .jf-alive { animation: jfAlive 7s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .jf-alive { animation: none !important; } }
+
+/* Acessibilidade: tamanho da letra e alto contraste (independentes do Modo Facil) */
+html[data-text="grande"] { font-size: 125%; }
+html[data-text="enorme"] { font-size: 150%; }
+html[data-text="grande"] .jf-orb-caption, html[data-text="enorme"] .jf-orb-caption { font-size: 1.1em; }
+html[data-contrast="alto"] body { background: #000; color: #fff; }
+html[data-contrast="alto"] .jf-panel { background: #000; border: 2px solid #fff; }
+html[data-contrast="alto"] [class*="text-white/"] { color: #fff; }
+html[data-contrast="alto"] .jf-btn { border: 2px solid #fff; color: #fff; }
+html[data-contrast="alto"] a { text-decoration: underline; }
+html[data-contrast="alto"] :focus-visible { outline: 3px solid #ffd400; outline-offset: 2px; }
