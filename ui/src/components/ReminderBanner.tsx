@@ -1,4 +1,8 @@
+import { useEffect, useRef } from "react"
 import { useReminders } from "@/hooks/useReminders"
+import { useSpeaker } from "@/hooks/useSpeaker"
+import { readFlag } from "@/lib/conversaState"
+import { shouldSpeak, spokenText, type NagState } from "@/lib/reminderNag"
 
 /** No maximo 2 avisos por vez: uma pilha de lembretes nao pode cobrir a tela. */
 export const MAX_SHOWN = 2
@@ -6,6 +10,27 @@ export const MAX_SHOWN = 2
 /** Avisos de lembrete no canto da tela. Fica invisivel quando nao ha nada vencido. */
 export function ReminderBanner() {
   const { items, dismiss, canNotify, enableNotifications } = useReminders()
+  const speaker = useSpeaker()
+  const nag = useRef<Map<string, NagState>>(new Map())
+  // fala o lembrete e repete (a cada 5 min, ate 3 vezes) enquanto a pessoa nao disser Ok; so com a voz ligada e fora do horario de silencio
+  useEffect(() => {
+    const tick = () => {
+      if (!readFlag("jefrey_voice_reply")) return
+      const now = Date.now()
+      const hour = new Date().getHours()
+      for (const i of items) {
+        const s = nag.current.get(i.id) ?? { spoken: 0, lastAt: null }
+        if (shouldSpeak(s, now, hour)) {
+          speaker.say(spokenText(i.text, s.spoken))
+          nag.current.set(i.id, { spoken: s.spoken + 1, lastAt: now })
+        }
+      }
+      for (const id of [...nag.current.keys()]) if (!items.some(x => x.id === id)) nag.current.delete(id)
+    }
+    tick()
+    const id = window.setInterval(tick, 30_000)
+    return () => window.clearInterval(id)
+  }, [items, speaker])
   if (!items.length) return null
   const shown = items.slice(0, MAX_SHOWN)
   const extra = items.length - shown.length
