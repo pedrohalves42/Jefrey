@@ -7,9 +7,10 @@ from src.jefrey.domain.news_brief import compose, news_topic
 
 @pytest.mark.parametrize("frase,assunto", [
     ("Quais as ultimas noticias sobre inteligencia artificial?", "inteligencia artificial"),
+    ("Quais as últimas notícias sobre inteligência artificial?", "inteligência artificial"),
     ("quais são as últimas notícias de futebol", "futebol"),
     ("me conta as noticias do dia", "brasil"),
-    ("notícias sobre o dólar", "o dolar"),
+    ("notícias sobre o dólar", "o dólar"),
     ("novidades da apple", "apple"),
 ])
 def test_reconhece_pedido_de_noticias(frase, assunto):

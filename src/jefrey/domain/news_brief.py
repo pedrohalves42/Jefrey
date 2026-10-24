@@ -24,6 +24,14 @@ def _plain(text: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]+", " ", s)).strip()
 
 
+def _with_accents(topic: str, original: str) -> str:
+    """A busca em portugues precisa dos acentos ('inteligência artificial'); sem eles ela devolve paginas em espanhol."""
+    words = {}
+    for w in re.findall(r"[\wÀ-ÿ]+", original or ""):
+        words.setdefault(_plain(w), w.lower())
+    return " ".join(words.get(tok, tok) for tok in topic.split())
+
+
 def news_topic(message: str) -> Optional[str]:
     """Assunto pedido ('inteligencia artificial'), 'brasil' se pediu noticias sem assunto, ou None se nao e pedido de noticias."""
     msg = _plain(message)
@@ -32,7 +40,7 @@ def news_topic(message: str) -> Optional[str]:
         return None
     topic = _TOPIC_NOISE.sub(" ", m.group("topic") or "").strip()
     topic = re.sub(r"\s+", " ", topic)[:MAX_TOPIC]
-    return topic or "brasil"
+    return _with_accents(topic, message) or "brasil"
 
 
 def _clip(text: str) -> str:
