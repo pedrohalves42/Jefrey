@@ -4,6 +4,7 @@ import FallbackSettings from "@/components/FallbackSettings"
 import NameField from "@/components/NameField"
 import VoiceDownload from "@/components/VoiceDownload"
 import AppSettings from "@/components/AppSettings"
+import FamilyCard from "@/components/FamilyCard"
 import AccessibilityPanel from "@/components/AccessibilityPanel"
 
 export default function Configuracoes() {
@@ -20,6 +21,7 @@ export default function Configuracoes() {
       </section>
       <AccessibilityPanel />
       <AppSettings />
+      <FamilyCard />
       <VoiceDownload />
       <ModelSettings />
       <FallbackSettings />

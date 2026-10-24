@@ -17,6 +17,7 @@ import { UpdateBanner } from "../components/UpdateBanner"
 import ReportProblem from "../components/ReportProblem"
 import Hoje from "../pages/Hoje"
 import AccessibilityPanel from "../components/AccessibilityPanel"
+import FamilyCard from "../components/FamilyCard"
 
 let root: Root | null = null
 let box: HTMLDivElement
@@ -67,6 +68,7 @@ describe("acessibilidade (axe, sem violacoes serias ou criticas)", () => {
     ["Algo deu errado", () => <ReportProblem />],
     ["Hoje", () => <Hoje />],
     ["Ver melhor", () => <AccessibilityPanel />],
+    ["Familia", () => <FamilyCard />],
   ]
   for (const [name, el] of screens) {
     it(name, async () => {

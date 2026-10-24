@@ -48,11 +48,24 @@ def build_interest_alerts():
     )
 
 
+def build_family_offer():
+    """Domingo a noite, avisa (so com consentimento) que o resumo da semana esta pronto para enviar. Nunca envia sozinho."""
+    from datetime import datetime
+
+    from src.jefrey.application import notify
+    from src.jefrey.application.family import FamilyOffer, shared_store
+    from src.jefrey.domain.reminders import local_tz
+
+    return FamilyOffer(shared_store(), users=lambda: DbUserDirectory().known_users(),
+                       notify=lambda uid, title, text: notify.notify(uid, title, text), now=lambda: datetime.now(local_tz()))
+
+
 def register_jobs(scheduler) -> None:
     """Tarefas periodicas dos casos de uso novos (as antigas continuam registradas em api/main.py ate migrarem)."""
     alerts = build_event_alerts()
     scheduler.register("avisos-de-compromissos", 120, alerts.tick)
     scheduler.register("alerta-de-assuntos", 1800, build_interest_alerts().tick)
+    scheduler.register("oferta-resumo-familia", 1800, build_family_offer().tick)
 
 
 def warm_up() -> None:

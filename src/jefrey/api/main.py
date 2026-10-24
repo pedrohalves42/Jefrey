@@ -391,6 +391,8 @@ def create_app() -> FastAPI:
     app.include_router(plugins_router)
     from src.jefrey.api.phone_routes import router as phone_router
     app.include_router(phone_router)
+    from src.jefrey.api.family_routes import router as family_router
+    app.include_router(family_router)
     from src.jefrey.api.system_routes import router as system_router
     app.include_router(system_router)
     from src.jefrey.api.profile_routes import router as profile_router

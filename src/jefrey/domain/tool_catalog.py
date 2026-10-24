@@ -74,6 +74,7 @@ CATALOG: dict[str, ToolPolicy] = {
     "current_time": _p("low", "Ver data e hora"),
     "daily_summary": _p("low", "Resumo do dia"),
     "news_brief": _p("low", "Ver as notícias"),
+    "family_summary": _p("low", "Resumo da semana para a família"),
     "undo_last": _p("medium", "Desfazer a ultima acao"),
     "calculator": _p("low", "Calcular"),
     "weather": _p("low", "Ver o clima"),
