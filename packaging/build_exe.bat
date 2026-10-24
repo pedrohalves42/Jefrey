@@ -49,6 +49,11 @@ popd
   --hidden-import webview.platforms.edgechromium ^
   packaging\jefrey_entry.py || exit /b 1
 
+REM O cache de descoberta do Google traz 600 APIs (~109 MB). O Jefrey usa so Agenda, Drive e Gmail: o resto sai do instalador.
+for %%f in ("dist\Jefrey\_internal\googleapiclient\discovery_cache\documents\*.json") do (
+  if /i not "%%~nxf"=="calendar.v3.json" if /i not "%%~nxf"=="drive.v3.json" if /i not "%%~nxf"=="gmail.v1.json" del /q "%%f"
+)
+
 REM A extensao do Chrome (WhatsApp) vai numa pasta visivel, para a pessoa "Carregar sem compactacao".
 if exist "dist\Jefrey\extensao-chrome" rmdir /s /q "dist\Jefrey\extensao-chrome"
 xcopy /e /i /y /q "extensions\whatsapp" "dist\Jefrey\extensao-chrome" >nul || exit /b 1

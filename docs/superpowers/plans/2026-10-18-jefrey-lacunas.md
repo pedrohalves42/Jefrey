@@ -38,70 +38,96 @@
 
 ## Parte 2: tudo que está aberto nos planos (consolidado em 18/10/2026)
 
-### Tarefa 2: Ações confirmadas ("ações verificadas")
+### Tarefa 2: Ações confirmadas
+
+> **Status (24/10/2026):** FEITA para lembretes (criar e cancelar releem antes de afirmar). Notas ficaram de fora: a ferramenta devolve dados para o agente, não frase. ("ações verificadas")
 **Arquivos:** criar `src/jefrey/domain/verify.py` e `tests/test_verify.py`; alterar `skills/reminders.py`, `skills/notes.py`.
 **Interfaces:** `confirm(kind: str, expected: dict, found: dict | None) -> str` devolve a frase final ("Criado para hoje às 10:00.") ou "Não consegui confirmar que ficou salvo.".
 - [ ] Teste: lembrete criado e relido com o mesmo texto e horário gera a frase com o horário; relido ausente gera o aviso de não confirmado; nunca afirma sucesso sem achar.
 - [ ] Implementar a releitura depois de criar lembrete e nota, e usar `confirm` na resposta da ferramenta.
 - [ ] Validação: pedir um lembrete no app e ver a frase com horário.
 
-### Tarefa 3: Lembretes por voz com repetição até confirmar
+### Tarefa 3: Lembretes por voz
+
+> **Status (24/10/2026):** FEITA: fala na hora, repete a cada 5 min até 3 vezes, silêncio das 22 h às 8 h, só com resposta por voz ligada. com repetição até confirmar
 **Arquivos:** `src/jefrey/application/` (repetição), `ui/src/hooks/useReminders.ts`.
 - [ ] Teste: lembrete vencido não confirmado repete a cada 5 min, no máximo 3 vezes; "ok" para.
 - [ ] Implementar a repetição falada; respeitar o horário de silêncio (22 h às 8 h).
 - [ ] Validação: lembrete de 1 minuto no app instalado.
 
-### Tarefa 4: Isolar o áudio do ambiente antes de transcrever
+### Tarefa 4: Isolar o áudio
+
+> **Status (24/10/2026):** FEITA (portão antes do Whisper: descarta trecho fraco ou longo fora da conversa). Limite honesto: sem motor de palavra de chamada dedicado, voz alta perto do microfone ainda é transcrita e depois filtrada pelo nome. do ambiente antes de transcrever
 **Arquivos:** `ui/src/lib/voiceGate.ts`, `src/jefrey/api/stt.py`, `src/jefrey/core/wake.py`.
 - [ ] Teste: trecho sem o nome do Jefrey fora da janela de conversa é descartado sem chegar à transcrição completa (portão por energia e palavra de chamada).
 - [ ] Teste: com o nome dito, o trecho passa; a janela de 25 s continua valendo.
 - [ ] Validação: com TV ligada ao fundo por 2 min, nada aparece no chat.
 
-### Tarefa 5: Notícias dentro de 15 s de forma estável
+### Tarefa 5: Notícias
+
+> **Status (24/10/2026):** FEITA de outro jeito: a busca já levava 0,5 a 2 s; o tempo era das rodadas do modelo. Pedido de notícias agora responde direto da busca (sem modelo). dentro de 15 s de forma estável
 **Arquivos:** `skills/web_search.py`, `domain/` (cache), testes em `tests/test_news_cache.py`.
 - [ ] Teste: mesma busca em 10 min reaproveita o resultado; busca de várias fontes roda em paralelo com teto de 8 s por fonte.
 - [ ] Validação: cinco perguntas de notícia no app, todas ≤ 15 s.
 
-### Tarefa 6: Ordem dos cérebros provada pelo uso
+### Tarefa 6: Ordem dos cérebros
+
+> **Status (24/10/2026):** FEITA: Configurações > Cérebros mostra usos, falhas e tempo por cérebro. provada pelo uso
 **Arquivos:** `ui/src/components/Cerebros.tsx`, `/brains/metrics`.
 - [ ] Teste: com ≥ 5 chamadas por cérebro, a tela mostra tempo mediano e falhas por função.
 - [ ] Validação: depois de uso real, a ordem mostrada bate com a medida.
 
-### Tarefa 7: Primeira abertura guiada por voz
+### Tarefa 7: Primeira abertura
+
+> **Status (24/10/2026):** JÁ EXISTIA (`primeiraVez.ts`, conduzida por voz, com testes). guiada por voz
 **Arquivos:** `ui/src/pages/BemVindo.tsx`, `ui/src/lib/primeiraVez.ts`.
 - [ ] Teste: o roteiro fala cada passo e avança com "sim"/"próximo" ditos; sem microfone, cai no botão.
 - [ ] Validação: abrir o app com dados limpos e concluir só falando.
 
-### Tarefa 8: Voz local como reserva guiada
+### Tarefa 8: Voz local
+
+> **Status (24/10/2026):** FEITA: depois de 2 falhas da voz da nuvem e sem a local instalada, a tela oferece baixar (nunca baixa sozinha). como reserva guiada
 **Arquivos:** `ui/src/components/VoiceDownload.tsx`, `src/jefrey/api/voice_routes.py`.
 - [ ] Teste: quando a voz da nuvem falha duas vezes seguidas e a local não está instalada, a tela oferece baixar (60 MB) com um botão, sem baixar sozinha.
 - [ ] Validação: simular falha da nuvem e ver a oferta.
 
 ### Tarefa 9: Acessibilidade
+
+> **Status (24/10/2026):** FEITA: letra normal/grande/enorme e alto contraste (axe sem violações). Falta o Narrador do Windows, só com você.
 **Arquivos:** `ui/src/index.css`, `ui/src/lib/appearance.tsx`, `ui/src/__tests__/a11y.test.tsx`.
 - [ ] Teste: opção "letra grande" aumenta legendas e botões; modo alto contraste atinge razão 7:1 nos textos principais; todo botão tem nome para leitor de tela.
 - [ ] Validação: conferir com o leitor de tela do Windows (Narrador) a tela Conversa.
 
-### Tarefa 10: Painel de topo (relógio, clima e atalhos)
+### Tarefa 10: Painel de topo
+
+> **Status (24/10/2026):** JÁ EXISTIA (faixa do dia com tempo, compromisso e dólar, hora e atalhos por momento do dia). (relógio, clima e atalhos)
 **Arquivos:** `ui/src/components/DayStrip.tsx`.
 - [ ] Teste: mostra hora, clima e três atalhos do momento do dia sem passar de 375 px.
 - [ ] Validação: captura em três larguras.
 
-### Tarefa 11: Mais comandos do computador
+### Tarefa 11: Mais comandos
+
+> **Status (24/10/2026):** JÁ EXISTIA (`close_app`, `type_text` em risco alto, `screen_look`). do computador
 **Arquivos:** `skills/computer.py`, `domain/tool_catalog.py`.
 - [ ] Teste: "fechar o programa X" só fecha programa da lista permitida e pede aprovação; "escrever neste programa" é risco alto; captura de tela só quando pedida.
 - [ ] Validação: abrir e fechar o Bloco de Notas por voz.
 
-### Tarefa 12: Modo família (resumo semanal ao cuidador)
+### Tarefa 12: Modo família
+
+> **Status (24/10/2026):** FEITA: consentimento, contato, oferta no domingo à noite, resumo só com contagens, envio sempre com aprovação. (resumo semanal ao cuidador)
 **Arquivos:** `application/` (resumo), `api/` (consentimento).
 - [ ] Teste: sem consentimento registrado nada é enviado; com consentimento sai um resumo por semana sem texto de conversas.
 - [ ] Validação: consentimento e envio de teste para um contato escolhido pelo dono.
 
-### Tarefa 13: Telemetria sem dados pessoais (opcional)
+### Tarefa 13: Telemetria
+
+> **Status (24/10/2026):** ADIADA: não há servidor de destino. Decisão do dono: sem ele, coletar não faz sentido. sem dados pessoais (opcional)
 - [ ] Teste: desligada por padrão; ligada, só conta eventos (tela aberta, erro por categoria), nunca texto, nome ou chave.
 - [ ] Validação: inspecionar o que seria enviado antes de ligar.
 
 ### Tarefa 14: Qualidade e peso
+
+> **Status (24/10/2026):** FEITA: `scripts/e2e_installed.py`, código sem uso = 0 módulos, instalador sem as APIs do Google não usadas (~100 MB), documentos atualizados. Whisper opcional não foi feito (60 MB do ctranslate2 é a voz do dono: manter).
 - [ ] Script único `scripts/e2e_installed.py` que roda `verify_installed`, `audit_whatsapp`, `check_connectivity` e o probe de perguntas, com relatório.
 - [ ] Instalador menor: `faster-whisper`/`ctranslate2` como download opcional (medir antes e depois; meta: menos de 130 MB).
 - [ ] P-07: rodar `scripts/dead_code.py` e remover o que continuar sem uso (visão só se não for carregada).

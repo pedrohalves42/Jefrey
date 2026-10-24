@@ -1,4 +1,4 @@
-# Checklist de lançamento (atualizado em 2026-10-05)
+# Checklist de lançamento (atualizado em 2026-10-24)
 
 Legenda: ✅ pronto e testado · 🟡 pronto no código, falta prova com conta/pessoa real · ⛔ só o dono do produto consegue
 
@@ -23,6 +23,21 @@ Legenda: ✅ pronto e testado · 🟡 pronto no código, falta prova com conta/p
 | Logs sem segredos, tokens em cofre do Windows, sem eval/shell com texto do usuário | ✅ |
 | Dependências: pip-audit só aponta o `chromadb` em modo servidor, que não é usado (ver AUDITORIA §5) | ✅ risco aceito |
 | Instalador assinado | ⛔ precisa de certificado |
+
+## Acrescentado desde 05/10 (estado real em 24/10/2026)
+| Item | Estado |
+|---|---|
+| Resumo do dia por voz, notícias diretas, desfazer, alertas de assuntos, área de transferência (desligada por padrão) | ✅ testado e validado no app instalado (exceto a área de transferência: só pela API) |
+| Aprender pelo uso (👍/👎, medidas por cérebro, ordem pelo desempenho) | ✅ código e medidas; 🟡 efeito da ordem depende de uso real (≥ 5 chamadas por cérebro) |
+| Plugins aprovados pelo hash e registro "o que o Jefrey fez hoje" | ✅ |
+| Celular por QR (rede local, desligado por padrão) | ✅ servidor testado de verdade na rede; 🟡 falta parear um celular real |
+| Modo família (resumo semanal, só com consentimento, envio sempre com aprovação) | ✅ código e testes; 🟡 falta uso real |
+| Acessibilidade: letra grande e alto contraste | ✅ código e axe; 🟡 falta conferir com o Narrador do Windows |
+| Instalador: atualização por cima com o app aberto | ✅ validado |
+| Voz: Antônio (masculina) por padrão; reserva local quando a nuvem falha | 🟡 a voz da Microsoft recusou pedidos (403) em 12/10; a reserva local depende de baixar 60 MB |
+| Voz em tempo real | ⛔ precisa de chave Gemini com acesso ao Live |
+| Publicação nas redes e visão com conta real | ⛔ falta entrar nas contas |
+| Revogar a chave do Google que vazou | ⛔ por último, só o dono |
 
 ## Só o dono consegue (sem isso não é "100%")
 1. Fazer o login do Google funcionar ponta a ponta (cadastrar o endereço, ou criar o cliente "Aplicativo para computador"), e a verificação do app.

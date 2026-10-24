@@ -29,7 +29,7 @@ Critério: uma pessoa de 70 anos instala, configura e usa sozinha, com a voz.
 
 ## C. Qualidade e dívida técnica
 1. ~~P-03~~ resolvido: ver AUDITORIA §5 (só resta o chromadb em modo servidor, não usado).
-2. P-07: remover código não usado (MCP, eventbus, plugins, visão) para reduzir superfície e tamanho (~130 MB).
-3. Testes ponta a ponta no `.exe` instalado automatizados (hoje manuais).
+2. ~~P-07~~ feito em 10–12/10/2026: removidos cli, mcp, publicador/assinante do barramento, doctor, telemetry; `scripts/dead_code.py` mostra 0 módulos sem importador. O instalador também deixou de levar as ~600 APIs do Google sem uso (~100 MB).
+3. ~~Testes ponta a ponta no instalado~~ feito: `python scripts/e2e_installed.py` (verificação, WhatsApp, conectividade e perguntas com tempo).
 4. Instalador menor: separar faster-whisper/ctranslate2 como download opcional.
 5. Docker: manter só como opção avançada (instável nesta máquina).
