@@ -175,6 +175,14 @@ export default function Conversa() {
       ? gotToken ? "responding" : "thinking"
       : listeningNow ? "listening" : note ? "thinking" : "idle"
 
+  // a janela de conversa conta a partir do FIM da resposta (antes contava do envio: resposta demorada = janela vencida e a fala era descartada)
+  const busyNow = streaming || speaker.speaking
+  const wasBusy = useRef(false)
+  useEffect(() => {
+    if (wasBusy.current && !busyNow) engagedRef.current = Date.now()
+    wasBusy.current = busyNow
+  }, [busyNow])
+
   // o que o Jefrey esta fazendo agora, em palavras (embaixo do avatar): ferramenta em andamento, escrevendo ou espera longa
   const [elapsedS, setElapsedS] = useState(0)
   useEffect(() => {

@@ -25,8 +25,8 @@ export function addressed(text: string, now: number, engagedAt: number): { ok: b
 
 /** Antes de gastar o Whisper: so transcreve o trecho que PODE ser para o Jefrey. Fora de uma conversa aberta, descarta o que e fraco
  *  (longe do microfone, como uma TV) ou longo demais (um programa falando). Nada do que foi descartado e enviado nem guardado. */
-export const NEAR_FIELD_PEAK = 0.04
-export const MAX_UNADDRESSED_MS = 12_000
+export const NEAR_FIELD_PEAK = 0.012 // so descarta o quase silencio: microfone de notebook costuma ter nivel baixo e a fala da pessoa NUNCA pode ser perdida aqui
+export const MAX_UNADDRESSED_MS = 30_000
 export const MIN_SEGMENT_MS = 250
 
 export type Segment = { peak: number; durationMs: number }
