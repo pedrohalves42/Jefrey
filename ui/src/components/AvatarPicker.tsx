@@ -23,7 +23,7 @@ export default function AvatarPicker() {
       <legend className="text-xs text-white/60">Avatar</legend>
       <div className="flex flex-wrap gap-1.5">
         <button type="button" className={btn(brain)} aria-pressed={brain} onClick={() => { clearAvatarImage(); set({ shape: "brain" }) }}>Cérebro</button>
-        <button type="button" className={btn(head)} aria-pressed={head} onClick={() => { clearAvatarImage(); set({ shape: "head" }) }}>Humano (holograma 3D)</button>
+        <button type="button" className={btn(head)} aria-pressed={head} onClick={() => { clearAvatarImage(); set({ shape: "head" }) }}>Humano (teste)</button>
         {PRESETS.map(p => (
           <button key={p.id} type="button" className={btn(false)} onClick={() => usePreset(p.id)}>{p.label}</button>
         ))}

@@ -90,16 +90,22 @@ export default function Conversa() {
   const sendRef = useRef<(t?: string) => Promise<void>>(async () => {})
   // quando foi a ultima vez que a pessoa falou com o Jefrey (abre a janela para responder sem repetir o nome)
   const engagedRef = useRef(0)
+  const [heardHint, setHeardHint] = useState("")
+  const heardTimer = useRef(0)
   const [votes, setVotes] = useState<Record<string, FeedbackValue>>({}) // 👍/👎 ja dados nesta sessao, por resposta
   const listener = useListener({
     gate: seg => worthTranscribing(seg, Date.now(), engagedRef.current),
     onTranscript: t => {
       const g = addressed(t, Date.now(), engagedRef.current)
       if (!g.ok) {
-        // ruido de fundo, TV ou outra pessoa: nao vai para o chat
+        // ruido de fundo, TV ou outra pessoa: nao vai para o chat. A tela diz o que ouviu e porque nao respondeu (some em 8 s; nada e guardado)
         setUnclear(false)
+        setHeardHint(t.trim().slice(0, 70))
+        window.clearTimeout(heardTimer.current)
+        heardTimer.current = window.setTimeout(() => setHeardHint(""), 8000)
         return
       }
+      setHeardHint("")
       setUnclear(false)
       if (!continuousRef.current) setMicOn(false)
       void sendRef.current(g.text)
@@ -649,6 +655,7 @@ export default function Conversa() {
           </div>
           </div>
           {listener.supported && view.hint && <p className="text-xs text-white/60">{view.hint}</p>}
+          {heardHint && <p role="status" className="text-sm text-amber-200">Ouvi “{heardHint}”, mas não era para mim. Comece dizendo “Jefrey”.</p>}
           {listener.supported && unclear && view.tone === "listening" && <p role="status" className="text-sm text-amber-200">Não entendi. Pode repetir, devagar?</p>}
           {listener.supported && voiceReady.error && <p role="alert" className="text-center text-sm text-red-200">{voiceReady.error}</p>}
           {listener.error && <p role="alert" className="text-center text-xs text-red-300">{listener.error}</p>}

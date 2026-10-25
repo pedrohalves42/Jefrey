@@ -37,7 +37,7 @@ export function dayHue(date: Date = new Date()): number {
 export const DEFAULT_APPEARANCE: Appearance = {
   auto: true,
   hue: 32,
-  shape: "head",
+  shape: "brain",
   intensity: 0.7,
   particles: 0.6,
   motion: true,
@@ -49,9 +49,9 @@ export const DEFAULT_APPEARANCE: Appearance = {
 }
 
 export const PRESETS: { id: string; label: string; value: Partial<Appearance> }[] = [
-  { id: "jefrey", label: "Jefrey (muda com o dia)", value: { auto: true, hue: 32, shape: "head", intensity: 0.8 } },
+  { id: "jefrey", label: "Jefrey (muda com o dia)", value: { auto: true, hue: 32, shape: "brain", intensity: 0.7 } },
   { id: "stark", label: "Stark (ciano)", value: { hue: 191, shape: "reactor", intensity: 0.8 } },
-  { id: "humano", label: "Humano (holograma 3D)", value: { hue: 191, shape: "head", intensity: 0.85 } },
+  { id: "humano", label: "Humano (experimental)", value: { hue: 191, shape: "head", intensity: 0.85 } },
   { id: "holo", label: "Holograma", value: { hue: 191, shape: "hologram", intensity: 0.85, holoScan: 0.55, holoGlitch: 0.3 } },
   { id: "neural", label: "Neural (violeta)", value: { hue: 268, shape: "brain", intensity: 0.7 } },
   { id: "matrix", label: "Matrix (verde)", value: { hue: 140, shape: "brain", intensity: 0.6 } },
@@ -93,21 +93,10 @@ function prefersReducedMotion(): boolean {
   }
 }
 
-const HEAD_MIGRATED = "jefrey_head_default_v1"
-
-/** Uma vez so: quem estava com o cerebro padrao passa para o holograma humano (a pessoa pode voltar quando quiser). */
-export function migrateToHead(a: Appearance, alreadyMigrated: boolean): Appearance {
-  return !alreadyMigrated && a.shape === "brain" ? { ...a, shape: "head" } : a
-}
-
 function load(): Appearance {
   try {
     const raw = localStorage.getItem(KEY)
-    if (raw) {
-      const done = localStorage.getItem(HEAD_MIGRATED) === "1"
-      localStorage.setItem(HEAD_MIGRATED, "1")
-      return migrateToHead(sanitizeAppearance(JSON.parse(raw)), done)
-    }
+    if (raw) return sanitizeAppearance(JSON.parse(raw))
   } catch {
     /* localStorage indisponivel ou JSON invalido: cai no padrao */
   }

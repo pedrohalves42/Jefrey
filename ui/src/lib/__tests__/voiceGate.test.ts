@@ -22,6 +22,22 @@ describe("voz: so o que e dirigido ao Jefrey entra no chat", () => {
     expect(addressed("ontem o jefrey do filme foi bom", T0, 0).ok).toBe(false)
   })
 
+  it("o Whisper escreve o nome de varios jeitos: todos valem", () => {
+    for (const nome of ["Jeffrey", "Geferi", "Jéfri", "Jefery", "jeferi", "Jefrei"]) {
+      expect(addressed(`${nome}, abre o youtube`, T0, 0)).toEqual({ ok: true, text: "abre o youtube" })
+    }
+  })
+  it("'oi', 'ei' e 'bom dia' antes do nome tambem valem", () => {
+    expect(addressed("Oi, Jefrey, me lembra de beber agua", T0, 0).text).toBe("me lembra de beber agua")
+    expect(addressed("Bom dia Jefrey que horas sao", T0, 0).ok).toBe(true)
+    expect(addressed("Ei ei Jefrey vem ca", T0, 0).ok).toBe(true)
+  })
+  it("palavras parecidas ou outros nomes nao disparam", () => {
+    for (const f of ["Jéssica, vem aqui", "o café ficou ótimo", "Jeferson chegou", "Geraldo, atende"]) expect(addressed(f, T0, 0).ok).toBe(false)
+  })
+  it("a janela de conversa e de 45 segundos", () => {
+    expect(WINDOW_MS).toBe(45_000)
+  })
   it("frase vazia nunca entra", () => {
     expect(addressed("   ", T0, T0).ok).toBe(false)
     expect(addressed("Jefrey", T0, 0).ok).toBe(false)

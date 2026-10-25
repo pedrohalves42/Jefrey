@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { DEFAULT_APPEARANCE, migrateToHead, sanitizeAppearance } from "../appearance"
+import { DEFAULT_APPEARANCE, sanitizeAppearance } from "../appearance"
 
 describe("sanitizeAppearance", () => {
   it("retorna o padrao para lixo", () => {
@@ -38,12 +38,8 @@ describe("sanitizeAppearance", () => {
   })
 })
 
-
-describe("holograma humano como padrao", () => {
-  it("quem estava no cerebro passa para o humano so uma vez", () => {
-    const a = { ...DEFAULT_APPEARANCE, shape: "brain" as const }
-    expect(migrateToHead(a, false).shape).toBe("head")
-    expect(migrateToHead(a, true).shape).toBe("brain") // escolheu voltar: respeitado
-    expect(migrateToHead({ ...a, shape: "orb" }, false).shape).toBe("orb")
+describe("padrao", () => {
+  it("o cerebro continua sendo o padrao; o holograma humano e opcional (experimental)", () => {
+    expect(DEFAULT_APPEARANCE.shape).toBe("brain")
   })
 })

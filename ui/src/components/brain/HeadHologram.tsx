@@ -17,16 +17,15 @@ const POINTS = 38_000
 const APPROVAL_HUE = 38
 
 const VERT = /* glsl */ `
-uniform float uTime; uniform float uMouth; uniform float uSize; uniform float uPixel; uniform float uMinY; uniform float uScanSpeed;
+uniform float uTime; uniform float uMouth; uniform float uSize; uniform float uPixel; uniform float uMinY; uniform float uScanSpeed; uniform float uSizeMul;
 attribute float aSeed;
-varying float vFres; varying float vScan; varying float vFade; varying float vLines; varying float vSeed; varying float vLit;
+varying float vFres; varying float vScan; varying float vFade; varying float vLines; varying float vSeed; varying float vLit; varying vec3 vPos;
 void main() {
   vec3 p = position;
-  // boca: o queixo desce e os labios abrem com a voz
-  float jaw = smoothstep(-0.10, -0.55, p.y - 0.18) * step(0.0, p.z + 0.05);
-  float lip = exp(-pow((p.y - 0.12) * 9.0, 2.0)) * step(0.05, p.z) * (1.0 - smoothstep(0.30, 0.55, abs(p.x)));
-  p.y -= uMouth * (0.05 * jaw + 0.035 * lip);
-  p.z += uMouth * 0.012 * lip;
+  // boca: o maxilar de baixo desce com a voz (acima da linha dos labios nada se mexe)
+  float jaw = smoothstep(-0.20, -0.42, p.y) * smoothstep(-0.10, 0.25, p.z);
+  p.y -= uMouth * 0.085 * jaw;
+  p.z += uMouth * 0.012 * jaw;
   p.y += sin(uTime * 1.3) * 0.004; // respiracao
   vec4 mv = modelViewMatrix * vec4(p, 1.0);
   vec3 n = normalize(normalMatrix * normal);
@@ -37,13 +36,14 @@ void main() {
   vFade = smoothstep(uMinY, uMinY + 0.55, p.y);
   vLines = 0.90 + 0.10 * sin(p.y * 170.0 - uTime * 2.4);
   vSeed = aSeed;
-  gl_PointSize = uSize * uPixel * (0.6 + 0.8 * aSeed) / max(0.4, -mv.z);
+  vPos = p;
+  gl_PointSize = uSizeMul * uSize * uPixel * (0.6 + 0.8 * aSeed) / max(0.4, -mv.z);
   gl_Position = projectionMatrix * mv;
 }`
 
 const FRAG = /* glsl */ `
-uniform vec3 uColor; uniform float uGain; uniform float uTime;
-varying float vFres; varying float vScan; varying float vFade; varying float vLines; varying float vSeed; varying float vLit;
+uniform vec3 uColor; uniform float uGain; uniform float uTime; uniform float uAlphaMul;
+varying float vFres; varying float vScan; varying float vFade; varying float vLines; varying float vSeed; varying float vLit; varying vec3 vPos;
 void main() {
   vec2 c = gl_PointCoord - 0.5;
   float d = length(c);
@@ -51,9 +51,13 @@ void main() {
   float soft = smoothstep(0.5, 0.0, d);
   float flicker = 1.0 - 0.10 * step(0.985, fract(sin(floor(uTime * 12.0) * 91.7) * 4375.5));
   float tw = 0.75 + 0.25 * sin(uTime * 3.0 + vSeed * 40.0); // cintilar de cada ponto
-  float lum = (0.26 + 1.05 * vLit + 0.45 * vFres + 1.3 * vScan) * vLines * tw * flicker * uGain;
+  // olhos e interior da boca (malha do escaneamento) ficam mais discretos: sem "olhos brancos" nem boca-caixa
+  float eye = max(smoothstep(0.22, 0.12, length(vPos.xy - vec2(0.19, 0.50))), smoothstep(0.22, 0.12, length(vPos.xy - vec2(-0.19, 0.50))));
+  float mouthBox = (1.0 - smoothstep(0.26, 0.34, abs(vPos.x))) * (1.0 - smoothstep(0.0, 0.05, abs(vPos.y + 0.24) - 0.14)) * step(0.3, vPos.z);
+  float quiet = 1.0 - 0.25 * eye - 0.6 * mouthBox;
+  float lum = (0.22 + 0.95 * vLit + 0.40 * vFres + 1.3 * vScan) * vLines * tw * flicker * uGain * quiet;
   vec3 col = uColor * lum + vec3(0.55, 0.8, 1.0) * vScan * 0.35; // varredura puxa para o branco
-  gl_FragColor = vec4(col, soft * vFade * clamp(lum, 0.0, 1.0) * 0.8);
+  gl_FragColor = vec4(col, soft * vFade * clamp(lum, 0.0, 1.0) * 0.8 * uAlphaMul);
 }`
 
 function hsl(h: number, s: number, l: number): THREE.Color {
@@ -89,14 +93,15 @@ export default function HeadHologram({ state, level = 0, appearance, onUnavailab
 
     const uniforms = {
       uTime: { value: 0 }, uMouth: { value: 0 }, uSize: { value: 1.0 }, uPixel: { value: pr * 120 }, uMinY: { value: -1 },
-      uScanSpeed: { value: 0.16 }, uColor: { value: hsl(live.current.appearance.hue, 0.95, 0.6) }, uGain: { value: 1 },
+      uScanSpeed: { value: 0.16 }, uSizeMul: { value: 1 }, uAlphaMul: { value: 1 }, uColor: { value: hsl(live.current.appearance.hue, 0.95, 0.6) }, uGain: { value: 1 },
     }
     const material = new THREE.ShaderMaterial({ uniforms, vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })
-    const lineMat = new THREE.LineBasicMaterial({ color: hsl(live.current.appearance.hue, 0.95, 0.55), transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false })
+    const glowMat = new THREE.ShaderMaterial({ uniforms: { ...uniforms, uSizeMul: { value: 3.2 }, uAlphaMul: { value: 0.09 } }, vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })
+    const lineMat = new THREE.LineBasicMaterial({ color: hsl(live.current.appearance.hue, 0.95, 0.55), transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false })
     const ringMat = new THREE.LineBasicMaterial({ color: hsl(live.current.appearance.hue, 0.95, 0.6), transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false })
 
     let disposed = false
-    const disposables: { dispose: () => void }[] = [material, lineMat, ringMat]
+    const disposables: { dispose: () => void }[] = [material, glowMat, lineMat, ringMat]
     new GLTFLoader().load(
       HEAD_MODEL_URL,
       gltf => {
@@ -135,9 +140,25 @@ export default function HeadHologram({ state, level = 0, appearance, onUnavailab
         g.setAttribute("normal", new THREE.BufferAttribute(nor, 3))
         g.setAttribute("aSeed", new THREE.BufferAttribute(seed, 1))
         group.add(new THREE.Points(g, material))
+        group.add(new THREE.Points(g, glowMat)) // brilho suave ao redor dos pontos
         disposables.push(g, src)
         if (wire) {
-          const w = new THREE.LineSegments(new THREE.WireframeGeometry(src), lineMat)
+          // linhas finas so na pele: olhos e interior da boca (malha densa do escaneamento) ficam sem linhas
+          const wg = src.clone()
+          const idx = wg.getIndex()!
+          const pa = wg.getAttribute("position")
+          const keep: number[] = []
+          for (let i = 0; i < idx.count; i += 3) {
+            const cx = (pa.getX(idx.getX(i)) + pa.getX(idx.getX(i + 1)) + pa.getX(idx.getX(i + 2))) / 3
+            const cy = (pa.getY(idx.getX(i)) + pa.getY(idx.getX(i + 1)) + pa.getY(idx.getX(i + 2))) / 3
+            const cz = (pa.getZ(idx.getX(i)) + pa.getZ(idx.getX(i + 1)) + pa.getZ(idx.getX(i + 2))) / 3
+            const eye = false
+            const mouth = cz > 0.3 && Math.abs(cx) < 0.32 && Math.abs(cy + 0.24) < 0.16
+            if (!eye && !mouth) keep.push(idx.getX(i), idx.getX(i + 1), idx.getX(i + 2))
+          }
+          wg.setIndex(keep)
+          disposables.push(wg)
+          const w = new THREE.LineSegments(new THREE.WireframeGeometry(wg), lineMat)
           group.add(w)
           disposables.push(w.geometry)
         }
@@ -185,7 +206,11 @@ export default function HeadHologram({ state, level = 0, appearance, onUnavailab
       const moving = ap.motion
       uniforms.uTime.value += moving ? dt : 0
       // boca segue a voz (suavizada)
-      const target = st === "responding" ? Math.min(1, lv * 1.6 + 0.12) : 0
+      // fala: ritmo de silabas (o nivel real do audio nem sempre chega, entao o ritmo e simulado e o nivel so ajusta a abertura)
+      const talking = st === "responding" && lv >= 0.2 && moving
+      const tt = uniforms.uTime.value
+      const syl = Math.abs(Math.sin(tt * 8.2)) * (0.62 + 0.38 * Math.sin(tt * 3.1 + 1.0))
+      const target = talking ? Math.min(1, 0.12 + 0.88 * syl * Math.min(1, 0.5 + lv)) : 0
       mouth += (target - mouth) * Math.min(1, dt * 14)
       uniforms.uMouth.value = mouth
       // cor: segue o tema do dia; aprovacao pendente fica ambar

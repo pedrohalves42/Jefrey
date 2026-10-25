@@ -7,7 +7,7 @@ const SHAPES: { id: BrainShape; label: string; hint: string }[] = [
   { id: "brain", label: "Cérebro", hint: "dois hemisférios com neurônios e sinapses" },
   { id: "orb", label: "Orbe", hint: "esfera de neurônios" },
   { id: "reactor", label: "Reator", hint: "anéis concêntricos estilo Homem de Ferro" },
-  { id: "head", label: "Humano", hint: "cabeça humana real em holograma 3D, que respira e mexe a boca quando fala" },
+  { id: "head", label: "Humano (teste)", hint: "cabeça humana real em holograma 3D, que respira e mexe a boca quando fala" },
   { id: "hologram", label: "Holograma", hint: "qualquer imagem sua, em estilo holograma animado" },
 ]
 
