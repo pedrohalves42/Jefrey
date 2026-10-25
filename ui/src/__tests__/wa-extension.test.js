@@ -12,12 +12,25 @@ function row(id, text, extra = "") {
   return `<div data-id="${id}">${text ? `<span class="selectable-text copyable-text">${text}</span>` : extra}</div>`
 }
 
-function page({ title = "Maria", group = false, rows = [], composer = "" } = {}) {
+function sidebar(names) {
+  const cells = names.map(n => `<div role="listitem" data-name="${n}"><span title="${n}">${n}</span></div>`).join("")
+  return `<div id="side"><div contenteditable="true" data-tab="3"></div><div id="pane-side">${cells}</div></div>`
+}
+
+function page({ title = "Maria", group = false, rows = [], composer = "", chats = null } = {}) {
   const jid = group ? "120363@g.us" : "5511999999999@c.us"
   const body = rows.map(r => row(`${r.me ? "true" : "false"}_${jid}_${r.id}`, r.text, r.extra)).join("")
-  document.body.innerHTML = `<div id="app"><div id="main"><header><span dir="auto" title="${title}">${title}</span></header>
+  document.body.innerHTML = `<div id="app">${chats ? sidebar(chats) : ""}<div id="main"><header><span dir="auto" title="${title}">${title}</span></header>
     <div class="messages">${body}</div>
     <footer><div contenteditable="true" data-tab="10">${composer}</div><button aria-label="Enviar"></button></footer></div></div>`
+  // clicar em uma conversa da lista abre essa conversa (so troca o nome no cabecalho)
+  document.querySelectorAll("#pane-side [role='listitem']").forEach(cell => {
+    cell.addEventListener("click", () => {
+      const h = document.querySelector("#main header span")
+      h.textContent = cell.getAttribute("data-name")
+      h.setAttribute("title", cell.getAttribute("data-name"))
+    })
+  })
   const send = document.querySelector('footer button[aria-label="Enviar"]')
   send.addEventListener("click", () => {
     const c = document.querySelector("footer div[contenteditable]")
@@ -77,9 +90,9 @@ describe("leitura da pagina (core)", () => {
     expect(C.context(rows, 2).map(r => r.from_me)).toEqual([true, false])
   })
 
-  it("digita no campo e confere o texto", () => {
+  it("digita no campo e confere o texto", async () => {
     page()
-    expect(C.typeText(document, "Oi! Tudo certo por aqui.")).toBe(true)
+    expect(await C.typeText(document, "Oi! Tudo certo por aqui.", () => Promise.resolve())).toBe(true)
     expect(C.composerText(document)).toBe("Oi! Tudo certo por aqui.")
   })
 
@@ -103,14 +116,15 @@ describe("leitura da pagina (core)", () => {
 describe("extensao inteira na pagina simulada", () => {
   let calls, respostas, hooks
 
-  function boot({ paired = true, paused = false } = {}) {
+  function boot({ paired = true, paused = false, idleMs = 0 } = {}) {
     calls = []
     respostas = {}
     window.__jefreyWA = false
     document.documentElement.querySelectorAll("div[style*='position:fixed']").forEach(e => e.remove())
-    window.__JEFREY_WA_TEST__ = { sleep: () => Promise.resolve() }
+    window.__JEFREY_WA_TEST__ = { sleep: () => Promise.resolve(), idleMs }
     window.chrome = {
       runtime: {
+        id: "jefrey-test",
         sendMessage: vi.fn(async msg => {
           calls.push(msg)
           if (msg.type === "status") return { paired, paused }
@@ -214,6 +228,68 @@ describe("extensao inteira na pagina simulada", () => {
     expect(document.querySelector("footer div[contenteditable]").textContent).toBe("rascunho da pessoa")
   })
 
+  it("abre sozinho a conversa certa da lista e envia o que a pessoa aprovou", async () => {
+    page({ title: "João", rows: [{ id: "A", text: "oi" }], chats: ["João", "Maria Clara", "Maria"] })
+    boot()
+    await hooks.refreshState()
+    respostas["/wa/device/poll"] = { ok: true, status: 200, data: { paused: false, send: [{ id: "D1", chat: "Maria", text: "Chego às 8h!" }] } }
+    await hooks.pollTick()
+    expect(document.querySelector("#main header span").textContent).toBe("Maria") // abriu "Maria", nao "Maria Clara"
+    expect(api("/wa/device/sent")[0].body).toEqual({ id: "D1", ok: true })
+    expect([...document.querySelectorAll(".messages [data-id]")].some(d => d.textContent === "Chego às 8h!")).toBe(true)
+  })
+
+  it("nao troca de conversa enquanto a pessoa esta mexendo no WhatsApp", async () => {
+    page({ title: "João", rows: [{ id: "A", text: "oi" }], chats: ["João", "Maria"] })
+    boot({ idleMs: 60 * 60 * 1000 }) // acabou de mexer: nao esta parada
+    await hooks.refreshState()
+    respostas["/wa/device/poll"] = { ok: true, status: 200, data: { paused: false, send: [{ id: "D1", chat: "Maria", text: "Oi!" }] } }
+    await hooks.pollTick()
+    expect(document.querySelector("#main header span").textContent).toBe("João")
+    expect(api("/wa/device/sent")).toHaveLength(0)
+  })
+
+  it("nao troca de conversa com rascunho digitado e nunca por uma conversa que nao existe; depois de algumas tentativas avisa que falhou", async () => {
+    page({ title: "João", composer: "rascunho", chats: ["João", "Maria"] })
+    boot()
+    await hooks.refreshState()
+    respostas["/wa/device/poll"] = { ok: true, status: 200, data: { paused: false, send: [{ id: "D1", chat: "Maria", text: "Oi!" }] } }
+    await hooks.pollTick()
+    expect(document.querySelector("#main header span").textContent).toBe("João")
+    page({ title: "João", chats: ["João", "Ana"] })
+    respostas["/wa/device/poll"] = { ok: true, status: 200, data: { paused: false, send: [{ id: "D2", chat: "Zeca", text: "Oi!" }] } }
+    for (let i = 0; i < 4; i++) await hooks.pollTick()
+    expect(document.querySelector("#main header span").textContent).toBe("João")
+    expect(api("/wa/device/sent").map(c => c.body)).toEqual([{ id: "D2", ok: false }])
+  })
+
+  it("extensao recarregada com a aba aberta: para sozinho, avisa para recarregar e nao enche o console de erros", async () => {
+    page({ title: "Maria", rows: [{ id: "A", text: "oi" }] })
+    boot()
+    await hooks.refreshState()
+    window.chrome.runtime.id = undefined // o contexto antigo morreu
+    window.chrome.runtime.sendMessage = vi.fn(async () => {
+      throw new Error("Extension context invalidated.")
+    })
+    await expect(hooks.refreshState()).resolves.toBeUndefined()
+    await expect(hooks.pollTick()).resolves.toBeUndefined()
+    expect([...document.querySelectorAll("div[title^='Clique para pausar']")].some(b => b.textContent.includes("Recarregue a página"))).toBe(true)
+    expect(window.chrome.runtime.sendMessage).not.toHaveBeenCalled() // depois de morto nem tenta falar com a extensao
+  })
+
+  it("o Jefrey nao conhece mais este aparelho (401): para de insistir e mostra nao pareado", async () => {
+    page({ title: "Maria", rows: [{ id: "A", text: "oi" }] })
+    boot()
+    await hooks.refreshState()
+    respostas["/wa/device/poll"] = { ok: false, status: 401, data: null }
+    await hooks.pollTick()
+    expect(hooks.state().paired).toBe(false)
+    expect([...document.querySelectorAll("div[title^='Clique para pausar']")].some(b => b.textContent.includes("não pareado"))).toBe(true)
+    const antes = api("/wa/device/poll").length
+    await hooks.pollTick() // pareamento desfeito: nem tenta de novo
+    expect(api("/wa/device/poll").length).toBe(antes)
+  })
+
   it("pausado ou nao pareado: nao le e nao envia nada", async () => {
     page({ rows: [{ id: "A", text: "oi" }] })
     boot({ paired: true, paused: true })
@@ -258,5 +334,220 @@ describe("extensao inteira na pagina simulada", () => {
     expect(manifest.content_scripts[0].matches).toEqual(["https://web.whatsapp.com/*"])
     expect(manifest.host_permissions.every(h => h.startsWith("http://127.0.0.1") || h.startsWith("http://localhost"))).toBe(true)
     expect(manifest.permissions).toEqual(["storage"])
+  })
+})
+
+describe("lista de conversas, historico e conversa comigo mesmo", () => {
+  let C
+  beforeEach(() => {
+    C = loadCore()
+  })
+
+  const cell = (name, preview, unread = 0, time = "10:32", icon = "") =>
+    `<div role="listitem"><span title="${name}">${name}</span><span dir="ltr">${time}</span><span dir="ltr" title="${preview}">${preview}</span>${
+      unread ? `<span aria-label="${unread} mensagens não lidas">${unread}</span>` : ""
+    }${icon}</div>`
+
+  it("le quem escreveu, a previa e as nao lidas sem abrir nada", () => {
+    document.body.innerHTML = `<div id="side"><div id="pane-side">${cell("Maria", "vamos jantar?", 2)}${cell("José", "ok, valeu", 0, "ontem")}${cell("Família", "foto", 5, "09:00", '<span data-icon="default-group"></span>')}</div></div>`
+    const items = C.parseSidebar(document)
+    expect(items.map(i => [i.title, i.preview, i.unread, i.group])).toEqual([
+      ["Maria", "vamos jantar?", 2, false],
+      ["José", "ok, valeu", 0, false],
+      ["Família", "foto", 5, true],
+    ])
+  })
+
+  it("grupo pela previa 'Fulano: texto' e pelo marcador do WhatsApp de hoje", () => {
+    expect(C.looksLikeGroupPreview("Ana: bom dia")).toBe(true)
+    expect(C.looksLikeGroupPreview("Você: bom dia")).toBe(false)
+    expect(C.looksLikeGroupPreview("You: ok")).toBe(false)
+    expect(C.looksLikeGroupPreview("bom dia, tudo bem?")).toBe(false)
+    document.body.innerHTML = `<div id="side"><div id="pane-side">
+      <div data-testid="cell-frame-container"><span title="Promo"></span><div data-testid="last-msg-status"><span dir="ltr">Loja X: oferta de hoje</span></div><span data-testid="icon-unread-count" aria-label="3 mensagens não lidas">3</span></div>
+      <div data-testid="cell-frame-container"><span title="Arnaldo"></span><div data-testid="last-msg-status"><span dir="ltr">chego às 8</span></div></div></div></div>`
+    const items = C.parseSidebar(document)
+    expect(items.map(i => [i.title, i.group, i.unread])).toEqual([["Promo", true, 3], ["Arnaldo", false, 0]])
+    expect(items[1].preview).toBe("chego às 8")
+  })
+
+  it("reconhece a conversa comigo mesmo e as respostas do proprio Jefrey", () => {
+    expect(C.isSelfChat("Pedro (Você)")).toBe(true)
+    expect(C.isSelfChat("Pedro (You)")).toBe(true)
+    expect(C.isSelfChat("Pedro")).toBe(false)
+    expect(C.isBotText("🤖 São 10 horas")).toBe(true)
+    expect(C.isBotText("São 10 horas")).toBe(false)
+    page({ title: "Pedro (Você)", rows: [{ id: "A", text: "que horas são?", me: true }, { id: "B", text: "🤖 São 10 horas", me: true }, { id: "C", text: "oi", me: false }] })
+    const rows = C.parseRows(document)
+    expect(C.newCommands(rows, new Set()).map(r => r.text)).toEqual(["que horas são?"])
+  })
+})
+
+describe("extensao: caixa de entrada, historico e comandos", () => {
+  let calls, hooks
+  function boot() {
+    calls = []
+    window.__jefreyWA = false
+    window.__JEFREY_WA_TEST__ = { sleep: () => Promise.resolve(), idleMs: 0 }
+    window.chrome = {
+      runtime: {
+        id: "jefrey-test",
+        sendMessage: vi.fn(async msg => {
+          calls.push(msg)
+          if (msg.type === "status") return { paired: true, paused: false }
+          if (msg.type === "api") return { ok: true, status: 200, data: msg.path === "/wa/device/command" ? { action: "working" } : {} }
+          return { ok: true }
+        }),
+      },
+    }
+    loadCore()
+    window.eval(CONTENT_SRC)
+    hooks = window.__JEFREY_WA_TEST__.hooks
+  }
+  const api = path => calls.filter(c => c.type === "api" && c.path === path)
+
+  it("manda a lista de conversas uma vez e de novo so quando muda", async () => {
+    page({ chats: ["Maria", "José"], rows: [] })
+    document.querySelector("#pane-side").innerHTML =
+      '<div role="listitem"><span title="Maria">Maria</span><span dir="ltr" title="oi">oi</span><span aria-label="1 mensagem não lida">1</span></div>'
+    boot()
+    await hooks.refreshState()
+    await hooks.inboxTick()
+    await hooks.inboxTick()
+    expect(api("/wa/device/inbox")).toHaveLength(1)
+    expect(api("/wa/device/inbox")[0].body.items[0]).toMatchObject({ title: "Maria", unread: 1, preview: "oi" })
+    document.querySelector("#pane-side span[aria-label]").setAttribute("aria-label", "3 mensagens não lidas")
+    await hooks.inboxTick()
+    expect(api("/wa/device/inbox")).toHaveLength(2)
+  })
+
+  it("manda o historico da conversa aberta (nao de grupo)", async () => {
+    page({ rows: [{ id: "A", text: "bom dia" }, { id: "B", text: "bom dia!", me: true }] })
+    boot()
+    await hooks.refreshState()
+    await hooks.readTick()
+    await Promise.resolve()
+    const h = api("/wa/device/history")
+    expect(h).toHaveLength(1)
+    expect(h[0].body.messages.map(m => m.text)).toEqual(["bom dia", "bom dia!"])
+    page({ group: true, title: "Família", rows: [{ id: "G", text: "oi grupo" }] })
+    await hooks.readTick()
+    await Promise.resolve()
+    expect(api("/wa/device/history")).toHaveLength(1)
+  })
+
+  it("conversa comigo mesmo: o que antes ja estava la e ignorado; o pedido novo vai ao Jefrey uma vez", async () => {
+    page({ title: "Pedro (Você)", rows: [{ id: "A", text: "pedido antigo", me: true }] })
+    boot()
+    await hooks.refreshState()
+    await hooks.readTick()
+    expect(api("/wa/device/command")).toHaveLength(0)
+    const div = document.createElement("div")
+    div.setAttribute("data-id", "true_5511999999999@c.us_NOVA")
+    div.innerHTML = '<span class="selectable-text copyable-text">que horas são?</span>'
+    document.querySelector(".messages").appendChild(div)
+    await hooks.readTick()
+    await hooks.readTick()
+    const cmds = api("/wa/device/command")
+    expect(cmds).toHaveLength(1)
+    expect(cmds[0].body).toMatchObject({ chat: "Pedro (Você)", text: "que horas são?" })
+    expect(api("/wa/device/inbound").every(c => c.body.messages.length === 0)).toBe(true) // nunca "responde como a pessoa" a si mesma
+  })
+})
+
+describe("editor do WhatsApp que atualiza o texto um instante depois (Lexical)", () => {
+  let C
+  beforeEach(() => {
+    C = loadCore()
+  })
+
+  function lexicalPage() {
+    document.body.innerHTML = `<div id="main"><header><span dir="auto" title="ph">ph</span></header>
+      <footer><div contenteditable="true" data-tab="10"><p><br></p></div><button aria-label="Enviar"></button></footer></div>`
+    return document.querySelector("footer div[contenteditable]")
+  }
+  const showAfter = (el, text, ms) =>
+    setTimeout(() => {
+      el.innerHTML = `<p><span data-lexical-text="true">${text.replace("🙂", "")}</span><span data-lexical-text="true">🙂</span></p>`
+    }, ms)
+
+  it("espera o editor mostrar o texto e NAO digita duas vezes", async () => {
+    const el = lexicalPage()
+    let chamadas = 0
+    document.execCommand = () => {
+      chamadas++
+      showAfter(el, "Oi, tudo bem? 🙂", 120) // o editor so mostra depois
+      return true
+    }
+    expect(await C.typeText(document, "Oi, tudo bem? 🙂")).toBe(true)
+    expect(chamadas).toBe(1)
+    expect(C.readText(el)).toBe("Oi, tudo bem? 🙂") // so uma vez, mesmo com o emoji repetido dentro do span
+  })
+
+  it("se o texto nunca aparece, limpa o campo e devolve falso (nao deixa rascunho)", async () => {
+    const el = lexicalPage()
+    document.execCommand = () => true // diz que digitou, mas nada aparece
+    Object.defineProperty(el, "textContent", { get: () => "", set: () => {}, configurable: true }) // e o editor ignora a troca direta do texto
+    expect(await C.typeText(document, "Oi", () => Promise.resolve())).toBe(false)
+    expect(C.readText(el)).toBe("")
+  })
+
+  it("leitura do campo ignora o texto de dica e conta so o que a pessoa ve", () => {
+    const el = lexicalPage()
+    el.innerHTML = '<p><span data-lexical-text="true">abc</span></p><span>Digite uma mensagem</span>'
+    expect(C.readText(el)).toBe("abc")
+    expect(C.composerText(document)).toBe("abc")
+  })
+})
+
+describe("WhatsApp no formato atual da pagina (conv-msg)", () => {
+  let C
+  beforeEach(() => {
+    C = loadCore()
+  })
+
+  const msg = (id, text, me, label) =>
+    `<div role="row"><div data-testid="conv-msg-${id}" data-id="${id}"><div data-testid="msg-container">${me ? '<span data-icon="tail-out"></span>' : '<span data-icon="tail-in"></span>'}
+      <span aria-label="${label}"></span><span data-testid="selectable-text">${text}</span></div></div></div>`
+
+  function pagina(rows, sub = "online") {
+    document.body.innerHTML = `<div id="main"><header><span dir="auto" title="Maria">Maria</span><span dir="auto" title="${sub}">${sub}</span></header><div>${rows}</div>
+      <footer><div contenteditable="true" data-tab="10"><p><br></p></div></footer></div>`
+  }
+
+  it("le as mensagens, quem enviou e o tipo", () => {
+    pagina(msg("AAA111", "oi, tudo bem?", false, "Maria:") + msg("BBB222", "tudo sim!", true, "Você:") + msg("CCC333", "", false, "Maria:"))
+    const r = C.parseRows(document)
+    expect(r.map(x => [x.id, x.from_me, x.kind, x.text])).toEqual([["AAA111", false, "text", "oi, tudo bem?"], ["BBB222", true, "text", "tudo sim!"], ["CCC333", false, "other", ""]])
+  })
+
+  it("mensagem minha sem 'cauda' (seguida de outra minha) continua sendo minha pelo rotulo", () => {
+    pagina(`<div role="row"><div data-testid="conv-msg-X1" data-id="X1"><span aria-label="Você:"></span><span data-testid="selectable-text">segunda seguida</span></div></div>`)
+    expect(C.parseRows(document)[0]).toMatchObject({ from_me: true, text: "segunda seguida" })
+    pagina(`<div role="row"><div data-testid="conv-msg-X2" data-id="X2"><span aria-label="You:"></span><span data-testid="selectable-text">in english</span></div></div>`)
+    expect(C.parseRows(document)[0].from_me).toBe(true)
+  })
+
+  it("grupo pelo subtitulo com participantes; conversa individual nao", () => {
+    pagina(msg("A1", "oi", false, "Ana:"), "Ana, Beto, Você")
+    expect(C.isGroup(document)).toBe(true)
+    pagina(msg("A1", "oi", false, "Maria:"), "online")
+    expect(C.isGroup(document)).toBe(false)
+    pagina(msg("A1", "oi", false, "Maria:"), "visto por último hoje às 19:29")
+    expect(C.isGroup(document)).toBe(false)
+  })
+
+  it("o formato antigo (data-id true_/false_) continua funcionando", () => {
+    document.body.innerHTML = `<div id="main"><header><span dir="auto" title="Maria">Maria</span></header>
+      <div data-id="true_5511@c.us_ABC"><span class="selectable-text copyable-text">antigo meu</span></div>
+      <div data-id="false_5511@c.us_DEF"><span class="selectable-text copyable-text">antigo dela</span></div></div>`
+    expect(C.parseRows(document).map(r => [r.from_me, r.text])).toEqual([[true, "antigo meu"], [false, "antigo dela"]])
+  })
+
+  it("mensagens novas e comandos da conversa com voce mesmo funcionam no formato novo", () => {
+    pagina(msg("N1", "que horas são?", true, "Você:") + msg("N2", "🤖 São 10 horas", true, "Você:") + msg("N3", "oi", false, "Maria:"))
+    const rows = C.parseRows(document)
+    expect(C.newCommands(rows, new Set()).map(r => r.text)).toEqual(["que horas são?"])
+    expect(C.newIncoming(rows, new Set(["N3"])).length).toBe(0)
   })
 })

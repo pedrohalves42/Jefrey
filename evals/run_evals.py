@@ -439,6 +439,51 @@ def run(base: str, only: str | None) -> list[Result]:
     return results
 
 
+MIN_CALLS = 5  # chamadas minimas de um cerebro para entrar na comparacao (mesmo valor de domain/brain_rank.py)
+FAIL_COST_S = 30.0
+
+
+def best_by_role(metrics: dict) -> dict:
+    """Para cada funcao, o cerebro mais rapido e confiavel (mediana + custo da taxa de falha). Sem dados suficientes, a funcao fica de fora."""
+    out: dict = {}
+    for role, per in (metrics or {}).items():
+        scored = {}
+        for brain, st in per.items():
+            if int(st.get("n", 0)) < MIN_CALLS:
+                continue
+            ok_rate = int(st.get("ok", 0)) / max(int(st.get("n", 1)), 1)
+            med = float(st["median"]) if st.get("median") is not None else FAIL_COST_S
+            scored[brain] = med + (1.0 - ok_rate) * FAIL_COST_S
+        if len(scored) >= 2:
+            out[role] = min(scored, key=scored.get)
+    return out
+
+
+def build_report(base: str, results: list[Result], brains: list, metrics: dict, p50: float = 0.0, p95: float = 0.0) -> dict:
+    """Relatorio: acerto por pedido, cerebros conectados e medidas de uso por funcao (o que o Jefrey aprendeu)."""
+    rate = (sum(r.ok for r in results) / len(results)) if results else 0.0
+    return {"base": base, "rate": rate, "p50": p50, "p95": p95, "brains": brains, "metrics": metrics,
+            "best_by_role": best_by_role(metrics), "results": [r.__dict__ for r in results]}
+
+
+def snapshot(base: str) -> tuple[list, dict]:
+    """Cerebros conectados e medidas por funcao, direto do app em execucao. Falha em silencio: o relatorio sai mesmo assim."""
+    brains: list = []
+    metrics: dict = {}
+    try:
+        with httpx.Client() as http:
+            tok = http.post(f"{base}/auth/dev-token", timeout=10).json()["access_token"]
+            h = {"Authorization": f"Bearer {tok}"}
+            brains = http.get(f"{base}/brains", headers=h, timeout=10).json().get("brains", [])
+            for role in ("conversa", "ferramentas", "rapido", "escrita", "estudo", "resumo", "visao"):
+                got = http.get(f"{base}/brains/metrics", params={"role": role}, headers=h, timeout=10).json()
+                if got.get("brains"):
+                    metrics[role] = got["brains"]
+    except Exception:
+        pass
+    return brains, metrics
+
+
 def report(results: list[Result], base: str) -> float:
     print(f"\n{'grupo':10} {'caso':34} {'ok':3} {'seg':>6}  detalhe")
     for r in results:
@@ -451,10 +496,12 @@ def report(results: list[Result], base: str) -> float:
     print(f"\nacerto: {passed}/{len(results)} ({rate:.0%})  latencia conversa p50={p50:.1f}s p95={p95:.1f}s")
     REPORTS.mkdir(exist_ok=True)
     out = REPORTS / f"{time.strftime('%Y%m%d-%H%M%S')}.json"
-    out.write_text(json.dumps({
-        "base": base, "rate": rate, "p50": p50, "p95": p95,
-        "results": [r.__dict__ for r in results]}, ensure_ascii=False, indent=2), encoding="utf-8")
+    brains, metrics = snapshot(base)
+    rel = build_report(base, results, brains, metrics, p50, p95)
+    out.write_text(json.dumps(rel, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"relatorio: {out}")
+    for role, brain in rel["best_by_role"].items():
+        print(f"  melhor para {role}: {brain}")
     return rate
 
 

@@ -299,7 +299,7 @@ def test_escolhe_o_assunto_mais_atrasado():
 def test_so_estuda_com_a_pessoa_ausente_dentro_do_orcamento_e_ligado(db, monkeypatch):
     st = S.StudyStore()
     meio_dia = datetime(2026, 10, 4, 12, 0, tzinfo=TZ)
-    monkeypatch.setattr(S, "datetime", type("D", (), {"now": staticmethod(lambda tz=None: meio_dia), "fromisoformat": datetime.fromisoformat}))
+    monkeypatch.setattr("src.jefrey.application.studies.datetime", type("D", (), {"now": staticmethod(lambda tz=None: meio_dia), "fromisoformat": datetime.fromisoformat}))
     assert S.eligible("ana", TZ, 600, st) is True
     assert S.eligible("ana", TZ, 30, st) is False  # acabou de usar
     st.set_prefs("ana", enabled=False)
@@ -317,7 +317,7 @@ def test_rodada_estuda_um_assunto_por_pessoa_e_so_na_nuvem(db, monkeypatch):
     L.FactStore().learn("ana", L.Fact("gosto", "gosto:horta", "Gosta de horta em casa."))
     L.FactStore().learn("bob", L.Fact("gosto", "gosto:violao", "Gosta de violão."))
     meio_dia = datetime(2026, 10, 4, 12, 0, tzinfo=TZ)
-    monkeypatch.setattr(S, "datetime", type("D", (), {"now": staticmethod(lambda tz=None: meio_dia), "fromisoformat": datetime.fromisoformat}))
+    monkeypatch.setattr("src.jefrey.application.studies.datetime", type("D", (), {"now": staticmethod(lambda tz=None: meio_dia), "fromisoformat": datetime.fromisoformat}))
     nuvem, local = FakeCloud(), FakeCloud(cloud=False)
     idle = lambda u: 900 if u == "ana" else 10  # noqa: E731  (bob acabou de usar)
     feitos = run(S.study_tick(lambda: nuvem, tz=TZ, idle=idle, search=fake_search, fetch=fake_fetch))

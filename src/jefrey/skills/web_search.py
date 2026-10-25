@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 CACHE_TTL: Final[float] = 300.0
 TIMEOUT_S: Final[float] = 10.0
+NEWS_BRIEF_TIMEOUT_S: Final[float] = 12.0
 
 class WebSearchSkill(SkillBase):
     metadata = SkillMetadata(
@@ -88,7 +89,7 @@ class WebSearchSkill(SkillBase):
 
     def get_tools(self) -> list:
         # Always expose tools - fallback handles missing Tavily
-        return [self.search, self.search_news, self.extract]
+        return [self.search, self.search_news, self.extract, self.news_brief]
 
     def _fallback_ddg(self, query: str, max_results: int = 5, news: bool = False) -> dict:
         """Busca sem chave (DuckDuckGo), em portugues do Brasil. Bloqueante: chame com asyncio.to_thread."""
@@ -167,6 +168,18 @@ class WebSearchSkill(SkillBase):
         if not out.get("error"):
             self._cache_set(cache_key, out)
         return out
+
+    @tool(description="Responde direto 'quais as ultimas noticias sobre X': busca e lista as manchetes com a fonte, sem rodadas extras do modelo")
+    async def news_brief(self, topic: str, user_id: str | None = None) -> str:
+        from src.jefrey.domain.news_brief import compose
+
+        try:
+            out = await asyncio.wait_for(self.search_news(query=topic, max_results=5, days=3, user_id=user_id), timeout=NEWS_BRIEF_TIMEOUT_S)
+        except asyncio.TimeoutError:
+            return "A busca de notícias demorou demais agora. Tente de novo em instantes."
+        if out.get("error"):
+            return "Não consegui buscar notícias agora. Tente de novo em instantes."
+        return compose(topic, out.get("results") or [])
 
     @tool(description="Busca noticias recentes (ultimos 7 dias por padrao)")
     async def search_news(

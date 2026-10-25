@@ -18,16 +18,20 @@ async function json<T>(path: string, init?: RequestInit): Promise<Res<T>> {
 }
 
 export const waStatus = () => json<WaStatus>("/wa/status")
-export const waPending = () => json<{ pending: WaDraft[]; paired: boolean }>("/wa/pending")
+export const waPending = () => json<{ pending: WaDraft[]; paired: boolean; new_chats?: WaChat[]; seen_s?: number | null }>("/wa/pending")
 export const waPairing = () => json<{ code: string; expires_in: number }>("/wa/pairing", { method: "POST" })
 export const waSetMode = (id: string, mode: WaMode) => json<WaChat>(`/wa/chats/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify({ mode }) })
+export const waCompose = (id: string, instruction: string) => json<{ text: string }>(`/wa/chats/${encodeURIComponent(id)}/compose`, { method: "POST", body: JSON.stringify({ instruction }) })
+export const waSend = (id: string, text: string) => json<{ ok: boolean; chat: string }>(`/wa/chats/${encodeURIComponent(id)}/send`, { method: "POST", body: JSON.stringify({ text }) })
 export const waDeleteChat = (id: string) => json<{ ok: boolean }>(`/wa/chats/${encodeURIComponent(id)}`, { method: "DELETE" })
 export const waSetPaused = (paused: boolean) => json<{ paused: boolean }>("/wa/paused", { method: "PUT", body: JSON.stringify({ paused }) })
 export const waDecide = (id: string, decision: "approve" | "reject", text?: string) =>
   json<WaDraft>(`/wa/drafts/${encodeURIComponent(id)}/decide`, { method: "POST", body: JSON.stringify({ decision, text }) })
 export const waRevoke = (id: string) => json<{ ok: boolean }>(`/wa/devices/${encodeURIComponent(id)}`, { method: "DELETE" })
 export const waForgetAll = () => json<{ ok: boolean }>("/wa/data", { method: "DELETE" })
-export const waOpenFolder = () => json<{ ok: boolean }>("/wa/open-extension-folder", { method: "POST" })
+export type WaInboxItem = { title: string; preview: string; unread: number }
+export const waInbox = () => json<{ text: string; items: WaInboxItem[]; age_s: number | null }>("/wa/inbox")
+export const waOpenFolder = () => json<{ ok: boolean; path?: string }>("/wa/open-extension-folder", { method: "POST" })
 
 export const MODE_LABEL: Record<WaMode, string> = {
   pending: "Ainda não liberada",

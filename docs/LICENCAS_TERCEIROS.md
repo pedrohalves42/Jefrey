@@ -57,3 +57,6 @@ Gerado por `scripts/gen_licenses.py` a partir do `requirements.txt` instalado. R
 - **Listadas no requirements mas não instaladas aqui:** nenhuma
 - O PyInstaller (usado só para empacotar) tem exceção que permite distribuir o programa gerado sob a licença que você escolher.
 - Os modelos de voz (Whisper, via faster-whisper) são MIT; os modelos de IA locais e as vozes do Windows têm licenças próprias.
+
+## Modelo 3D do avatar "Humano"
+- **Infinite, 3D Head Scan** de Lee Perry-Smith (www.triplegangers.com), arquivo `LeePerrySmith.glb` obtido do repositório mrdoob/three.js (exemplos). Licença **Creative Commons Atribuição 3.0** (CC BY 3.0): exige mencionar o autor. O crédito aparece em Ajuda > Créditos. Texto original: examples/models/gltf/LeePerrySmith/LeePerrySmith_License.txt.

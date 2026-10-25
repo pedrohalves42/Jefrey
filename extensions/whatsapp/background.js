@@ -34,6 +34,7 @@ async function api(path, method, body) {
     });
   try {
     let r = await send(base);
+    if (r.status === 401) await chrome.storage.local.remove(["token"]); // o Jefrey nao conhece mais este aparelho (pareado de novo em outro lugar): para de insistir
     return { ok: r.ok, status: r.status, data: await r.json().catch(() => null) };
   } catch (e) {
     const found = await findBase(null); // o Jefrey pode ter aberto em outra porta

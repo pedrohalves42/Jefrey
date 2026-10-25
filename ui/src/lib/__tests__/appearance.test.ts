@@ -37,3 +37,9 @@ describe("sanitizeAppearance", () => {
     expect(sanitizeAppearance({ intensity: Infinity }).intensity).toBe(DEFAULT_APPEARANCE.intensity)
   })
 })
+
+describe("padrao", () => {
+  it("o cerebro continua sendo o padrao; o holograma humano e opcional (experimental)", () => {
+    expect(DEFAULT_APPEARANCE.shape).toBe("brain")
+  })
+})

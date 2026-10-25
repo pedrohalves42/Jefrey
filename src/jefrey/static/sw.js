@@ -7,7 +7,7 @@
 const VERSION = "jefrey-shell-v1"
 const SHELL = ["/", "/manifest.json", "/images/icon-192.png"]
 // caminhos estaticos que podem ficar em cache (nomes com hash em /assets/ nunca mudam de conteudo)
-const STATIC_PREFIXES = ["/assets/", "/images/"]
+const STATIC_PREFIXES = ["/assets/", "/images/", "/models/"]
 const STATIC_FILES = ["/manifest.json", "/favicon.ico", "/vite.svg"]
 // paginas do aplicativo (navegacao): rede primeiro, casca guardada se estiver offline
 const APP_PAGES = ["/", "/memoria", "/skills", "/configuracoes", "/avancado", "/bem-vindo"]

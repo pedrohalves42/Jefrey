@@ -187,7 +187,7 @@ def test_api_aceite_copia_e_apagar(api, monkeypatch):
         async def post(self, url, data=None, **k):
             revogados.append(data["token"])
 
-    monkeypatch.setattr(PR.httpx, "AsyncClient", FakeClient)
+    monkeypatch.setattr(__import__("httpx"), "AsyncClient", FakeClient)
     from src.jefrey.core import google_oauth as G
     G.save_tokens("apipriv", ["calendar"], {"access_token": "AT", "refresh_token": "RT-revogar"}, None)
     out = c.post("/privacy/erase", headers=h, json={"confirm": " apagar "}).json()

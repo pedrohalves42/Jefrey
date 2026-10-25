@@ -1,3 +1,4 @@
+import ReportProblem from "@/components/ReportProblem"
 import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import ListenButton from "@/components/ListenButton"
@@ -118,6 +119,7 @@ export default function Ajuda() {
 
       <MorningSettings />
       <Updates />
+      <ReportProblem />
 
       <section className="jf-panel p-5">
         <h2 className="text-xl font-medium text-white">Meus dados e privacidade</h2>
@@ -138,6 +140,13 @@ export default function Ajuda() {
             Para mudar o seu nome ou a aparência do Jefrey, <Link className="underline" to="/configuracoes" onClick={() => setEasy(false)}>abra as Configurações</Link>.
           </p>
         )}
+      </section>
+
+      <section className="jf-panel p-5" aria-label="Créditos">
+        <h2 className="text-xl font-medium text-white">Créditos</h2>
+        <p className="mt-2 text-sm text-white/65">
+          A cabeça do holograma “Humano” vem de “Infinite, 3D Head Scan”, de Lee Perry-Smith (triplegangers.com), usada sob a licença Creative Commons Atribuição 3.0 (CC BY 3.0).
+        </p>
       </section>
     </div>
   )

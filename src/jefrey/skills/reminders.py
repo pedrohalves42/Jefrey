@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 
 from src.jefrey.core.reminders import ReminderStore, describe_due, parse_when
+from src.jefrey.domain.verify import confirm_created, confirm_removed
 from src.jefrey.skills import SkillBase, SkillMetadata, skill, tool
 
 logger = logging.getLogger(__name__)
@@ -44,8 +45,19 @@ class RemindersSkill(SkillBase):
             r = ReminderStore().add(user_id, text, w.due, w.repeat)
         except ValueError as e:
             return f"Não consegui criar o lembrete: {e}."
+        try:
+            from src.jefrey.application import undo as _undo
+
+            _undo.shared_journal().record(user_id, f"lembrete: {text}", "delete_reminder", {"user_id": user_id, "id": r["id"]})
+        except Exception:
+            logging.getLogger(__name__).debug("diario de desfazer indisponivel", exc_info=True)  # nunca atrapalha criar o lembrete
         extra = " Assumi 9h; se quiser outro horário, é só me dizer." if w.assumed_time else ""
-        return f"Pronto! Vou te lembrar de “{text}” {describe_due(w.due)}{REPEAT_LABEL[r['repeat']]}.{extra}"
+        ok = f"Pronto! Vou te lembrar de “{text}” {describe_due(w.due)}{REPEAT_LABEL[r['repeat']]}.{extra}"
+        try:  # relê o que acabou de gravar: só afirma o que achou
+            found = next((x for x in ReminderStore().pending(user_id) if x["id"] == r["id"]), None)
+        except Exception:
+            found = None
+        return confirm_created(ok, found, r["id"])
 
     @tool(description="Lista os lembretes pendentes do usuario")
     async def list_reminders(self, user_id: str | None = None) -> str:
@@ -62,7 +74,13 @@ class RemindersSkill(SkillBase):
     async def cancel_reminder(self, reminder_id: str, user_id: str | None = None) -> str:
         if _need_user(user_id):
             return "Preciso saber quem você é."
-        return "Lembrete cancelado." if ReminderStore().cancel(user_id, reminder_id) else "Não encontrei esse lembrete."
+        if not ReminderStore().cancel(user_id, reminder_id):
+            return "Não encontrei esse lembrete."
+        try:
+            still = any(x["id"] == reminder_id for x in ReminderStore().pending(user_id))
+        except Exception:
+            still = False
+        return confirm_removed("Lembrete cancelado.", still)
 
 
 @skill("reminders", "Lembretes com hora, avisados pelo Jefrey", tags=["utility", "local"])

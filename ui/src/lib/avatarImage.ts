@@ -76,3 +76,6 @@ export async function processImageFile(file: File, maxPx = 640): Promise<string>
     URL.revokeObjectURL(url)
   }
 }
+
+
+export const PRESETS: { id: string; label: string; url: string }[] = [] // sem desenhos prontos: o avatar bonito e o holograma humano 3D (forma "Humano")

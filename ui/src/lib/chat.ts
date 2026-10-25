@@ -110,7 +110,7 @@ export type StreamHandlers = {
   onPendingApproval?: (approvalId?: string) => void
   onToolStart?: (tool: string, label: string, risk: string) => void
   onToolEnd?: (tool: string, ok: boolean, summary: string) => void
-  onApprovalRequired?: (approvalId: string, tool: string, label: string) => void
+  onApprovalRequired?: (approvalId: string, tool: string, label: string, detail?: string) => void
   onRecall?: (items: RecallItem[]) => void
 }
 
@@ -160,7 +160,7 @@ export async function streamChat(
       else if (ev.type === "pending_approval") handlers.onPendingApproval?.(ev.approval_id)
       else if (ev.type === "tool_start") handlers.onToolStart?.(ev.tool, ev.label, ev.risk)
       else if (ev.type === "tool_end") handlers.onToolEnd?.(ev.tool, ev.ok, ev.summary)
-      else if (ev.type === "approval_required") handlers.onApprovalRequired?.(ev.approval_id, ev.tool, ev.label)
+      else if (ev.type === "approval_required") handlers.onApprovalRequired?.(ev.approval_id, ev.tool, ev.label, ev.detail)
       else if (ev.type === "recall") handlers.onRecall?.(ev.items)
     }
   }

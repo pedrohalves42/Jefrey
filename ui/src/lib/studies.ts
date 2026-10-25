@@ -37,6 +37,31 @@ export const getGuide = (id: string) => json<Guide>(`/studies/${encodeURICompone
 export const runStudy = (id: string) => json<Guide>(`/studies/${encodeURIComponent(id)}/run`, { method: "POST" })
 export const putPrefs = (p: Partial<Prefs>) => json<Prefs>("/studies/prefs", { method: "PUT", body: JSON.stringify(p) })
 
+export type UserSource = { id: string; topic_id: string | null; url: string; title: string }
+export type LearnResult = { topic?: Topic; source?: string; saved_text?: boolean; facts?: number; guide?: Guide; run_error?: string }
+
+export const learnRequest = (body: { topic?: string; url?: string; text?: string; run?: boolean }) =>
+  json<LearnResult>("/studies/learn", { method: "POST", body: JSON.stringify(body) })
+export const getUserSources = () => json<{ sources: UserSource[] }>("/studies/sources")
+export const addUserSource = (url: string, topicId = "any", title = "") =>
+  json<UserSource>(`/studies/${encodeURIComponent(topicId)}/sources`, { method: "POST", body: JSON.stringify({ url, title }) })
+export const deleteUserSource = (id: string) => json<{ ok: boolean }>(`/studies/sources/${encodeURIComponent(id)}`, { method: "DELETE" })
+
+/** O que a pessoa digitou parece um link? (para mandar no campo certo) */
+export function looksLikeLink(s: string): boolean {
+  return /^(https?:\/\/\S+|[\w-]+(\.[\w-]+)+(\/\S*)?)$/i.test(s.trim())
+}
+
+/** Frase simples sobre o que aconteceu com o pedido de aprender. */
+export function learnMessage(r: LearnResult): { ok: boolean; text: string } {
+  const parts: string[] = []
+  if (r.saved_text) parts.push(r.facts ? `Guardei o texto e aprendi ${r.facts} coisa${r.facts > 1 ? "s" : ""} sobre você.` : "Guardei o texto nas suas notas.")
+  if (r.topic) parts.push(r.source ? `Anotei o link para o assunto “${r.topic.title}”.` : `Anotei o assunto “${r.topic.title}”.`)
+  if (r.guide) return { ok: true, text: `${parts.join(" ")} Estudei e escrevi um guia: “${r.guide.title}”. Veja em Estudos.`.trim() }
+  if (r.run_error) return { ok: false, text: `${parts.join(" ")} ${r.run_error}`.trim() }
+  return { ok: true, text: `${parts.join(" ")} Eu estudo quando você estiver longe do computador, ou aperte “Estudar agora” em Estudos.`.trim() }
+}
+
 /** Mensagem humana a partir de um erro da API (o servidor ja manda o texto em portugues simples). */
 export function apiMessage(res: Res<unknown>, fallback = "Não consegui agora. Tente de novo."): string {
   const d = (res.data as { detail?: unknown } | null)?.detail

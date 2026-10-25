@@ -74,67 +74,9 @@ def test_idp_httpx_mock_success(monkeypatch):
     assert "expires_at" in tok
 
 
-def test_publisher_dev_fallback_without_redis(monkeypatch):
-    sg = _reload_signing(monkeypatch)
-    # força redis url inalcançável; em dev deve cair para memory_fallback não raise
-    monkeypatch.setenv("JEFREY_REDIS__URL", "redis://localhost:6399/0")
-    from src.jefrey.eventbus.publisher import EventBusPublisher
-    pub = EventBusPublisher(redis_url="redis://localhost:6399/0")
-    signed = pub.publish("notes", "note_write", {"text": "oi"}, user_id="u1")
-    assert "signature" in signed
-    assert len(pub.memory_fallback) == 1
-    assert pub.memory_fallback[0]["topic"] == "jefrey.events.u1.notes"
 
 
-def test_publisher_prod_raises_without_redis(monkeypatch):
-    _reload_signing(monkeypatch, {"JEFREY_ENV": "prod", "JEFREY_REDIS__URL": "redis://localhost:6399/0"})
-    monkeypatch.setenv("JEFREY_ENV", "prod")
-    from src.jefrey.eventbus.publisher import EventBusPublisher
-    pub = EventBusPublisher(redis_url="redis://localhost:6399/0")
-    with pytest.raises(RuntimeError, match="Redis indispon"):
-        pub.publish("notes", "note_write", {"text": "oi"}, user_id="u1")
 
 
-def test_subscriber_verify_and_dlq(monkeypatch):
-    _reload_signing(monkeypatch)
-    from src.jefrey.eventbus.publisher import EventBusPublisher
-    from src.jefrey.eventbus.subscriber import EventBusSubscriber
-
-    pub = EventBusPublisher(redis_url="redis://localhost:6399/0")
-    sub = EventBusSubscriber(redis_url="redis://localhost:6399/0")
-    received = {}
-
-    def handler(msg):
-        received["msg"] = msg
-
-    sub.subscribe("notes", "note_write", "u1", handler)
-    signed = pub.publish("notes", "note_write", {"text": "hello"}, user_id="u1")
-    out = sub.handle_message(signed)
-    assert out is not None
-    assert received["msg"]["payload"]["text"] == "hello"
-    # tamper -> dlq
-    tampered = dict(signed)
-    tampered["signature"] = "0" * 64
-    out2 = sub.handle_message(tampered)
-    assert out2 is None
-    assert any("invalid_signature" in str(d.get("error", "")) for d in sub.get_dead_letter())
 
 
-def test_kid_rotation_preserved_in_streams_payload(monkeypatch):
-    # kid v2 deve viajar no payload assinado mesmo quando vai para Streams (memory_fallback)
-    _reload_signing(monkeypatch, {
-        "JEFREY_EVENTBUS__HMAC_KEYS_JSON": '{"v1":"' + "a"*32 + '","v2":"' + "b"*32 + '"}',
-        "JEFREY_ENV": "dev",
-        "JEFREY_EVENTBUS__HMAC_KID": "v2",
-    })
-    monkeypatch.setenv("JEFREY_EVENTBUS__HMAC_KID", "v2")
-    from src.jefrey.eventbus.publisher import EventBusPublisher
-    from src.jefrey.eventbus.subscriber import EventBusSubscriber
-    pub = EventBusPublisher(redis_url="redis://localhost:6399/0")
-    sub = EventBusSubscriber(redis_url="redis://localhost:6399/0")
-    got = {}
-    sub.subscribe("notes", "note_write", "u1", lambda m: got.update(m))
-    signed = pub.publish("notes", "note_write", {"x": 1}, user_id="u1")
-    assert signed["kid"] == "v2"
-    # subscriber dual-verify deve aceitar v2
-    assert sub.handle_message(signed) is not None

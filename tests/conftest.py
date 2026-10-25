@@ -19,6 +19,8 @@ if os.getenv("JEFREY_TEST_REDIS") != "real":
 
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
 os.environ.setdefault("JEFREY_LOCAL_GUARD", "0")  # o TestClient usa Host "testserver"; a protecao tem testes proprios
+# Os testes nao podem depender do .env de quem os roda: sem esta chave o app recusa emitir tokens (CI nao tem .env).
+os.environ.setdefault("JEFREY_API__SECRET_KEY", "chave-so-para-testes-0123456789abcdef0123456789abcdef")
 
 
 import pytest

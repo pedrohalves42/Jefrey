@@ -238,3 +238,18 @@ def test_api_resumo_do_dia(client):
     assert c.put("/briefing/prefs", headers=h, json={"hour": 7, "notify": False}).json() == {"enabled": True, "hour": 7, "notify": False}
     assert c.put("/briefing/prefs", headers=h, json={"hour": 20}).status_code == 422
     assert c.get("/system/activity", headers=h).json() == {"studying": False, "learning": False, "topic": None}
+
+
+def test_lembrete_esquecido_ganha_um_toque_gentil_uma_vez(db):
+    from src.jefrey.core.reminders import ReminderStore
+    vistos = []
+    N.set_sink(lambda t, x: vistos.append((t, x)))
+    B._nudged.clear()
+    ReminderStore().add("ana", "meditar", _manha(8, 0))
+    run(B.reminder_tick(now=_manha(8, 5)))  # avisou
+    run(B.reminder_tick(now=_manha(8, 40)))  # ainda nao passou uma hora
+    assert [t for t, _ in vistos] == ["Lembrete"]
+    run(B.reminder_tick(now=_manha(9, 10)))  # uma hora depois, sem ciente
+    run(B.reminder_tick(now=_manha(9, 20)))  # nao repete
+    assert [t for t, _ in vistos] == ["Lembrete", "Passou do horário"]
+    N.set_sink(None)

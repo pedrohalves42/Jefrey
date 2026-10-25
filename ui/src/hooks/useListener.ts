@@ -35,20 +35,22 @@ type Options = {
   /** endereco que recebe o audio (padrao "/stt") e, se houver onResult, quem trata a resposta crua */
   endpoint?: string
   onResult?: (json: Record<string, unknown>) => void
+  /** decide ANTES de transcrever se o trecho vale a pena (descarta ambiente sem enviar nada) */
+  gate?: (seg: { peak: number; durationMs: number }) => boolean
 }
 
 /**
  * Ouve pelo microfone, detecta o fim da fala no proprio navegador (nada e enviado antes disso) e
  * transcreve com o Whisper LOCAL do servidor. Sem Web Speech API (que mandaria o audio ao Google).
  */
-export function useListener({ onTranscript, onSpeechStart, onLevel, onUnclear, endpoint, onResult }: Options) {
+export function useListener({ onTranscript, onSpeechStart, onLevel, onUnclear, endpoint, onResult, gate }: Options) {
   const supported = typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== "undefined"
   const [state, setState] = useState<ListenerState>("idle")
   const [error, setError] = useState<string | null>(null)
   const cleanup = useRef<(() => void) | null>(null)
   const starting = useRef(false)
-  const cb = useRef({ onTranscript, onSpeechStart, onLevel, onUnclear, endpoint, onResult })
-  cb.current = { onTranscript, onSpeechStart, onLevel, onUnclear, endpoint, onResult }
+  const cb = useRef({ onTranscript, onSpeechStart, onLevel, onUnclear, endpoint, onResult, gate })
+  cb.current = { onTranscript, onSpeechStart, onLevel, onUnclear, endpoint, onResult, gate }
 
   const stop = useCallback(() => {
     cleanup.current?.()
@@ -119,6 +121,8 @@ export function useListener({ onTranscript, onSpeechStart, onLevel, onUnclear, e
     const ep = new Endpointer()
     let heard = false
     let finished = false
+    let peak = 0
+    let startedAt = 0
 
     const release = () => {
       window.clearInterval(timer)
@@ -129,7 +133,9 @@ export function useListener({ onTranscript, onSpeechStart, onLevel, onUnclear, e
     rec.onstop = () => {
       release()
       cb.current.onLevel?.(0)
-      if (heard && chunks.length) void transcribe(new Blob(chunks, { type: rec.mimeType || "audio/webm" }))
+      const seg = { peak, durationMs: performance.now() - startedAt }
+      if (heard && chunks.length && cb.current.gate && !cb.current.gate(seg)) setState("idle") // ambiente: descartado sem transcrever nem enviar
+      else if (heard && chunks.length) void transcribe(new Blob(chunks, { type: rec.mimeType || "audio/webm" }))
       else setState("idle")
     }
     const finish = () => {
@@ -141,10 +147,13 @@ export function useListener({ onTranscript, onSpeechStart, onLevel, onUnclear, e
     const timer = window.setInterval(() => {
       analyser.getFloatTimeDomainData(buf)
       const rms = rmsOf(buf)
+      if (heard && rms > peak) peak = rms
       cb.current.onLevel?.(Math.min(1, rms * 8))
       const ev = ep.update(rms, performance.now())
       if (ev === "speech_start") {
         heard = true
+        startedAt = performance.now()
+        peak = rms
         setState("hearing")
         cb.current.onSpeechStart?.()
       } else if (ev === "speech_end" || ev === "timeout") {

@@ -1,11 +1,12 @@
 """Rotas do botao "Conectar Google". O retorno do Google e uma navegacao (sem login do Jefrey): protegido pelo state."""
 from __future__ import annotations
 
+import asyncio
 import logging
+import re
 from typing import Optional
 from urllib.parse import urlsplit
 
-import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
@@ -24,13 +25,19 @@ def _user(request: Request) -> str:
 
 
 class StartBody(BaseModel):
-    services: list[str] = Field(default_factory=lambda: ["calendar", "email"], min_length=1, max_length=3)
+    services: list[str] = Field(default_factory=lambda: ["calendar", "email"], min_length=1, max_length=5)
 
 
 @router.get("")
 async def google_status(request: Request):
-    out = G.status(_user(request))
+    uid = _user(request)
+    out = G.status(uid)
+    if out.get("connected"):
+        out["health"] = await asyncio.to_thread(G.check_health, uid)  # ok | chave | entrar | desconhecido
     out["available_services"] = [{"id": k, "label": v["label"]} for k, v in G.SERVICES.items()]
+    diag = G.diagnose(str(request.base_url).rstrip("/"))
+    out["redirect_uri"] = diag["redirect_uri"]  # o que o Google vai receber: precisa estar cadastrado no Cloud Console
+    out["diagnosis"] = {"ok": diag["ok"], "advice": diag["advice"], "client_type": diag["client_type"]}
     return out
 
 
@@ -63,22 +70,10 @@ async def finish(code: str, state: str, error: str) -> RedirectResponse:
     if error or not code or entry is None or creds is None:
         return _back(entry, "erro")
     try:
-        async with httpx.AsyncClient(timeout=20) as c:
-            r = await c.post(G.TOKEN_URL, data={"code": code, "client_id": creds["client_id"], "client_secret": creds["client_secret"],
-                                                "redirect_uri": entry["redirect"], "grant_type": "authorization_code",
-                                                "code_verifier": entry["verifier"]})
-            r.raise_for_status()
-            tok = r.json()
-            if not tok.get("access_token"):
-                raise ValueError("sem token")
-            email: Optional[str] = None
-            try:
-                u = await c.get(G.USERINFO_URL, headers={"Authorization": f"Bearer {tok['access_token']}"}, timeout=10)
-                if u.status_code == 200:
-                    email = u.json().get("email")
-            except httpx.HTTPError as _e:
-                logger.debug("google: e-mail nao obtido (%s)", type(_e).__name__)
-        G.save_tokens(entry["user"], entry["services"], tok, email)
+        res = await G.exchange_code(code, entry["redirect"], entry["verifier"], creds)
+        if not res["ok"]:
+            return _back(entry, res["reason"])
+        G.save_tokens(entry["user"], entry["services"], res["token"], res["email"])
     except Exception as e:  # nunca registra codigo, token nem e-mail
         logger.warning("google callback falhou: %s", type(e).__name__)
         return _back(entry, "erro")
@@ -90,13 +85,24 @@ async def google_callback(code: str = "", state: str = "", error: str = ""):
     return await finish(code, state, error)
 
 
+class CredsBody(BaseModel):
+    client_id: str = Field(..., max_length=200)
+    client_secret: str = Field(..., max_length=200)
+
+
+@router.put("/credentials")
+async def set_credentials(request: Request, body: CredsBody):
+    """Cola as credenciais do app Google (uma vez). Nunca devolve a chave."""
+    _user(request)
+    try:
+        G.save_credentials(body.client_id, body.client_secret)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return {"configured": G.credentials() is not None}
+
+
 @router.delete("")
 async def google_disconnect(request: Request):
     tokens = G.delete_tokens(_user(request))
-    async with httpx.AsyncClient(timeout=10) as c:  # revoga no Google (melhor esforco)
-        for t in tokens:
-            try:
-                await c.post(G.REVOKE_URL, data={"token": t})
-            except httpx.HTTPError as _e:
-                logger.debug("google: revogacao nao concluida (%s)", type(_e).__name__)
+    await G.revoke_tokens(tokens)  # revoga no Google (melhor esforco)
     return {"ok": True}

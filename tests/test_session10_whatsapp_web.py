@@ -347,7 +347,7 @@ def test_api_aviso_de_aprovacao_e_pasta_da_extensao(api, monkeypatch):
     import src.jefrey.core.llm_provider as LP
     monkeypatch.setattr(LP, "get_llm_client", lambda: FakeLLM("Oi!"))
     assert c.get("/wa/pending").status_code == 401
-    assert c.get("/wa/pending", headers=h).json() == {"pending": [], "paired": False}
+    assert c.get("/wa/pending", headers=h).json() == {"pending": [], "paired": False, "new_chats": [], "seen_s": None}
     tok = c.post("/wa/device/pair", json={"code": c.post("/wa/pairing", headers=h).json()["code"]}).json()["token"]
     dh = {"Authorization": f"Bearer {tok}"}
     c.post("/wa/device/inbound", headers=dh, json=entrada())
@@ -406,3 +406,93 @@ def test_guarda_continua_recusando_paginas_da_web_inclusive_na_porta_do_aparelho
     assert c.post("/wa/device/inbound", headers={"Origin": "https://evil.example"}).status_code == 403
     assert c.post("/wa/device/inbound", headers={"Origin": "https://web.whatsapp.com", "Sec-Fetch-Site": "cross-site"}).status_code == 403
     assert c.post("/wa/device/inbound", headers={"Host": "evil.example"}).status_code == 400  # DNS rebinding continua barrado
+
+
+def test_conversa_nova_aparece_na_lista_de_perguntas_ate_a_pessoa_escolher(db, monkeypatch):
+    """O Jefrey nao responde conversa nova; antes a pessoa nao sabia por que. Agora a tela pergunta o que fazer."""
+    from src.jefrey.api import wa_web_routes as R
+    s = W.WAStore()
+    monkeypatch.setattr(R, "_user", lambda request: "ana")
+    s.touch_chat("ana", "Maria")
+    s.touch_chat("ana", "João")
+    s.touch_chat("bob", "Pedro")  # de outra pessoa: nunca aparece
+    out = run(R.pending(object()))
+    assert sorted(c["display"] for c in out["new_chats"]) == ["João", "Maria"] and all(c["mode"] == "pending" for c in out["new_chats"])
+    maria = next(c for c in out["new_chats"] if c["display"] == "Maria")
+    s.set_mode("ana", maria["id"], "ask")
+    out = run(R.pending(object()))
+    assert [c["display"] for c in out["new_chats"]] == ["João"]
+
+
+# ---------------- mensagem escrita pela pessoa (compor e enviar) ----------------
+def test_mensagem_da_pessoa_vai_para_a_fila_so_da_conversa_dela(db):
+    s = W.WAStore()
+    c = liberar(s, "ask")
+    d = s.queue_message("ana", c["id"], "Chego   às 8h, pode ser?")
+    assert d["status"] == "approved" and d["reply"] == "Chego às 8h, pode ser?"
+    assert s.outbox("ana") == [{"id": d["id"], "chat": "Maria", "text": "Chego às 8h, pode ser?"}]
+    with pytest.raises(LookupError):
+        s.queue_message("bia", c["id"], "oi")  # conversa de outra pessoa
+
+
+def test_mensagem_vazia_ou_com_dado_sensivel_nao_entra_na_fila(db):
+    s = W.WAStore()
+    c = liberar(s, "ask")
+    for ruim in ("", "   ", "minha senha é 1234 e o cartão 4111 1111 1111 1111"):
+        with pytest.raises(ValueError):
+            s.queue_message("ana", c["id"], ruim)
+    assert s.outbox("ana") == []
+
+
+def test_compor_usa_o_modelo_sem_ferramentas_e_a_ideia_fica_entre_marcas(db):
+    llm = FakeLLM("Oi! Chego às 8h, tá bom?")
+    out = run(W.compose_message(llm, "Ana", [], "Maria", "diga que chego às 8h"))
+    assert out == "Oi! Chego às 8h, tá bom?"
+    user_msg = llm.prompts[0][1]["content"]
+    assert "<ideia>" in user_msg and "diga que chego às 8h" in user_msg
+    assert run(W.compose_message(FakeLLM(RuntimeError("fora")), "Ana", [], "Maria", "oi")) is None
+
+
+# ---------------- robustez: mensagem velha, extensao parada e aviso do Windows ----------------
+def test_mensagem_aprovada_que_nao_saiu_vence_em_vez_de_sair_de_surpresa(db):
+    from datetime import timedelta
+
+    s = W.WAStore()
+    c = liberar(s, "ask")
+    novo = s.queue_message("ana", c["id"], "Chego às 8h")
+    velho = s.queue_message("ana", c["id"], "Mensagem antiga")
+    with s.engine.begin() as conn:
+        conn.execute(s.drafts.update().where(s.drafts.c.id == velho["id"]).values(created_at=W._now() - timedelta(hours=W.APPROVED_TTL_H + 1)))
+    assert [m["id"] for m in s.outbox("ana")] == [novo["id"]]
+    assert s.get_draft("ana", velho["id"])["status"] == "expired"
+
+
+def test_segundos_desde_que_a_extensao_falou(db):
+    s = W.WAStore()
+    assert s.seconds_since_seen("ana") is None  # sem aparelho
+    code = W.WAStore.begin_pairing("ana")["code"]
+    token = s.complete_pairing(code, "Chrome")
+    assert s.seconds_since_seen("ana") is None  # pareou mas nunca falou
+    assert s.device_user(token) == "ana"
+    assert 0 <= s.seconds_since_seen("ana") < 5
+
+
+def test_rota_pending_informa_ha_quanto_tempo_a_extensao_nao_fala(db):
+    from src.jefrey.api import wa_web_routes as R
+
+    class Req:
+        def __init__(self):
+            self.state = type("S", (), {"user_id": "ana"})()
+
+    out = run(R.pending(Req()))
+    assert out["paired"] is False and out["seen_s"] is None
+
+
+def test_balao_do_windows_so_com_o_nome_de_quem_escreveu(monkeypatch):
+    from src.jefrey.api import wa_web_routes as R
+    from src.jefrey.core import notify
+
+    vistos = []
+    monkeypatch.setattr(notify, "notify", lambda uid, title, text, **k: vistos.append((uid, title, text, k)) or True)
+    R._notify_needs_answer("ana", "  Maria   Clara  ")
+    assert vistos == [("ana", "WhatsApp", "Maria Clara te escreveu. Quer responder?", {"urgent": True})]

@@ -29,6 +29,16 @@ O Google só aceita o endereço de retorno que você **registrou** no app (clien
    Se o endereço registrado estiver em `JEFREY_OAUTH__REDIRECT_URIS` e na mesma porta do Jefrey, o botão usa exatamente esse.
    Se o Jefrey abrir em outra porta (8001, 8002…), o cliente "Web" não serve: use o tipo "Computador".
 
+## Se o Google mostrar "Acesso bloqueado ... Erro 403: access_denied"
+Significa que o app está em **fase de testes** e a conta que entrou **não está na lista de testadores** (visto na prática com `pedrohalves42@gmail.com`;
+o Jefrey chegou ao Google normalmente e o endereço de retorno registrado foi aceito). Para liberar:
+1. Google Cloud Console > **APIs e serviços > Tela de permissão OAuth** (ou **Google Auth Platform > Público-alvo**).
+2. Em **Usuários de teste**, clique em **Add users** e inclua o e-mail da pessoa (até 100). O dono do projeto também precisa estar na lista.
+3. Tente de novo no Jefrey. Aparece o aviso "O Google não verificou este app": **Avançado > Acessar jefrey (não seguro)** (normal em teste).
+Limites do modo de testes: a autorização **vence em 7 dias** (a pessoa precisa conectar de novo) e só os testadores entram. Para qualquer pessoa usar,
+é preciso **publicar** o app e passar pela **verificação** (Agenda é simples; **Gmail é escopo restrito** e pode exigir avaliação de segurança paga).
+Dica para lançar mais rápido: oferecer só **Agenda** no início (desmarque E-mail no botão) e deixar o Gmail para depois da verificação.
+
 ## O que o Jefrey guarda
 Tokens de acesso e de renovação, protegidos pelo Windows (DPAPI), no banco local, por pessoa. Nada vai a terceiros.
 O botão **Desconectar** apaga os tokens e avisa o Google para revogá-los.
